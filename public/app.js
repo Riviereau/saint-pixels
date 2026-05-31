@@ -597,25 +597,37 @@ function drawGrid() {
   }
 
   // Cross markers at every corner: each arm extends 25% into the adjacent cell.
-  const armX = Math.min(scale * 0.25, 6);
-  const armY = Math.min(scale * 0.25, 6);
+  const armBase = Math.min(scale * 0.25, 6);
   const thick = Math.min(Math.max(scale * 0.15, 1), 2);
 
-  // Set base style for the grid crosshair
+  // White glow first
+  gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
+  for (const y of ys) {
+    for (const x of xs) {
+      // Clamp arms so they never go outside the board
+      const left  = Math.min(armBase, x - offsetX);
+      const right = Math.min(armBase, boardScreenR - x);
+      const up    = Math.min(armBase, y - offsetY);
+      const down  = Math.min(armBase, boardScreenB - y);
+
+      // Horizontal bar
+      gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
+      // Vertical bar
+      gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+    }
+  }
+
+  // Dark core on top
   gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
   for (const y of ys) {
     for (const x of xs) {
-      // Main dark crosshair layer
-      gridCtx.fillRect(x - armX, y - thick / 2, armX * 2, thick);
-      gridCtx.fillRect(x - thick / 2, y - armY, thick, armY * 2);
+      const left  = Math.min(armBase, x - offsetX);
+      const right = Math.min(armBase, boardScreenR - x);
+      const up    = Math.min(armBase, y - offsetY);
+      const down  = Math.min(armBase, boardScreenB - y);
 
-      // White crosshair layer (larger than dark crosshair)
-      gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
-      gridCtx.fillRect(x - armX - 0.5, y - thick / 2 - 0.5, armX * 2 + 1, thick);
-      gridCtx.fillRect(x - thick / 2 - 0.5, y - armY - 0.5, thick, armY * 2 + 1);
-
-      // Reset dark crosshair
-      gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
+      gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
+      gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
     }
   }
 
