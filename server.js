@@ -175,6 +175,7 @@ app.get('/apple-touch-icon.png', indexLimiter, (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/sfx', express.static(path.join(__dirname, 'sfx')));
 
 // ── DB init & helpers ─────────────────────────────────────────────────────────
 initializeDatabase(db);
