@@ -601,11 +601,21 @@ function drawGrid() {
   const armY = Math.min(scale * 0.25, 6);
   const thick = Math.min(Math.max(scale * 0.15, 1), 2);
 
+  // Set base style for the grid crosshair
   gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
   for (const y of ys) {
     for (const x of xs) {
+      // Main dark crosshair layer
       gridCtx.fillRect(x - armX, y - thick / 2, armX * 2, thick);
       gridCtx.fillRect(x - thick / 2, y - armY, thick, armY * 2);
+
+      // White crosshair layer (larger than dark crosshair)
+      gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
+      gridCtx.fillRect(x - armX - 0.5, y - thick / 2 - 0.5, armX * 2 + 1, thick);
+      gridCtx.fillRect(x - thick / 2 - 0.5, y - armY - 0.5, thick, armY * 2 + 1);
+
+      // Reset dark crosshair
+      gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
     }
   }
 
