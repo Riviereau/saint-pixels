@@ -1450,7 +1450,10 @@ function applyToolAtCell(x, y) {
   paintPixel(x, y);
   lastPlaceAt = Date.now();
 
-  // SFX + particles for brush
+  // SFX + particles for brush/eraser
+  if (tool === 'eraser') {
+    SFX.play('pixel-erased', 80, 0.4);
+  }
   if(tool === 'brush') {
     SFX.play(Math.random() < 0.5 ? 'pixel-placed2' : 'pixel-placed3', 80, 0.45);
     spawnParticles(x, y, color || '#ffffff');
