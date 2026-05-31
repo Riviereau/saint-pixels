@@ -5,6 +5,7 @@ const helmet   = require('helmet');
 const Database = require('better-sqlite3');
 const path     = require('path');
 const crypto   = require('crypto');
+const os       = require('os');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 const app = express();
@@ -683,11 +684,27 @@ app.get('/api/palette', paletteLimiter, (req, res) => {
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => res.status(404).send('Not found'));
 
+// Get the local IP to print to the console when running the app
+function getLocalIP() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 const desiredPort = process.env.PORT ? Number(process.env.PORT) : 3000;
+const ip = getLocalIP();
 // Binding to '0.0.0.0' allows connections from both localhost and your local Wi-Fi IP
 const server = app.listen(desiredPort, '0.0.0.0', () => {
-  console.log(`Saint Pixels server running on http://localhost:${desiredPort}`);
+  console.log(`\nSaint Pixels server running on:`);
+  console.log(`\x1b[32mLocal:\x1b[0m http://localhost:${desiredPort}`);
+  console.log(`\x1b[36mNetwork:\x1b[0m http://${ip}:${desiredPort}`);
+  console.log('');
 });
 
 server.on('error', (err) => {

@@ -76,6 +76,8 @@ const EMAIL_VERIFIED_KEY = 'sp_email_verified';
 const COOLDOWN_MS = 3000;
 /** Max zoom as UI scale (1 = 100%, 50 = 5000%) */
 const MAX_ZOOM_SCALE = 50;
+/** Min zoom as UI scale (1 = 100%, 50 = 5000%) */
+const MIN_ZOOM_SCALE = 0.25;
 /** Slow OS key-repeat for arrow nudging (ms between steps while key is held) */
 const ARROW_KEY_REPEAT_MS = 110;
 /** Ignore small mouse jitter after arrow moves until pointer moves this far (px). */
@@ -664,6 +666,8 @@ let isRedrawPending = false;
 function redraw() {
   if (isRedrawPending) return;
   isRedrawPending = true;
+
+  console.log('redrawing');
 
   requestAnimationFrame(() => {
     isRedrawPending = false;
@@ -1981,17 +1985,23 @@ function stopAction(event) {
 
 function handleWheel(event) {
   event.preventDefault();
+  
+  const direction = -Math.sign(event.deltaY);
+
+  // Prevent unecessary redraws if attempting to zoom in at MAX_ZOOM_SCALE, or out at MIN_ZOOM_LEVEL
+  if (scale === MAX_ZOOM_SCALE && direction > 0) return;
+  if (scale === MIN_ZOOM_SCALE && direction < 0) return;
+
   const rect = viewport.getBoundingClientRect();
   const mouseX = event.clientX - rect.left;
   const mouseY = event.clientY - rect.top;
 
   const boardX = (mouseX - offsetX) / scale;
   const boardY = (mouseY - offsetY) / scale;
-  const direction = -Math.sign(event.deltaY);
   
   // scale factor per wheel tick
   let nextZoom = scale * (direction > 0 ? 1.12 : 0.88);
-  nextZoom = clamp(nextZoom, 0.05, MAX_ZOOM_SCALE);
+  nextZoom = clamp(nextZoom, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
   scale = nextZoom;
   
   offsetX = Math.round(mouseX - boardX * scale);
@@ -2171,7 +2181,7 @@ zoomInput.addEventListener('input', event => {
   const boardCenterX = (centerX - offsetX) / scale;
   const boardCenterY = (centerY - offsetY) / scale;
 
-  scale = clamp(nextZoom, 0.05, MAX_ZOOM_SCALE);
+  scale = clamp(nextZoom, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
   offsetX = Math.round(centerX - boardCenterX * scale);
   offsetY = Math.round(centerY - boardCenterY * scale);
   clampOffsets();
@@ -2862,7 +2872,7 @@ viewport.addEventListener("touchmove", (e) => {
       const boardY = (mouseY - offsetY) / scale;
 
       let nextZoom = scale * (1 + delta * 0.005);
-      nextZoom = clamp(nextZoom, 0.05, MAX_ZOOM_SCALE);
+      nextZoom = clamp(nextZoom, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
       scale = nextZoom;
 
       // Round at write time — same reason as the pan path above
