@@ -3206,6 +3206,11 @@ let lastTouchX = 0;
 let lastTouchY = 0;
 /** True while a single-finger touch pan is actively moving — suppresses cursor overlay redraws. */
 let isTouchPanning = false;
+/** CSS-px position where the current touch began — used to measure drag distance for the ruler tool. */
+let touchStartX = 0;
+let touchStartY = 0;
+/** Cumulative CSS-px travel of the current touch (ruler uses a larger tap threshold than other tools). */
+let touchTotalTravel = 0;
 
 /** True when a touch started on a UI control (palette, toolbar, etc.) — suppresses tap-to-place. */
 let touchStartedOnUI = false;
@@ -3229,6 +3234,9 @@ viewport.addEventListener("touchstart", (e) => {
   if (e.touches.length === 1) {
     lastTouchX = e.touches[0].clientX;
     lastTouchY = e.touches[0].clientY;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchTotalTravel = 0;
     isTouchDragging = false;
   } else if (e.touches.length === 2) {
     e.preventDefault(); // Stop native 2-finger zoom gestures
@@ -3245,8 +3253,14 @@ viewport.addEventListener("touchmove", (e) => {
     const dx = e.touches[0].clientX - lastTouchX;
     const dy = e.touches[0].clientY - lastTouchY;
     
-    // Threshold to prevent jittering taps
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    // Accumulate total travel so the ruler tool can use its own larger tap threshold.
+    touchTotalTravel += Math.hypot(dx, dy);
+
+    // Threshold to prevent jittering taps.
+    // The ruler tool uses its own travel-based check in touchend, so we only
+    // set isTouchDragging here for non-ruler tools (or when travel is clearly a pan).
+    const dragThreshold = tool === 'ruler' ? 20 : 3;
+    if (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold) {
       isTouchDragging = true;
       isTouchPanning = true;
     }
@@ -3325,7 +3339,17 @@ viewport.addEventListener("touchend", (e) => {
   
   // TAP TO PLACE: If it was 1 finger, it ended, didn't drag, and started on the canvas (not a palette/UI tap)
   // Skip when hand tool is active — hand tool only pans, never places pixels
-  if (!isTouchDragging && !touchStartedOnUI && tool !== 'hand' && e.changedTouches.length === 1 && e.touches.length === 0) {
+  // For the ruler tool, determine tap vs pan using total touch travel rather than
+  // the per-move delta flag — this tolerates the natural finger jitter on mobile
+  // that would otherwise prevent setting ruler points. 20px is generous enough
+  // to absorb hold-still jitter but small enough not to swallow intentional pans.
+  const wasRulerTap = tool === 'ruler'
+    && !touchStartedOnUI
+    && e.changedTouches.length === 1
+    && e.touches.length === 0
+    && touchTotalTravel < 20;
+
+  if ((!isTouchDragging || wasRulerTap) && !touchStartedOnUI && tool !== 'hand' && e.changedTouches.length === 1 && e.touches.length === 0) {
      if (_eyedropperJustFired) { _eyedropperJustFired = false; return; }
      const touch = e.changedTouches[0];
      // iOS reports clientY at the TOP of the contact ellipse, not its center.
