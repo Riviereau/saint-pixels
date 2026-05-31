@@ -9,7 +9,8 @@
 function dispatchStateChange(detail) {
   window.dispatchEvent(new CustomEvent('sp-state-change', { detail }));
 }
-
+//Expose achievements
+window.ACHIEVEMENT_DEFS = ACHIEVEMENT_DEFS;
 
 document.addEventListener('DOMContentLoaded', () => {
 // Prevent default form submission (replaces the removed onsubmit="return false;" attr,
