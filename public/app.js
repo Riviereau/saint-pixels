@@ -112,6 +112,7 @@ const SFX = (() => {
 
   return { play, enabled: () => enabled, setVolume, getVolume };
 })();
+window.SFX = SFX; // expose globally so settings.js (and any other module) can call SFX.setVolume / getVolume at runtime
 
 // ═══════════════════════════════════════════════════════════════════
 // ── PARTICLE SYSTEM ─────────────────────────────────────────────────
