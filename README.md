@@ -27,7 +27,8 @@ The canvas size is **1920x1080** and every pixel matters.
 | `2` | Eraser |
 | `3` | Fill |
 | `4` | Eyedropper |
-| `5` | None |
+| `5` | Ruler |
+| `6` | None |
 | `F` | Toggle fullscreen |
 | `G` | Toggle grid |
 | `Shift + drag` | Pan canvas |
