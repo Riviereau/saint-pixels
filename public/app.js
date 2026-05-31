@@ -1453,7 +1453,8 @@ function applyToolAtCell(x, y) {
   // SFX + particles for brush/eraser
   if (tool === 'eraser') {
     SFX.play('pixel-erased', 80, 0.4);
-  } else {
+  }
+  if(tool === 'brush') {
     SFX.play(Math.random() < 0.5 ? 'pixel-placed2' : 'pixel-placed3', 80, 0.45);
     spawnParticles(x, y, color || '#ffffff');
   }
