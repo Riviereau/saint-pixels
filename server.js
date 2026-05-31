@@ -432,6 +432,18 @@ initializeActions(app, db, pixelLimiter, (event) => {
     try { updateStreak(event.user); } catch(e) { /* non-fatal */ }
   }
 });
+// SSE connections must not be subject to requestTimeout (30 s) — they are
+// intentionally long-lived and would otherwise be killed by the server-wide
+// timeout set below, causing Firefox to report "can't establish a connection".
+// Disabling it per-socket here, before the rate limiter, ensures the timeout
+// is cleared regardless of which middleware runs next.
+app.use('/api/stream', (req, res, next) => {
+  req.socket.setTimeout(0);          // disable socket inactivity timeout
+  if (res.socket) res.socket.setTimeout(0);
+  // Node 18+ exposes requestTimeout directly on the request; clear it too.
+  if (typeof req.setTimeout === 'function') req.setTimeout(0);
+  next();
+});
 app.use('/api/stream', sseLimiter);
 initializeSSE(app, db, sseConnectionGuard);
 
@@ -928,6 +940,8 @@ server.on('error', (err) => {
 // well under 10 s; the defaults (0 = unlimited) invite abuse.
 server.headersTimeout  = 10_000;   // 10 s to finish sending headers
 server.requestTimeout  = 30_000;   // 30 s for full request (covers slow bodies)
+                                   // NOTE: /api/stream overrides this to 0 per-socket
+                                   // so SSE connections aren't killed after 30 s.
 server.keepAliveTimeout = 65_000;  // slightly above typical proxy idle timeout
 
 // ── Global Express error handler ─────────────────────────────────────────────
