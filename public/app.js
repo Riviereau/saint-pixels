@@ -74,8 +74,8 @@ const SFX = (() => {
   }
 
   // Pre-warm the sounds that will be needed immediately
-  ['pixel-placed','pixel-erased','tool-changed','eyedropper',
-   'hand','click','notification','achievement','ultra-achivement',
+  ['pixel-placed','pixel-placed2','pixel-placed3','pixel-erased','tool-changed','eyedropper',
+   'hand','ruler','none','click','notification','achievement','ultra-achivement', 'error', 'equiping',
    'leaderboard-open','leaderboard-close','chat-open','chat-close',
    'star-picked','failling-star'].forEach(load);
 
@@ -1917,6 +1917,8 @@ function setTool(newTool) {
   if (prevTool !== newTool) {
     if (newTool === 'eyedropper') SFX.play('eyedropper', 200, 0.5);
     else if (newTool === 'hand')  SFX.play('hand', 200, 0.45);
+    else if (newTool === 'ruler') SFX.play('ruler', 150, 0.4);
+    else if (newTool === 'none')  SFX.play('none', 150, 0.4);
     else                          SFX.play('tool-changed', 150, 0.4);
   }
   
