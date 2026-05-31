@@ -2836,8 +2836,8 @@ select,
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
-  background: rgba(30,30,31,0.96);
-  border: 1px solid rgba(56,189,248,0.4);
+  background: rgba(128, 128, 192, 0.96);
+  border: 1px solid rgb(105, 168, 196);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(56,189,248,0.1);
   min-width: 260px;
@@ -2846,7 +2846,7 @@ select,
   opacity: 0;
   transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease;
   pointer-events: none;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(5px);
 }
 .achievement-popup--ultra {
   border-color: rgba(251,191,36,0.7);
