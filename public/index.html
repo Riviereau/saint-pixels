@@ -246,6 +246,12 @@
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           <span x-text="liveCount"></span>
         </span>
+        <span
+          id="streak-badge"
+          class="inline-flex items-center px-2 py-1 rounded-lg border border-orange-400/40 bg-orange-400/10 text-xs font-bold whitespace-nowrap text-orange-300"
+          style="display:none;"
+          title="Day streak"
+        ></span>
         <button
           id="topbarRulesBtn"
           type="button"
@@ -332,6 +338,13 @@
 
       </div>
     </header>
+
+    <!-- ── Cooldown Event Banner ── -->
+    <div id="event-banner" style="display:none;" class="event-banner">
+      <span class="event-banner__icon">⚡</span>
+      <span class="event-banner__text">Cooldown Reduction Event — only <strong>1.5s</strong> cooldown!</span>
+      <span class="event-banner__timer">Ends in <strong id="event-countdown">—</strong></span>
+    </div>
 
     <main class="grid gap-5 mt-3 flex-1 min-h-0 overflow-hidden" style="grid-template-columns: 340px minmax(0,1fr)">
 
@@ -587,6 +600,20 @@
           <span class="pm-stat-label">Rank</span>
         </div>
       </div>
+      <div class="pm-streak-row">
+        <span class="pm-streak-label">🔥 Streak</span>
+        <span class="pm-stat-value" id="pm-streak">—</span>
+      </div>
+      <div class="pm-fav-color-row">
+        <span class="pm-streak-label">🎨 Fav Color</span>
+        <span id="pm-fav-color" class="pm-fav-color-swatch" style="display:none;"></span>
+      </div>
+      <div>
+        <div class="pm-recent-title">Achievements</div>
+        <div id="pm-achievements" class="pm-achievements-row">
+          <span class="pm-loading">Loading…</span>
+        </div>
+      </div>
       <div>
         <div class="pm-recent-title">Recent Pixels</div>
         <div class="pm-recent-pixels" id="pm-recent-pixels">
@@ -782,6 +809,17 @@
       });
     })();
   </script>
+  <!-- ── Achievement Popups ── -->
+  <div id="achievement-container" class="achievement-container"></div>
+
+  <!-- ── Attack Warning Toast ── -->
+  <div id="attack-warning" class="attack-warning">
+    <span class="attack-warning__icon">⚠️</span>
+    <div class="attack-warning__text">
+      <strong>You're under attack!</strong>
+      <span>Your pixels are being overwritten.</span>
+    </div>
+  </div>
 
 </body>
 </html>

@@ -49,6 +49,349 @@ const CANVAS_HEIGHT = 2000;
 // Visible board dimensions (grid and placement area)
 const BOARD_WIDTH = 1920;
 const BOARD_HEIGHT = 1080;
+
+// ═══════════════════════════════════════════════════════════════════
+// ── SFX ENGINE ──────────────────────────────────────────────────────
+// Loads audio from /sfx/<name>.wav. Plays are rate-limited per sound
+// (minInterval) so spamming pixels never floods the audio channel.
+// All sounds are disabled while the tab is hidden (visibilitychange).
+// ═══════════════════════════════════════════════════════════════════
+const SFX = (() => {
+  const cache   = {};
+  const lastAt  = {};
+  let   enabled = true;
+
+  document.addEventListener('visibilitychange', () => {
+    enabled = !document.hidden;
+  });
+
+  function load(name) {
+    if (cache[name]) return cache[name];
+    const a = new Audio(`/sfx/${name}.wav`);
+    a.preload = 'auto';
+    cache[name] = a;
+    return a;
+  }
+
+  // Pre-warm the sounds that will be needed immediately
+  ['pixel-placed','pixel-erased','tool-changed','eyedropper',
+   'hand','click','notification','achievement','ultra-achivement',
+   'leaderboard-open','leaderboard-close','chat-open','chat-close',
+   'star-picked','failling-star'].forEach(load);
+
+  /**
+   * Play a sound.
+   * @param {string} name  — filename without extension (e.g. 'pixel-placed')
+   * @param {number} minInterval — minimum ms between plays of this sound (default 80)
+   * @param {number} volume — 0–1 (default 0.5)
+   */
+  function play(name, minInterval = 80, volume = 0.5) {
+    if (!enabled) return;
+    const now = Date.now();
+    if (lastAt[name] && now - lastAt[name] < minInterval) return;
+    lastAt[name] = now;
+    try {
+      const a = load(name);
+      const clone = a.cloneNode(); // allows overlapping if interval passes
+      clone.volume = Math.max(0, Math.min(1, volume));
+      clone.play().catch(() => {}); // ignore NotAllowedError before first interaction
+    } catch { /* ignore */ }
+  }
+
+  return { play, enabled: () => enabled };
+})();
+
+// ═══════════════════════════════════════════════════════════════════
+// ── PARTICLE SYSTEM ─────────────────────────────────────────────────
+// Spawns small colored squares that fly outward from the pixel that
+// was just placed. Runs on a dedicated canvas layered above the overlay.
+// ═══════════════════════════════════════════════════════════════════
+const _particleCanvas = document.createElement('canvas');
+_particleCanvas.id = 'particle-canvas';
+_particleCanvas.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:5;';
+const _pCtx = _particleCanvas.getContext('2d');
+let   _particles = [];
+
+function _ensureParticleCanvas() {
+  const vp = document.getElementById('viewport');
+  if (vp && !vp.contains(_particleCanvas)) {
+    vp.style.position = 'relative';
+    vp.appendChild(_particleCanvas);
+    _resizeParticleCanvas();
+  }
+}
+
+function _resizeParticleCanvas() {
+  const vp = document.getElementById('viewport');
+  if (!vp) return;
+  const r = vp.getBoundingClientRect();
+  _particleCanvas.width  = r.width  * (window.devicePixelRatio || 1);
+  _particleCanvas.height = r.height * (window.devicePixelRatio || 1);
+  _particleCanvas.style.width  = r.width  + 'px';
+  _particleCanvas.style.height = r.height + 'px';
+}
+window.addEventListener('resize', _resizeParticleCanvas);
+
+/**
+ * Spawn a burst of particles at a board-pixel coordinate.
+ * @param {number} bx  board x
+ * @param {number} by  board y
+ * @param {string} hexColor  e.g. '#ef4444'
+ */
+function spawnParticles(bx, by, hexColor) {
+  _ensureParticleCanvas();
+  const dpr = window.devicePixelRatio || 1;
+  // Screen position of the board pixel's centre
+  const cx = (bx + 0.5) * scale + offsetX;
+  const cy = (by + 0.5) * scale + offsetY;
+  const count = 8;
+  for (let i = 0; i < count; i++) {
+    const angle  = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+    const speed  = 1.5 + Math.random() * 2.5;
+    _particles.push({
+      x:  cx * dpr, y:  cy * dpr,
+      vx: Math.cos(angle) * speed * dpr,
+      vy: Math.sin(angle) * speed * dpr,
+      size: (2 + Math.random() * 3) * dpr,
+      alpha: 1,
+      color: hexColor,
+      decay: 0.035 + Math.random() * 0.025,
+    });
+  }
+  _runParticleLoop();
+}
+
+let _particleRaf = null;
+function _runParticleLoop() {
+  if (_particleRaf) return;
+  function tick() {
+    _pCtx.clearRect(0, 0, _particleCanvas.width, _particleCanvas.height);
+    _particles = _particles.filter(p => p.alpha > 0.02);
+    _particles.forEach(p => {
+      p.x     += p.vx;
+      p.y     += p.vy;
+      p.vy    += 0.12 * (window.devicePixelRatio || 1); // tiny gravity
+      p.alpha -= p.decay;
+      _pCtx.globalAlpha = Math.max(0, p.alpha);
+      _pCtx.fillStyle   = p.color;
+      _pCtx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    });
+    _pCtx.globalAlpha = 1;
+    if (_particles.length > 0) {
+      _particleRaf = requestAnimationFrame(tick);
+    } else {
+      _particleRaf = null;
+    }
+  }
+  _particleRaf = requestAnimationFrame(tick);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ── ACHIEVEMENT ENGINE ──────────────────────────────────────────────
+// Definitions + client-side unlock checks. The server also tracks
+// achievements in the DB; the client is responsible for showing the
+// popup immediately (no latency). Server is the authoritative record.
+// ═══════════════════════════════════════════════════════════════════
+const ACHIEVEMENT_DEFS = [
+  { id: 'first_pixel',   label: 'First Pixel!',       desc: 'Place your very first pixel.',         icon: '🎨', ultra: false },
+  { id: 'pixels_10',     label: 'Getting Started',    desc: 'Place 10 pixels.',                     icon: '✏️',  ultra: false },
+  { id: 'pixels_100',    label: 'Dedicated Artist',   desc: 'Place 100 pixels.',                    icon: '🖌️',  ultra: false },
+  { id: 'pixels_1000',   label: 'Pixel Veteran',      desc: 'Place 1,000 pixels.',                  icon: '⭐',  ultra: false },
+  { id: 'pixels_10000',  label: 'Grand Master',       desc: 'Place 10,000 pixels.',                 icon: '👑',  ultra: true  },
+  { id: 'streak_3',      label: '3-Day Streak',       desc: 'Paint 3 days in a row.',               icon: '🔥',  ultra: false },
+  { id: 'streak_7',      label: 'Week Warrior',       desc: 'Paint 7 days in a row.',               icon: '🔥',  ultra: false },
+  { id: 'streak_30',     label: 'Month of Madness',   desc: 'Paint 30 days in a row.',              icon: '🔥',  ultra: true  },
+];
+
+const ACHIEVEMENT_LS_KEY = 'sp_achievements_unlocked';
+
+function getUnlockedAchievements() {
+  try { return new Set(JSON.parse(localStorage.getItem(ACHIEVEMENT_LS_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function saveUnlockedAchievement(id) {
+  const set = getUnlockedAchievements();
+  set.add(id);
+  localStorage.setItem(ACHIEVEMENT_LS_KEY, JSON.stringify([...set]));
+}
+
+function checkAchievements({ totalPixels, currentStreak }) {
+  const unlocked = getUnlockedAchievements();
+  const toUnlock = [];
+
+  const milestones = [
+    { id: 'first_pixel',  threshold: 1    },
+    { id: 'pixels_10',    threshold: 10   },
+    { id: 'pixels_100',   threshold: 100  },
+    { id: 'pixels_1000',  threshold: 1000 },
+    { id: 'pixels_10000', threshold: 10000},
+  ];
+  milestones.forEach(m => {
+    if (!unlocked.has(m.id) && totalPixels >= m.threshold) toUnlock.push(m.id);
+  });
+
+  const streakMilestones = [
+    { id: 'streak_3',  threshold: 3  },
+    { id: 'streak_7',  threshold: 7  },
+    { id: 'streak_30', threshold: 30 },
+  ];
+  streakMilestones.forEach(m => {
+    if (!unlocked.has(m.id) && currentStreak >= m.threshold) toUnlock.push(m.id);
+  });
+
+  toUnlock.forEach(id => {
+    saveUnlockedAchievement(id);
+    const def = ACHIEVEMENT_DEFS.find(d => d.id === id);
+    if (def) showAchievementPopup(def);
+  });
+}
+
+function showAchievementPopup(def) {
+  const container = document.getElementById('achievement-container');
+  if (!container) return;
+  SFX.play(def.ultra ? 'ultra-achivement' : 'achievement', 1000, 0.7);
+
+  const el = document.createElement('div');
+  el.className = 'achievement-popup' + (def.ultra ? ' achievement-popup--ultra' : '');
+  el.innerHTML = `
+    <span class="achievement-icon">${def.icon}</span>
+    <div class="achievement-text">
+      <div class="achievement-label">${def.ultra ? '✨ ULTRA ACHIEVEMENT' : 'Achievement Unlocked'}</div>
+      <div class="achievement-name">${def.label}</div>
+      <div class="achievement-desc">${def.desc}</div>
+    </div>`;
+  container.appendChild(el);
+
+  // Animate in, hold, then remove
+  requestAnimationFrame(() => { el.classList.add('achievement-popup--visible'); });
+  setTimeout(() => {
+    el.classList.remove('achievement-popup--visible');
+    el.addEventListener('transitionend', () => el.remove(), { once: true });
+    setTimeout(() => el.remove(), 500);
+  }, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ── ATTACK DETECTION ────────────────────────────────────────────────
+// Counts how many of the current user's pixels have been overwritten
+// in a sliding 10-second window. If > ATTACK_THRESHOLD, show a warning.
+// ═══════════════════════════════════════════════════════════════════
+const ATTACK_THRESHOLD = 15;
+const ATTACK_WINDOW_MS = 10_000;
+let _attackTimestamps = [];
+let _attackCooldownUntil = 0;
+
+function recordAttackPixel() {
+  if (!currentUser) return;
+  const now = Date.now();
+  _attackTimestamps.push(now);
+  // Prune old events outside window
+  _attackTimestamps = _attackTimestamps.filter(t => now - t < ATTACK_WINDOW_MS);
+  if (_attackTimestamps.length >= ATTACK_THRESHOLD && now > _attackCooldownUntil) {
+    _attackCooldownUntil = now + 30_000; // suppress re-notification for 30s
+    _attackTimestamps = [];
+    showAttackWarning();
+  }
+}
+
+function showAttackWarning() {
+  const el = document.getElementById('attack-warning');
+  if (!el) return;
+  SFX.play('notification', 5000, 0.8);
+  el.classList.add('attack-warning--visible');
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => el.classList.remove('attack-warning--visible'), 6000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ── COOLDOWN EVENT SYSTEM ───────────────────────────────────────────
+// Polls /api/event on load and listens to SSE for live updates.
+// Shows a countdown banner in the topbar. Adjusts client COOLDOWN_MS.
+// ═══════════════════════════════════════════════════════════════════
+let _activeCooldownMs = 3000; // starts at default; overridden by event
+
+function updateEventBanner(active, endsAt, cooldownMs) {
+  const banner = document.getElementById('event-banner');
+  const countdown = document.getElementById('event-countdown');
+  if (!banner) return;
+  if (active && endsAt) {
+    _activeCooldownMs = cooldownMs || 1500;
+    banner.style.display = '';
+    // Tick countdown every second
+    clearInterval(banner._tickInterval);
+    banner._tickInterval = setInterval(() => {
+      const rem = endsAt - Date.now();
+      if (rem <= 0) {
+        banner.style.display = 'none';
+        _activeCooldownMs = 3000;
+        clearInterval(banner._tickInterval);
+        return;
+      }
+      const m = Math.floor(rem / 60000);
+      const s = Math.floor((rem % 60000) / 1000);
+      if (countdown) countdown.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    }, 1000);
+  } else if (endsAt && !active) {
+    // Event is upcoming — show "in X hours" teaser
+    const rem = endsAt - Date.now();
+    if (rem > 0 && countdown) {
+      const h = Math.floor(rem / 3600000);
+      const m = Math.floor((rem % 3600000) / 60000);
+      banner.style.display = '';
+      banner.classList.add('event-banner--upcoming');
+      if (countdown) countdown.textContent = `in ${h}h ${m}m`;
+    }
+  } else {
+    banner.style.display = 'none';
+    _activeCooldownMs = 3000;
+  }
+}
+
+async function fetchEventStatus() {
+  try {
+    const res = await fetch('/api/event');
+    if (!res.ok) return;
+    const data = await res.json();
+    updateEventBanner(data.active, data.endsAt, data.cooldownMs);
+    // Schedule next upcoming check using next event if server provides it
+    if (!data.active && data.nextEventAt) {
+      const delay = Math.max(0, data.nextEventAt - Date.now());
+      setTimeout(fetchEventStatus, Math.min(delay, 60_000));
+    }
+  } catch { /* non-fatal */ }
+}
+
+// ── Streak state (loaded once after login) ────────────────────────────────────
+let _currentStreak  = 0;
+let _longestStreak  = 0;
+let _totalPixelCount = 0; // approximate running count for achievement checks
+
+async function fetchStreakAndStats() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch('/api/streak', {
+      headers: { 'Authorization': `Bearer ${getStoredToken()}` }
+    });
+    if (!res.ok) return;
+    const d = await res.json();
+    _currentStreak  = d.currentStreak  || 0;
+    _longestStreak  = d.longestStreak  || 0;
+    updateStreakBadge();
+  } catch { /* non-fatal */ }
+}
+
+function updateStreakBadge() {
+  const badge = document.getElementById('streak-badge');
+  if (!badge) return;
+  if (_currentStreak >= 2) {
+    badge.textContent = `🔥 ${_currentStreak}`;
+    badge.title = `${_currentStreak}-day streak! Longest: ${_longestStreak}`;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
 const DEFAULT_PALETTE = [
   { id: 0, label: 'Black', color: '#000000' },
   { id: 1, label: 'White', color: '#ffffff' },
@@ -129,6 +472,12 @@ function connectSSE() {
         if (event.user !== currentUser) {
           applyRemotePixel(event);
           scheduleRemoteRedraw();
+          // Attack detection: check if this pixel overwrites one of ours
+          if (currentUser && event.user !== currentUser) {
+            const existing = bufferCtx.getImageData(event.x, event.y, 1, 1).data;
+            // A non-transparent pixel was there — assume it was ours if we're tracking
+            if (existing[3] > 0) recordAttackPixel();
+          }
         }
         // Notify leaderboard of any pixel placed (own or other players)
         window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
@@ -140,6 +489,9 @@ function connectSSE() {
       } else if (event.type === 'clients') {
         // Update live player count from server SSE (authoritative count)
         dispatchStateChange({ liveCount: event.count });
+      } else if (event.type === 'event') {
+        // Cooldown event started/updated from server broadcast
+        updateEventBanner(event.active, event.endsAt, event.cooldownMs);
       } else if (event.type === 'chat') {
         // Forward chat messages to the chat panel (chat.js)
         if (typeof window.__chatIncoming === 'function') window.__chatIncoming(event);
@@ -377,6 +729,20 @@ function setCurrentUser(username, emailVerified = false, cooldown = 0) {
   document.body.classList.remove('auth-open');
   showAuthMessage('');
   updateCooldownLabel();
+  // Load streak + pixel count for achievements
+  fetchStreakAndStats().then(() => {
+    // Load total pixel count from profile for achievement seeding
+    fetch(`/api/profile/${encodeURIComponent(username)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          _totalPixelCount = d.totalPixels || 0;
+          _currentStreak   = d.currentStreak || 0;
+          _longestStreak   = d.longestStreak || 0;
+          updateStreakBadge();
+        }
+      }).catch(() => {});
+  });
 }
 
 async function handleLogout() {
@@ -510,8 +876,8 @@ function updateCooldownLabel() {
     return;
   }
   cooldownBar.classList.remove('cooldown-bar--guest');
-  const remaining = Math.max(0, COOLDOWN_MS - (Date.now() - lastPlaceAt));
-  const recharged = 1 - remaining / COOLDOWN_MS;
+  const remaining = Math.max(0, _activeCooldownMs - (Date.now() - lastPlaceAt));
+  const recharged = 1 - remaining / _activeCooldownMs;
   cooldownFill.style.width = `${Math.max(0, Math.min(100, recharged * 100))}%`;
   if (remaining > 0) {
     cooldownBar.classList.add('cooldown-bar--cooling');
@@ -519,8 +885,8 @@ function updateCooldownLabel() {
     // Drive smooth updates via rAF while cooling
     if (!_cooldownRafId) {
       const tick = () => {
-        const rem = Math.max(0, COOLDOWN_MS - (Date.now() - lastPlaceAt));
-        const pct = (1 - rem / COOLDOWN_MS) * 100;
+        const rem = Math.max(0, _activeCooldownMs - (Date.now() - lastPlaceAt));
+        const pct = (1 - rem / _activeCooldownMs) * 100;
         cooldownFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
         if (rem > 0) {
           cooldownBarLabel.textContent = `Cooldown · ${Math.ceil(rem / 1000)}s`;
@@ -542,7 +908,7 @@ function updateCooldownLabel() {
 }
 
 function canPlacePixel() {
-  return !!currentUser && Date.now() - lastPlaceAt >= COOLDOWN_MS;
+  return !!currentUser && Date.now() - lastPlaceAt >= _activeCooldownMs;
 }
 
 // ─── Grid: corner dots drawn in viewport space ───────────────────────────────
@@ -1086,6 +1452,14 @@ function applyToolAtCell(x, y) {
   paintPixel(x, y);
   lastPlaceAt = Date.now();
 
+  // SFX + particles for brush/eraser
+  if (tool === 'eraser') {
+    SFX.play('pixel-erased', 80, 0.4);
+  } else {
+    SFX.play('pixel-placed', 80, 0.45);
+    spawnParticles(x, y, color || '#ffffff');
+  }
+
   // Draw only the new pixel directly to ctx for instant feedback
   const ox = offsetX;
   const oy = offsetY;
@@ -1181,6 +1555,11 @@ function broadcastEvent(event) {
       }).then(res => {
         if (res.ok) {
           window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
+          // Update running total and check achievements
+          _totalPixelCount++;
+          _currentStreak = Math.max(_currentStreak, 1); // at minimum 1 today
+          checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
+          updateStreakBadge();
         } else {
           // Non-2xx = pixel was NOT saved (e.g. server-side cooldown race or IP
           // anti-cheat rejection). Roll back the client state so the cooldown
@@ -1531,9 +1910,17 @@ function rgbToHex(r, g, b) {
 
 
 function setTool(newTool) {
+  const prevTool = tool;
   tool = newTool;
   toolButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tool === newTool));
   dispatchStateChange({ currentTool: newTool.charAt(0).toUpperCase() + newTool.slice(1) });
+
+  // Play tool-specific SFX on manual tool changes (not internal switches)
+  if (prevTool !== newTool) {
+    if (newTool === 'eyedropper') SFX.play('eyedropper', 200, 0.5);
+    else if (newTool === 'hand')  SFX.play('hand', 200, 0.45);
+    else                          SFX.play('tool-changed', 150, 0.4);
+  }
   
   // Manage active cursor styling layers directly on the viewport wrapper container
   if (tool === 'hand') {
@@ -2598,6 +2985,11 @@ window.addEventListener('load', () => {
   replayHistory();
   connectSSE();
   updateCooldownLabel();
+
+  // 4. Engagement features — non-blocking background fetches
+  _ensureParticleCanvas();
+  fetchEventStatus();
+  // Streak/stats fetched after auth resolves (handled in setCurrentUser)
 });
 
 (function () {
@@ -3018,6 +3410,7 @@ viewport.addEventListener("touchend", (e) => {
   toggle.addEventListener('click', () => {
     isOpen = !isOpen;
     panel.classList.toggle('lb-open', isOpen);
+    SFX.play(isOpen ? 'leaderboard-open' : 'leaderboard-close', 300, 0.45);
     if (isOpen) fetchLeaderboard();
   });
 
@@ -3062,6 +3455,39 @@ viewport.addEventListener("touchend", (e) => {
       pmTotal.textContent = (d.totalPixels || 0).toLocaleString();
       pmToday.textContent = (d.todayPixels || 0).toLocaleString();
       pmRank.textContent = d.allTimeRank ? `#${d.allTimeRank}` : '—';
+
+      // Streak display
+      const pmStreakEl = document.getElementById('pm-streak');
+      if (pmStreakEl) {
+        pmStreakEl.textContent = d.currentStreak
+          ? `🔥 ${d.currentStreak} day${d.currentStreak !== 1 ? 's' : ''} (best: ${d.longestStreak})`
+          : '—';
+      }
+
+      // Most-used color swatch
+      const pmColorEl = document.getElementById('pm-fav-color');
+      if (pmColorEl) {
+        if (d.mostUsedColor) {
+          pmColorEl.style.background = d.mostUsedColor;
+          pmColorEl.title = d.mostUsedColor.toUpperCase();
+          pmColorEl.style.display = '';
+        } else {
+          pmColorEl.style.display = 'none';
+        }
+      }
+
+      // Achievements
+      const pmAchEl = document.getElementById('pm-achievements');
+      if (pmAchEl) {
+        if (d.achievements && d.achievements.length > 0) {
+          pmAchEl.innerHTML = d.achievements.map(a => {
+            const def = ACHIEVEMENT_DEFS.find(x => x.id === a.achievement_id);
+            return def ? `<span class="pm-ach-badge" title="${def.label}: ${def.desc}">${def.icon}</span>` : '';
+          }).join('');
+        } else {
+          pmAchEl.innerHTML = '<span style="color:#475569;font-size:0.8rem">No achievements yet.</span>';
+        }
+      }
 
       if (d.recentPixels && d.recentPixels.length > 0) {
         pmRecent.innerHTML = d.recentPixels.map(p => {

@@ -436,7 +436,13 @@ function sseConnectionGuard(req, res, next) {
 }
 
 // ── Actions & SSE ─────────────────────────────────────────────────────────────
-initializeActions(app, db, pixelLimiter, broadcastSSE);
+initializeActions(app, db, pixelLimiter, (event) => {
+  broadcastSSE(event);
+  // Update streak whenever a pixel or erase is placed
+  if ((event.type === 'pixel' || event.type === 'erase') && event.user) {
+    try { updateStreak(event.user); } catch(e) { /* non-fatal */ }
+  }
+});
 app.use('/api/stream', sseLimiter);
 initializeSSE(app, db, sseConnectionGuard);
 
@@ -678,6 +684,212 @@ app.get('/api/palette', paletteLimiter, (req, res) => {
   } catch (err) {
     console.error('Palette fetch error:', err);
     return res.status(500).json({ error: 'Could not load palette.' });
+  }
+});
+
+// ── Streak helpers (UTC-4 day boundary) ──────────────────────────────────────
+function getDayUTC4() {
+  const now = new Date();
+  const utc4 = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  return utc4.toISOString().slice(0, 10);
+}
+
+function initStreakTables() {
+  db.prepare(`CREATE TABLE IF NOT EXISTS streaks (
+    username TEXT PRIMARY KEY,
+    current_streak INTEGER NOT NULL DEFAULT 0,
+    longest_streak INTEGER NOT NULL DEFAULT 0,
+    last_day TEXT
+  )`).run();
+
+  db.prepare(`CREATE TABLE IF NOT EXISTS achievements (
+    username TEXT NOT NULL,
+    achievement_id TEXT NOT NULL,
+    unlocked_at INTEGER NOT NULL,
+    PRIMARY KEY (username, achievement_id)
+  )`).run();
+}
+initStreakTables();
+
+// Update a user's streak when they place a pixel. Called from placePixel paths.
+function updateStreak(username) {
+  try {
+    const today = getDayUTC4();
+    const row = db.prepare('SELECT current_streak, longest_streak, last_day FROM streaks WHERE username = ?').get(username);
+    if (!row) {
+      db.prepare('INSERT INTO streaks (username, current_streak, longest_streak, last_day) VALUES (?, 1, 1, ?)').run(username, today);
+      return { current: 1, longest: 1 };
+    }
+    if (row.last_day === today) return { current: row.current_streak, longest: row.longest_streak };
+
+    const yesterday = (() => {
+      const d = new Date(today + 'T04:00:00Z'); // UTC-4 midnight
+      d.setUTCDate(d.getUTCDate() - 1);
+      return d.toISOString().slice(0, 10);
+    })();
+
+    const newStreak = row.last_day === yesterday ? row.current_streak + 1 : 1;
+    const newLongest = Math.max(newStreak, row.longest_streak);
+    db.prepare('UPDATE streaks SET current_streak = ?, longest_streak = ?, last_day = ? WHERE username = ?')
+      .run(newStreak, newLongest, today, username);
+    return { current: newStreak, longest: newLongest };
+  } catch (err) {
+    console.error('[streak] update error:', err.message);
+    return null;
+  }
+}
+
+// ── Cooldown Event state ──────────────────────────────────────────────────────
+// A cooldown event halves the per-player cooldown for a set duration.
+// Server admins trigger it via POST /api/event/start (no auth for simplicity —
+// add a secret header check if you want to restrict it).
+let _eventActive = false;
+let _eventEndsAt  = 0;
+const EVENT_COOLDOWN_MS = 1500; // 1.5 s during event (vs normal 3 s)
+const EVENT_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
+function isEventActive() {
+  if (_eventActive && Date.now() < _eventEndsAt) return true;
+  _eventActive = false;
+  return false;
+}
+
+// Read / write event state from DB so it survives restarts
+(function initEventTable() {
+  db.prepare(`CREATE TABLE IF NOT EXISTS cooldown_events (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    ends_at INTEGER NOT NULL DEFAULT 0
+  )`).run();
+  const row = db.prepare('SELECT ends_at FROM cooldown_events WHERE id = 1').get();
+  if (row && row.ends_at > Date.now()) {
+    _eventActive  = true;
+    _eventEndsAt  = row.ends_at;
+  }
+})();
+
+const eventLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyGenerator: (req) => safeIp(req) });
+
+// GET /api/event — returns current event status + countdown
+app.get('/api/event', eventLimiter, (req, res) => {
+  const active = isEventActive();
+  res.json({
+    active,
+    endsAt:   active ? _eventEndsAt : null,
+    cooldownMs: active ? EVENT_COOLDOWN_MS : 3000,
+  });
+});
+
+// POST /api/event/start — admin trigger (protect with a secret if needed)
+app.post('/api/event/start', eventLimiter, (req, res) => {
+  const secret = process.env.EVENT_SECRET || '';
+  if (secret && req.headers['x-event-secret'] !== secret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  _eventActive = true;
+  _eventEndsAt = Date.now() + EVENT_DURATION_MS;
+  db.prepare('INSERT OR REPLACE INTO cooldown_events (id, ends_at) VALUES (1, ?)').run(_eventEndsAt);
+  broadcastSSE({ type: 'event', active: true, endsAt: _eventEndsAt, cooldownMs: EVENT_COOLDOWN_MS });
+  return res.json({ success: true, endsAt: _eventEndsAt });
+});
+
+// ── Profile API ───────────────────────────────────────────────────────────────
+const profileLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, keyGenerator: (req) => safeIp(req) });
+
+app.get('/api/profile/:username', profileLimiter, (req, res) => {
+  const { username } = req.params;
+  if (!username || username.length > 30) return res.status(400).json({ error: 'Invalid username.' });
+  try {
+    const today = getDayUTC4();
+
+    // Total pixels all-time
+    const totalRow = db.prepare(`SELECT COALESCE(SUM(count), 0) AS total FROM pixel_counts WHERE username = ?`).get(username);
+    // Today's pixels
+    const todayRow = db.prepare(`SELECT COALESCE(count, 0) AS cnt FROM pixel_counts WHERE username = ? AND day = ?`).get(username, today);
+    // All-time rank
+    const rankRow  = db.prepare(`
+      SELECT COUNT(*) + 1 AS rank FROM (
+        SELECT username, SUM(count) AS total FROM pixel_counts GROUP BY username
+      ) t WHERE total > COALESCE((SELECT SUM(count) FROM pixel_counts WHERE username = ?), 0)
+    `).get(username);
+    // Recent pixels
+    const recent = db.prepare(`SELECT x, y, color, placed_at FROM pixel_history WHERE username = ? ORDER BY placed_at DESC LIMIT 20`).all(username);
+    // Most-used color (exclude 'erase')
+    const colorRow = db.prepare(`
+      SELECT color, COUNT(*) AS cnt FROM pixel_history
+      WHERE username = ? AND color != 'erase'
+      GROUP BY color ORDER BY cnt DESC LIMIT 1
+    `).get(username);
+    // Streak
+    const streakRow = db.prepare('SELECT current_streak, longest_streak FROM streaks WHERE username = ?').get(username);
+    // Achievements
+    const achievements = db.prepare(`SELECT achievement_id, unlocked_at FROM achievements WHERE username = ? ORDER BY unlocked_at ASC`).all(username);
+
+    return res.json({
+      username,
+      totalPixels:   Number(totalRow?.total  || 0),
+      todayPixels:   Number(todayRow?.cnt    || 0),
+      allTimeRank:   Number(rankRow?.rank    || 0),
+      currentStreak: streakRow?.current_streak  || 0,
+      longestStreak: streakRow?.longest_streak  || 0,
+      mostUsedColor: colorRow ? ('#' + colorRow.color) : null,
+      achievements:  achievements || [],
+      recentPixels:  recent || [],
+    });
+  } catch (err) {
+    console.error('[profile] error:', err);
+    return res.status(500).json({ error: 'Could not load profile.' });
+  }
+});
+
+// ── Streak API ────────────────────────────────────────────────────────────────
+const streakLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, keyGenerator: (req) => safeIp(req) });
+
+app.get('/api/streak', streakLimiter, (req, res) => {
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const row = db.prepare('SELECT current_streak, longest_streak, last_day FROM streaks WHERE username = ?').get(session.username);
+    return res.json({
+      currentStreak: row?.current_streak  || 0,
+      longestStreak: row?.longest_streak  || 0,
+      lastDay:       row?.last_day        || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not load streak.' });
+  }
+});
+
+// ── Leaderboard API ───────────────────────────────────────────────────────────
+const leaderboardLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, keyGenerator: (req) => safeIp(req) });
+
+const PERIOD_SQL = {
+  today:   `AND day = '${getDayUTC4()}'`,
+  week:    `AND day >= date('now', '-6 days', 'start of day')`,
+  month:   `AND day >= date('now', 'start of month')`,
+  year:    `AND day >= date('now', 'start of year')`,
+  decade:  '',
+  alltime: '',
+};
+
+app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
+  const period = ['today','week','month','year','decade','alltime'].includes(req.query.period)
+    ? req.query.period : 'today';
+  const dayFilter = period === 'today'
+    ? `AND day = '${getDayUTC4()}'`
+    : period === 'week'   ? `AND day >= date('now', '-6 days')`
+    : period === 'month'  ? `AND day >= date('now', '-29 days')`
+    : period === 'year'   ? `AND day >= date('now', '-364 days')`
+    : '';
+  try {
+    const rows = db.prepare(`
+      SELECT username, SUM(count) AS count
+      FROM pixel_counts WHERE 1=1 ${dayFilter}
+      GROUP BY username ORDER BY count DESC LIMIT 50
+    `).all();
+    return res.json({ leaderboard: rows });
+  } catch (err) {
+    console.error('[leaderboard] error:', err);
+    return res.status(500).json({ error: 'Could not load leaderboard.' });
   }
 });
 
