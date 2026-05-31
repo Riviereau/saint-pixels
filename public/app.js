@@ -400,6 +400,11 @@ async function handleLogout() {
   updateCooldownLabel();
 }
 
+/**
+ * Handles user login by validating form input, verifying the captcha,
+ * sending credentials to the login API, and updating the current user 
+ * state when auth is successful.
+ */
 async function handleLogin(event) {
   if (event) event.preventDefault();
   const username = authUsername.value.trim();
@@ -410,7 +415,7 @@ async function handleLogin(event) {
   }
 
   const captchaToken = getCaptchaToken();
-  if (!captchaToken) {
+  if (!captchaToken && !isLocalDev()) {
     showAuthMessage('Please complete the captcha.');
     return;
   }
@@ -2186,6 +2191,7 @@ function getCaptchaToken() {
 }
 
 function resetCaptcha() {
+  if (isLocalDev()) return;
   if (typeof hcaptcha !== 'undefined') {
     hcaptcha.reset();
   }
