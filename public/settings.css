@@ -9,28 +9,8 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Topbar button ────────────────────────────────────────────────────── */
-.settings-topbar-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.375rem 0.65rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e2e8f0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
-  flex-shrink: 0;
-}
-.settings-topbar-btn:hover {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.8);
-  color: #38bdf8;
-  transform: translateY(-1px);
-}
+/* Styled via Tailwind classes directly in settings.js to match the
+   existing topbar pill buttons (Rules, Contribute, Discord, etc.) */
 
 /* ── Overlay backdrop ─────────────────────────────────────────────────── */
 .settings-overlay {

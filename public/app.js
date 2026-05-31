@@ -60,6 +60,19 @@ const SFX = (() => {
   let   enabled = true;
   const SFX_VERSION = Date.now(); // cache-bust: forces browser to re-fetch on every page load
 
+  // ── Master volume (persisted to localStorage) ──────────────────────
+  const VOL_KEY = 'sp_sfx_volume';
+  let masterVolume = Math.max(0, Math.min(1, parseFloat(localStorage.getItem(VOL_KEY) ?? '1')));
+
+  function setVolume(v) {
+    masterVolume = Math.max(0, Math.min(1, v));
+    localStorage.setItem(VOL_KEY, String(masterVolume));
+  }
+
+  function getVolume() {
+    return masterVolume;
+  }
+
   document.addEventListener('visibilitychange', () => {
     enabled = !document.hidden;
   });
@@ -82,7 +95,7 @@ const SFX = (() => {
    * Play a sound.
    * @param {string} name  — filename without extension (e.g. 'pixel-placed')
    * @param {number} minInterval — minimum ms between plays of this sound (default 80)
-   * @param {number} volume — 0–1 (default 0.5)
+   * @param {number} volume — 0–1 relative volume, scaled by masterVolume (default 0.5)
    */
   function play(name, minInterval = 80, volume = 0.5) {
     if (!enabled) return;
@@ -92,12 +105,12 @@ const SFX = (() => {
     try {
       const a = load(name);
       const clone = a.cloneNode(); // allows overlapping if interval passes
-      clone.volume = Math.max(0, Math.min(1, volume));
+      clone.volume = Math.max(0, Math.min(1, volume * masterVolume));
       clone.play().catch(() => {}); // ignore NotAllowedError before first interaction
     } catch { /* ignore */ }
   }
 
-  return { play, enabled: () => enabled };
+  return { play, enabled: () => enabled, setVolume, getVolume };
 })();
 
 // ═══════════════════════════════════════════════════════════════════
