@@ -35,6 +35,9 @@ function appendToJsonHistory(entry) {
   const line = JSON.stringify(entry);
   try {
     if (!fs.existsSync(JSON_HISTORY_PATH)) {
+      // Ensure the parent directory exists before creating the file.
+      const dir = path.dirname(JSON_HISTORY_PATH);
+      fs.mkdirSync(dir, { recursive: true });
       // First entry — create the file as a single-element array.
       fs.writeFileSync(JSON_HISTORY_PATH, `[\n${line}\n]`, 'utf8');
       return;

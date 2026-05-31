@@ -34,6 +34,10 @@ app.use((req, res, next) => {
         // Per-request nonce covers all script tags we control (app.js, chat.js,
         // the inline rules script). Any tag without this nonce is blocked.
         (req, res) => `'nonce-${res.locals.cspNonce}'`,
+        // Fallback hash for any inline script that somehow lacks a nonce
+        // (e.g. a new block added without the __CSP_NONCE__ placeholder).
+        // Remove once all inline scripts carry a nonce attribute.
+        "'sha256-fhzTSFP/g8pZXkvs0zLgEc7vR12cQqDrjqwhNP7LoMA='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
