@@ -420,7 +420,7 @@ const COOLDOWN_MS = 3000;
 /** Max zoom as UI scale (1 = 100%, 50 = 5000%) */
 const MAX_ZOOM_SCALE = 50;
 /** Min zoom as UI scale (1 = 100%, 50 = 5000%) */
-const MIN_ZOOM_SCALE = 0.25;
+const MIN_ZOOM_SCALE = 0.5;
 /** Slow OS key-repeat for arrow nudging (ms between steps while key is held) */
 const ARROW_KEY_REPEAT_MS = 110;
 /** Ignore small mouse jitter after arrow moves until pointer moves this far (px). */
@@ -1032,8 +1032,6 @@ let isRedrawPending = false;
 function redraw() {
   if (isRedrawPending) return;
   isRedrawPending = true;
-
-  console.log('redrawing');
 
   requestAnimationFrame(() => {
     isRedrawPending = false;
