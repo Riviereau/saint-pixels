@@ -2346,6 +2346,10 @@ function moveAction(event) {
 
 
 
+// Tracks the last cell placed during the current mouse-drag so moveAction and
+// stopAction never both fire applyToolAtCell on the same (x,y) in one gesture.
+let _lastPlacedCell = null;
+
 function handleAction(event) {
   disarmKeyboardCursor();
   const { x, y } = getCanvasCoords(event.clientX, event.clientY);
@@ -2353,6 +2357,8 @@ function handleAction(event) {
   // cursorPosition is used for the keyboard/arrow-key workflow; relying on it
   // here caused off-by-one placement on Android because touchmove jitter
   // updated cursorPosition to a slightly wrong cell before touchend fired.
+  if (_lastPlacedCell && _lastPlacedCell.x === x && _lastPlacedCell.y === y) return;
+  _lastPlacedCell = { x, y };
   applyToolAtCell(x, y);
 }
 
@@ -2368,6 +2374,7 @@ function stopAction(event) {
   }
   // Clear the flag so the next independent click works normally.
   _eyedropperJustFired = false;
+  _lastPlacedCell = null; // reset so the next click always registers
 
   isMouseDown = false;
 }
@@ -2836,7 +2843,7 @@ document.addEventListener('keydown', event => {
       break;
 
     case 'Enter':
-      placeFromKeyboard();
+      if (!event.repeat) placeFromKeyboard();
       break;
     // Fullscreen
     case 'f':
