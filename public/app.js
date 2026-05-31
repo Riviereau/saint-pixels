@@ -9,9 +9,6 @@
 function dispatchStateChange(detail) {
   window.dispatchEvent(new CustomEvent('sp-state-change', { detail }));
 }
-//Expose achievements
-window.ACHIEVEMENT_DEFS = ACHIEVEMENT_DEFS;
-
 document.addEventListener('DOMContentLoaded', () => {
 // Prevent default form submission (replaces the removed onsubmit="return false;" attr,
 // which was blocked by Content-Security-Policy script-src-attr 'none').
@@ -204,6 +201,8 @@ const ACHIEVEMENT_DEFS = [
   { id: 'streak_7',      label: 'Week Warrior',       desc: 'Paint 7 days in a row.',               icon: '🔥',  ultra: false },
   { id: 'streak_30',     label: 'Month of Madness',   desc: 'Paint 30 days in a row.',              icon: '🔥',  ultra: true  },
 ];
+// Expose to settings.js (must come after the const declaration)
+window.ACHIEVEMENT_DEFS = ACHIEVEMENT_DEFS;
 
 const ACHIEVEMENT_LS_KEY = 'sp_achievements_unlocked';
 
