@@ -60,6 +60,7 @@ const SFX = (() => {
   const cache   = {};
   const lastAt  = {};
   let   enabled = true;
+  const SFX_VERSION = Date.now(); // cache-bust: forces browser to re-fetch on every page load
 
   document.addEventListener('visibilitychange', () => {
     enabled = !document.hidden;
@@ -67,7 +68,7 @@ const SFX = (() => {
 
   function load(name) {
     if (cache[name]) return cache[name];
-    const a = new Audio(`/sfx/${name}.wav`);
+    const a = new Audio(`/sfx/${name}.wav?v=${SFX_VERSION}`);
     a.preload = 'auto';
     cache[name] = a;
     return a;
