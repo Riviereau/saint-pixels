@@ -72,6 +72,12 @@ app.use((req, res, next) => {
       frameSrc:   ["https://newassets.hcaptcha.com"],
       connectSrc: ["'self'", "https://hcaptcha.com", "https://*.hcaptcha.com"],
       imgSrc:     ["'self'", "data:"],
+      // 'data:' allows the silent inline WAV used to unlock iOS audio on first
+      // touch (the _unlockAudio() helper in app.js).  Without it, iOS falls back
+      // to default-src 'self' which blocks data: URIs and silently drops every
+      // subsequent SFX play() call — the user hears nothing.
+      // 'blob:' covers browsers that resolve Audio.src to a blob: URL internally.
+      mediaSrc:   ["'self'", "data:", "blob:"],
       fontSrc:    ["'self'"],
       upgradeInsecureRequests: null,
     },
