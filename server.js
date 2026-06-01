@@ -35,12 +35,18 @@ app.use((req, res, next) => {
         // the inline rules script). Any tag without this nonce is blocked.
         (req, res) => `'nonce-${res.locals.cspNonce}'`,
         // Fallback hashes for inline scripts that lack a nonce attribute.
-        // Add new hashes here when the browser console reports a blocked
-        // inline script and suggests a hash to allow it.
-        // Remove entries once all inline scripts carry a nonce attribute.
+        // Fallback hashes for inline scripts. Inline scripts should carry a
+        // nonce="__CSP_NONCE__" — if one is missing the nonce, the browser will
+        // report its hash here and it should be added. Once all inline scripts are
+        // extracted to external files these entries can be removed.
         "'sha256-fhzTSFP/g8pZXkvs0zLgEc7vR12cQqDrjqwhNP7LoMA='",
         "'sha256-kgL4BeXu5i8IL19/h+xX29yxerkiRJAIMlaB16C9Z3c='",
         "'sha256-DKvyw+VPCZ+yYosvM7fBfmlQLJUOPR/XmndDIzBHCuk='",
+        // Rules window script — two hashes cover the file-as-uploaded and the
+        // version the browser reported. The inline script has been moved to
+        // /rules.js so these hashes are belt-and-suspenders for cached deployments.
+        "'sha256-cTc7j0QRPd2lahucuGoesYnoiY20ld2VoJH/dI1jo1Q='",
+        "'sha256-VRHni0ghwcE6k2ag6cOlYFcp2gCLPlFMjucv3rvRtEo='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
