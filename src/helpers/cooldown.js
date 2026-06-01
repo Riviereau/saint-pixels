@@ -36,4 +36,4 @@ function resetCooldown(username) {
   `).run(username, Date.now());
 }
 
-module.exports = { setDb, getCooldown, resetCooldown };
+module.exports = { setDb, getCooldown, resetCooldown, COOLDOWN_MS };

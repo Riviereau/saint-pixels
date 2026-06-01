@@ -87,8 +87,7 @@ const dbFile = process.env.DATABASE_PATH || path.join(__dirname, 'database.sqlit
 const db = new Database(dbFile);
 
 const { setDb: setSessionDb, createSession, closeSession, getSession } = require('./src/helpers/session.js');
-const { setDb: setCooldownDb }  = require('./src/helpers/cooldown.js');
-const { getCooldown } = require('./src/helpers/cooldown.js');
+const { setDb: setCooldownDb, getCooldown, COOLDOWN_MS } = require('./src/helpers/cooldown.js');
 const { setDb: setAntiCheatDb } = require('./src/helpers/AntiCheat.js');
 const { hashPassword, verifyPassword } = require('./src/helpers/password.js');
 const { requireCaptcha }         = require('./src/helpers/captcha.js');
@@ -817,7 +816,7 @@ app.get('/api/event', eventLimiter, (req, res) => {
   res.json({
     active,
     endsAt:   active ? _eventEndsAt : null,
-    cooldownMs: active ? EVENT_COOLDOWN_MS : 3000,
+    cooldownMs: active ? EVENT_COOLDOWN_MS : COOLDOWN_MS,
   });
 });
 

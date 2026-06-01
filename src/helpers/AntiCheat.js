@@ -36,11 +36,9 @@ let _db = null;
  */
 const _ipInFlight = new Map();
 
-/**
- * Base cooldown in ms — mirrors the per-user cooldown in cooldown.js.
- * Keep these in sync or import from a shared config if you add one.
- */
-const BASE_COOLDOWN_MS = 3_000;
+// Single source-of-truth cooldown: imported from cooldown.js so AntiCheat
+// always matches the per-user cooldown without a separate hardcode.
+const { COOLDOWN_MS: BASE_COOLDOWN_MS } = require('./cooldown.js');
 
 /**
  * When 2+ distinct usernames are seen from the same IP within this window,

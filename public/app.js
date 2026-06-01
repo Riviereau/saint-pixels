@@ -324,7 +324,9 @@ function showAttackWarning() {
 // Polls /api/event on load and listens to SSE for live updates.
 // Shows a countdown banner in the topbar. Adjusts client COOLDOWN_MS.
 // ═══════════════════════════════════════════════════════════════════
-let _activeCooldownMs = 3000; // starts at default; overridden by event
+/** Normal per-pixel cooldown in ms — must match cooldown.js on the server. */
+const COOLDOWN_MS = 3000;
+let _activeCooldownMs = COOLDOWN_MS; // starts at default; overridden by event
 
 function updateEventBanner(active, endsAt, cooldownMs) {
   const banner = document.getElementById('event-banner');
@@ -339,7 +341,7 @@ function updateEventBanner(active, endsAt, cooldownMs) {
       const rem = endsAt - Date.now();
       if (rem <= 0) {
         banner.style.display = 'none';
-        _activeCooldownMs = 3000;
+        _activeCooldownMs = COOLDOWN_MS;
         clearInterval(banner._tickInterval);
         return;
       }
@@ -359,7 +361,7 @@ function updateEventBanner(active, endsAt, cooldownMs) {
     }
   } else {
     banner.style.display = 'none';
-    _activeCooldownMs = 3000;
+    _activeCooldownMs = COOLDOWN_MS;
   }
 }
 
@@ -431,7 +433,7 @@ const PIXEL_HISTORY_KEY = 'sp_pixel_history';
 // Declared here (top of DOMContentLoaded) so clearToken(), updateAuthState(),
 // and checkVerifiedParam() can all reference it without a TDZ ReferenceError.
 const EMAIL_VERIFIED_KEY = 'sp_email_verified';
-const COOLDOWN_MS = 3000;
+// NOTE: COOLDOWN_MS is declared earlier, near the Cooldown Event System block.
 /** Max zoom as UI scale (1 = 100%, 50 = 5000%) */
 const MAX_ZOOM_SCALE = 50;
 /** Min zoom as UI scale (1 = 100%, 50 = 5000%) */
@@ -699,9 +701,12 @@ async function updateAuthState() {
     const data = await response.json();
     currentUser = data.username;
     
-    // Sync local cooldown timer with server remaining time
+    // Sync local cooldown timer with server remaining time.
+    // Use _activeCooldownMs (live value, synced from the server via
+    // fetchEventStatus / SSE) so canPlacePixel() and the bar both agree,
+    // even when a speed-up event is active.
     if (data.cooldown && data.cooldown > 0) {
-      lastPlaceAt = Date.now() - (COOLDOWN_MS - data.cooldown);
+      lastPlaceAt = Date.now() - (_activeCooldownMs - data.cooldown);
     } else {
       lastPlaceAt = 0; // Ready to place
     }
@@ -739,9 +744,12 @@ function showAuthMessage(message, isError = true) {
 function setCurrentUser(username, emailVerified = false, cooldown = 0) {
   currentUser = username;
   
-  // Sync local cooldown timer with server remaining time
+  // Sync local cooldown timer with server remaining time.
+  // Use _activeCooldownMs (live value, synced from the server via
+  // fetchEventStatus / SSE) so canPlacePixel() and the bar both agree,
+  // even when a speed-up event is active.
   if (cooldown && cooldown > 0) {
-    lastPlaceAt = Date.now() - (COOLDOWN_MS - cooldown);
+    lastPlaceAt = Date.now() - (_activeCooldownMs - cooldown);
   } else {
     lastPlaceAt = 0; // Ready to place
   }
