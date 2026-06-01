@@ -9,8 +9,11 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Topbar button ────────────────────────────────────────────────────── */
-/* Styled via Tailwind classes directly in settings.js to match the
-   existing topbar pill buttons (Rules, Contribute, Discord, etc.) */
+/* The JS-injected #settings-topbar-btn is superseded by #mob-settings-btn
+   in the scrolling topbar strip, so we hide it unconditionally. */
+#settings-topbar-btn {
+  display: none !important;
+}
 
 /* ── Overlay backdrop ─────────────────────────────────────────────────── */
 .settings-overlay {
