@@ -133,6 +133,10 @@
   }
 
   topbarBtn.addEventListener('click', openSettings);
+
+  // Also wire the mobile topbar settings button (visible on small screens)
+  const mobSettingsBtn = document.getElementById('mob-settings-btn');
+  if (mobSettingsBtn) mobSettingsBtn.addEventListener('click', openSettings);
   document.getElementById('settings-close-btn').addEventListener('click', closeSettings);
   overlay.addEventListener('click', e => { if (e.target === overlay) closeSettings(); });
   document.addEventListener('keydown', e => {
