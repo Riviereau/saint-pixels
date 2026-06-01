@@ -217,16 +217,25 @@
     volIcon.textContent  = pct === 0 ? '🔇' : pct < 50 ? '🔉' : '🔊';
   }
 
-  slider.addEventListener('input', () => {
-    const v = parseInt(slider.value, 10) / 100;
+  // applyVolume is called from both 'input' (desktop drag) and 'change'
+  // (iOS fires 'change' reliably; 'input' may be skipped during a drag).
+  // Always committing volume inside 'change' ensures the preview sound on
+  // release plays at the *new* level, not the stale one.
+  function applyVolume() {
+    const raw = parseInt(slider.value, 10);
+    const v = isNaN(raw) ? 1 : Math.max(0, Math.min(1, raw / 100));
     if (window.SFX) SFX.setVolume(v);
     else localStorage.setItem('sp_sfx_volume', String(v));
-    volLabel.textContent = slider.value + '%';
+    volLabel.textContent = Math.round(v * 100) + '%';
     volIcon.textContent  = v === 0 ? '🔇' : v < 0.5 ? '🔉' : '🔊';
-  });
+  }
 
-  // Play a preview sound on release so users can hear the new level
+  // 'input'  — fires continuously on desktop while dragging; gives live feedback.
+  // 'change' — fires on iOS (and on desktop on release); always commit here too
+  //            so the preview sound uses the correct volume.
+  slider.addEventListener('input',  applyVolume);
   slider.addEventListener('change', () => {
+    applyVolume(); // ensure volume is committed on iOS before playing preview
     if (window.SFX) SFX.play('click', 0, 0.6);
   });
 
