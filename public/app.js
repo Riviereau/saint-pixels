@@ -1671,7 +1671,10 @@ function exportPng() {
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width  = BOARD_WIDTH;
   exportCanvas.height = BOARD_HEIGHT;
-  exportCanvas.getContext('2d').drawImage(
+  const exportCtx = exportCanvas.getContext('2d');
+  exportCtx.fillStyle = '#ffffff';
+  exportCtx.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+  exportCtx.drawImage(
     bufferCanvas,
     0, 0, BOARD_WIDTH, BOARD_HEIGHT,   // source: board region of buffer
     0, 0, BOARD_WIDTH, BOARD_HEIGHT    // dest: full export canvas
