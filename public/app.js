@@ -2319,6 +2319,11 @@ function startAction(event) {
     return;
   }
 
+  // Reset the per-gesture dedup guard so every new mousedown can place on
+  // the same cell as the previous gesture (e.g. rapid clicks on one pixel,
+  // or a server-rollback retry on the exact same cell).
+  _lastPlacedCell = null;
+
   // Start a long-press timer — if the user holds left-click without moving,
   // switch into pan mode after LONG_PRESS_PAN_DELAY_MS milliseconds.
   // We do NOT place a pixel yet; we wait to see whether this becomes a pan
