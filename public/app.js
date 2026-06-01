@@ -1592,21 +1592,27 @@ function broadcastEvent(event) {
           checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
           updateStreakBadge();
         } else {
-          // Non-2xx = pixel was NOT saved (e.g. server-side cooldown race or IP
-          // anti-cheat rejection). Roll back the client state so the cooldown
-          // is not wasted and the ghost pixel doesn't stay on screen.
+          // Non-2xx = pixel was NOT saved. Roll back the optimistic paint.
           res.json().then(data => {
             console.warn('[sp] pixel save failed:', res.status, data?.error);
-            // Rollback: clear our local cooldown timestamp so the user can retry
-            lastPlaceAt = 0;
             // Erase the optimistically-painted pixel from the buffer
             paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+            // Only give the cooldown back on a genuine server-side cooldown
+            // rejection (429). On other errors (400, 500) the cooldown has
+            // already ticked — resetting it to 0 would let the user bypass it.
+            if (res.status === 429) {
+              lastPlaceAt = 0;
+            }
             redraw();
+            updateCooldownLabel();
           }).catch(() => {
             console.warn('[sp] pixel save failed:', res.status);
-            lastPlaceAt = 0;
             paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+            if (res.status === 429) {
+              lastPlaceAt = 0;
+            }
             redraw();
+            updateCooldownLabel();
           });
         }
       }).catch(err => {
@@ -2409,6 +2415,12 @@ function stopAction(event) {
   cancelLongPressPan();
 
   if (wasShortClick && isMouseDown && !isPanning && !_eyedropperJustFired) {
+    // IMPORTANT: clear _lastPlacedCell BEFORE calling handleAction.
+    // moveAction may have set it during the mousedown→mousemove sequence
+    // (Firefox fires fine-grained mousemove even for sub-pixel jitter).
+    // If we don't clear it first, handleAction's dedup guard would see the
+    // same cell and silently skip the placement — causing the double-click bug.
+    _lastPlacedCell = null;
     handleAction(event);
   }
   // Clear the flag so the next independent click works normally.
@@ -2416,6 +2428,15 @@ function stopAction(event) {
   _lastPlacedCell = null; // reset so the next click always registers
 
   isMouseDown = false;
+
+  // End any residual pan state (e.g. pointer left the canvas mid-pan)
+  if (isPanning) {
+    isPanning = false;
+    viewport.classList.remove('tool-hand-dragging');
+    if (tool === 'hand') {
+      viewport.classList.add('tool-hand-active');
+    }
+  }
 }
 
 function handleWheel(event) {
@@ -2492,26 +2513,6 @@ function handlePanEnd() {
   viewport.classList.remove('tool-hand-dragging');
   if (tool === 'hand') {
     viewport.classList.add('tool-hand-active');
-  }
-}
-
-function endAction(event) {
-  const wasShortClick = _longPressPanTimer !== null;
-  cancelLongPressPan();
-  
-  if (wasShortClick && isMouseDown && !isPanning && !_eyedropperJustFired) {
-    handleAction(event);
-  }
-  // Clear the flag so the next independent click works normally.
-  _eyedropperJustFired = false;
-
-  isMouseDown = false;
-  if (isPanning) {
-    isPanning = false;
-    viewport.classList.remove('tool-hand-dragging');
-    if (tool === 'hand') {
-      viewport.classList.add('tool-hand-active');
-    }
   }
 }
 

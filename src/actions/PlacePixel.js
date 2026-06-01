@@ -104,6 +104,21 @@ class PlacePixel {
       return res.status(429).json({ error: 'Cooldown active. Please wait.', cooldown: cooldownLeft });
     }
 
+    // Validate coordinates and color BEFORE resetting the cooldown so that a
+    // malformed request doesn't burn the user's cooldown for nothing.
+    const x = parseInt(req.body.x, 10);
+    const y = parseInt(req.body.y, 10);
+    const color = typeof req.body.color === 'string' ? req.body.color : '';
+    if (isNaN(x) || isNaN(y) || !color) {
+      return res.status(400).json({ error: 'Invalid pixel coordinates or color.' });
+    }
+    // Strip everything except hex digits and #, then drop any leading #
+    const safeColor = color.replace(/[^0-9a-fA-F#]/g, '').replace(/^#+/, '').slice(0, 6);
+    if (safeColor.length !== 6) {
+      return res.status(400).json({ error: 'Invalid color value.' });
+    }
+
+    // Validation passed — now consume the cooldown
     resetCooldown(session.username);
     // Record this placement against the IP for anti-cheat enforcement
     recordIp(req.ip || req.socket?.remoteAddress || 'unknown', session.username);
@@ -123,39 +138,24 @@ class PlacePixel {
     }
 
     // Upsert the pixel — replaces the existing row for this (x,y) if one exists.
-    // This keeps the pixels table bounded to at most BOARD_WIDTH × BOARD_HEIGHT rows
-    // (1 920 × 1 080 = ~2 M) rather than growing without limit as an append log.
     if (_db) {
       try {
-        // Coerce x/y to integers — body-parser may deliver them as strings if
-        // Content-Type is wrong, which would silently skip the write below.
-        const x = parseInt(req.body.x, 10);
-        const y = parseInt(req.body.y, 10);
-        const color = typeof req.body.color === 'string' ? req.body.color : '';
-        if (!isNaN(x) && !isNaN(y) && color) {
-          // Strip everything except hex digits and #, then drop any leading #
-          // so the stored value is always a bare 6-char hex (e.g. "ff0000").
-          const safeColor = color.replace(/[^0-9a-fA-F#]/g, '').replace(/^#+/, '').slice(0, 6);
-          if (safeColor.length !== 6) throw new Error(`Invalid color value: "${color}"`);
-          const now = Date.now();
-          _db.prepare(`
-            INSERT OR REPLACE INTO pixels (username, x, y, color, placed_at)
-            VALUES (?, ?, ?, ?, ?)
-          `).run(session.username, x, y, safeColor, now);
-          // Append-log for timelapse generation — one row per event, never pruned.
-          _db.prepare(`
-            INSERT INTO pixel_history (username, x, y, color, placed_at)
-            VALUES (?, ?, ?, ?, ?)
-          `).run(session.username, x, y, safeColor, now);
-          // Mirror the same event to the JSON history file for timelapse --json.
-          appendToJsonHistory({ username: session.username, x, y, color: safeColor, placed_at: now });
-          // Broadcast uses the same sanitised, #-prefixed color so SSE clients
-          // and the DB are always consistent.
-          _broadcast({ type: 'pixel', x, y, color: '#' + safeColor, user: session.username });
-          return res.json({ success: true });
-        } else {
-          return res.status(400).json({ error: 'Invalid pixel coordinates or color.' });
-        }
+        const now = Date.now();
+        _db.prepare(`
+          INSERT OR REPLACE INTO pixels (username, x, y, color, placed_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(session.username, x, y, safeColor, now);
+        // Append-log for timelapse generation — one row per event, never pruned.
+        _db.prepare(`
+          INSERT INTO pixel_history (username, x, y, color, placed_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(session.username, x, y, safeColor, now);
+        // Mirror the same event to the JSON history file for timelapse --json.
+        appendToJsonHistory({ username: session.username, x, y, color: safeColor, placed_at: now });
+        // Broadcast uses the same sanitised, #-prefixed color so SSE clients
+        // and the DB are always consistent.
+        _broadcast({ type: 'pixel', x, y, color: '#' + safeColor, user: session.username });
+        return res.json({ success: true });
       } catch (err) {
         console.error('PIXEL WRITE FAILED:', err.message, err.code);
         return res.status(500).json({ error: 'Failed to save pixel.' });
@@ -164,10 +164,7 @@ class PlacePixel {
 
     // _db not available — broadcast anyway so other clients still see the pixel,
     // but the pixel won't survive a reload.
-    const safeColor = typeof req.body.color === 'string'
-      ? req.body.color.replace(/[^0-9a-fA-F#]/g, '').replace(/^#+/, '').slice(0, 6)
-      : '';
-    _broadcast({ type: 'pixel', x: req.body.x, y: req.body.y, color: '#' + safeColor, user: session.username });
+    _broadcast({ type: 'pixel', x, y, color: '#' + safeColor, user: session.username });
 
     return res.json({ success: true });
   }
@@ -185,47 +182,48 @@ class PlacePixel {
       return res.status(429).json({ error: 'Cooldown active. Please wait.', cooldown: cooldownLeft });
     }
 
+    // Validate BEFORE consuming the cooldown
+    const x = parseInt(req.body.x, 10);
+    const y = parseInt(req.body.y, 10);
+    if (isNaN(x) || isNaN(y)) {
+      return res.status(400).json({ error: 'Invalid pixel coordinates.' });
+    }
+
     resetCooldown(session.username);
     // Record this erase against the IP for anti-cheat enforcement
     recordIp(req.ip || req.socket?.remoteAddress || 'unknown', session.username);
 
     if (_db) {
       try {
-        // Coerce x/y to integers — same guard as execute() so string-typed
-        // body values don't silently bypass the DB write.
-        const x = parseInt(req.body.x, 10);
-        const y = parseInt(req.body.y, 10);
-        if (!isNaN(x) && !isNaN(y)) {
-          const now = Date.now();
-          // Upsert the erase sentinel — same bounded-table guarantee as pixel placement.
-          _db.prepare(`
-            INSERT OR REPLACE INTO pixels (username, x, y, color, placed_at)
-            VALUES (?, ?, ?, 'erase', ?)
-          `).run(session.username, x, y, now);
+        const now = Date.now();
+        // Upsert the erase sentinel — same bounded-table guarantee as pixel placement.
+        _db.prepare(`
+          INSERT OR REPLACE INTO pixels (username, x, y, color, placed_at)
+          VALUES (?, ?, ?, 'erase', ?)
+        `).run(session.username, x, y, now);
 
-          // Append-log for timelapse generation.
-          _db.prepare(`
-            INSERT INTO pixel_history (username, x, y, color, placed_at)
-            VALUES (?, ?, ?, 'erase', ?)
-          `).run(session.username, x, y, now);
-          // Mirror the erase event to the JSON history file for timelapse --json.
-          appendToJsonHistory({ username: session.username, x, y, color: 'erase', placed_at: now });
+        // Append-log for timelapse generation.
+        _db.prepare(`
+          INSERT INTO pixel_history (username, x, y, color, placed_at)
+          VALUES (?, ?, ?, 'erase', ?)
+        `).run(session.username, x, y, now);
+        // Mirror the erase event to the JSON history file for timelapse --json.
+        appendToJsonHistory({ username: session.username, x, y, color: 'erase', placed_at: now });
 
-          // Increment this player's pixel count for today to update the leaderboard
-          _db.prepare(`
-            INSERT INTO pixel_counts (username, day, count)
-            VALUES (?, ?, 1)
-            ON CONFLICT(username, day)
-            DO UPDATE SET count = count + 1
-          `).run(session.username, getDayUTC4());
-        }
+        // Increment this player's pixel count for today to update the leaderboard
+        _db.prepare(`
+          INSERT INTO pixel_counts (username, day, count)
+          VALUES (?, ?, 1)
+          ON CONFLICT(username, day)
+          DO UPDATE SET count = count + 1
+        `).run(session.username, getDayUTC4());
       } catch (err) {
         console.error('Failed to store erase:', err);
       }
     }
 
     // Broadcast erase event to all SSE clients
-    _broadcast({ type: 'erase', x: parseInt(req.body.x, 10), y: parseInt(req.body.y, 10), user: session.username });
+    _broadcast({ type: 'erase', x, y, user: session.username });
 
     return res.json({ success: true });
   }
