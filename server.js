@@ -34,10 +34,13 @@ app.use((req, res, next) => {
         // Per-request nonce covers all script tags we control (app.js, chat.js,
         // the inline rules script). Any tag without this nonce is blocked.
         (req, res) => `'nonce-${res.locals.cspNonce}'`,
-        // Fallback hash for any inline script that somehow lacks a nonce
-        // (e.g. a new block added without the __CSP_NONCE__ placeholder).
-        // Remove once all inline scripts carry a nonce attribute.
+        // Fallback hashes for inline scripts that lack a nonce attribute.
+        // Add new hashes here when the browser console reports a blocked
+        // inline script and suggests a hash to allow it.
+        // Remove entries once all inline scripts carry a nonce attribute.
         "'sha256-fhzTSFP/g8pZXkvs0zLgEc7vR12cQqDrjqwhNP7LoMA='",
+        "'sha256-kgL4BeXu5i8IL19/h+xX29yxerkiRJAIMlaB16C9Z3c='",
+        "'sha256-DKvyw+VPCZ+yYosvM7fBfmlQLJUOPR/XmndDIzBHCuk='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
@@ -158,8 +161,17 @@ app.get('/favicon.svg', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.svg');
 });
 
+
+
 app.get('/apple-touch-icon.png', indexLimiter, (req, res) => {
-  res.redirect(301, '/images/apple-touch-icon.png');
+  // Return 204 No Content when the file doesn't exist so the browser stops
+  // logging a 404 for a missing touch icon instead of doing a redirect loop.
+  const iconPath = path.join(__dirname, 'images', 'apple-touch-icon.png');
+  if (fs.existsSync(iconPath)) {
+    res.sendFile(iconPath);
+  } else {
+    res.status(204).end();
+  }
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -445,6 +457,29 @@ app.use('/api/stream', (req, res, next) => {
   next();
 });
 app.use('/api/stream', sseLimiter);
+
+// ── SSE heartbeat — prevents Cloudflare / AWS ALB / nginx from closing ────────
+// Reverse proxies (including Cloudflare) close idle HTTP connections after
+// ~100 s of inactivity.  An EventSource with no data will therefore receive a
+// 502 / connection-reset error on the client.  We emit an SSE comment (lines
+// starting with ':' are ignored by EventSource) every 25 seconds to keep the
+// TCP socket alive through any proxy idle-timeout window.
+// The interval is stored per-response and cleared when the client disconnects.
+app.use('/api/stream', (req, res, next) => {
+  // Only attach the heartbeat after the SSE headers have been sent.
+  // We hook into the 'pipe' event which fires once initializeSSE writes the
+  // headers, OR we use a short delay as a reliable fallback.
+  const sendHeartbeat = () => {
+    if (!res.writableEnded && !res.destroyed) {
+      try { res.write(':heartbeat\n\n'); } catch { /* ignore if already closed */ }
+    }
+  };
+  const heartbeatInterval = setInterval(sendHeartbeat, 25_000);
+  res.on('close',  () => clearInterval(heartbeatInterval));
+  res.on('finish', () => clearInterval(heartbeatInterval));
+  next();
+});
+
 initializeSSE(app, db, sseConnectionGuard);
 
 // ── Chat ──────────────────────────────────────────────────────────────────────

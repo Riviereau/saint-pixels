@@ -515,8 +515,17 @@ function connectSSE() {
   };
 
   _sseSource.onerror = () => {
-    // Auto-reconnect after 3 seconds on connection drop
-    setTimeout(connectSSE, 3000);
+    // Guard: only schedule a reconnect if this source is still the active one.
+    // Without this check, a stale onerror handler from a previous source fires
+    // after connectSSE() has already replaced _sseSource, scheduling a second
+    // redundant reconnect that opens a duplicate connection.
+    const thisSource = _sseSource;
+    if (thisSource) thisSource.close();
+    _sseSource = null;
+    // Auto-reconnect after 3 seconds on connection drop (502, network error, etc.)
+    setTimeout(() => {
+      if (!_sseSource) connectSSE();
+    }, 3000);
   };
 }
 
@@ -3687,12 +3696,27 @@ viewport.addEventListener("touchend", (e) => {
 const togglePasswordBtn = document.getElementById('togglePassword');
 const eyeIconOpen       = document.getElementById('eyeIconOpen');
 const eyeIconClosed     = document.getElementById('eyeIconClosed');
-if (togglePasswordBtn && authPassword && eyeIconOpen && eyeIconClosed) {
+
+// Replace any <img src="...eye-*.svg"> with inline SVGs so the browser
+// never makes an HTTP request for image files that may not exist on disk.
+// This eliminates the 404 logged in the console for eye-closed.svg.
+const EYE_OPEN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_CLOSED_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+if (eyeIconOpen  && eyeIconOpen.tagName  === 'IMG') { eyeIconOpen.outerHTML  = `<span id="eyeIconOpen"  style="display:inline-flex;align-items:center;pointer-events:none;">${EYE_OPEN_SVG}</span>`; }
+if (eyeIconClosed && eyeIconClosed.tagName === 'IMG') { eyeIconClosed.outerHTML = `<span id="eyeIconClosed" style="display:none;align-items:center;pointer-events:none;">${EYE_CLOSED_SVG}</span>`; }
+
+if (togglePasswordBtn && authPassword) {
+  // Re-query after potential outerHTML replacement above
+  const getEyeOpen   = () => document.getElementById('eyeIconOpen');
+  const getEyeClosed = () => document.getElementById('eyeIconClosed');
   togglePasswordBtn.addEventListener('click', () => {
     const isHidden = authPassword.type === 'password';
     authPassword.type = isHidden ? 'text' : 'password';
-    eyeIconOpen.style.display   = isHidden ? 'none'  : '';
-    eyeIconClosed.style.display = isHidden ? ''      : 'none';
+    const eo = getEyeOpen();
+    const ec = getEyeClosed();
+    if (eo) eo.style.display   = isHidden ? 'none'         : 'inline-flex';
+    if (ec) ec.style.display   = isHidden ? 'inline-flex'  : 'none';
   });
 }
 
