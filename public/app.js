@@ -1625,25 +1625,68 @@ function broadcastEvent(event) {
           checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
           updateStreakBadge();
         } else {
-          // Non-2xx = pixel was NOT saved. Roll back the optimistic paint.
+          // Non-2xx = pixel was NOT saved.
           res.json().then(data => {
             console.warn('[sp] pixel save failed:', res.status, data?.error);
-            // Erase the optimistically-painted pixel from the buffer
-            paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-            // Only give the cooldown back on a genuine server-side cooldown
-            // rejection (429). On other errors (400, 500) the cooldown has
-            // already ticked — resetting it to 0 would let the user bypass it.
+
             if (res.status === 429) {
-              lastPlaceAt = 0;
+              // Cooldown boundary race: the client fired right as its timer
+              // expired but the server clock hadn't quite caught up.  The
+              // server's grace window (COOLDOWN_GRACE_MS) absorbs most of
+              // these, but as a second safety net we silently retry once after
+              // the server-reported remaining time (or 100 ms minimum).
+              // The optimistic pixel stays visible — no jarring erase/redraw.
+              const retryAfter = Math.max(100, data?.cooldown ?? 100);
+              lastPlaceAt = 0; // reset so canPlacePixel() returns true after delay
+              setTimeout(() => {
+                const token = getStoredToken();
+                if (!token) return;
+                const endpoint = event.tool === 'eraser' ? '/api/erase' : '/api/pixel';
+                const payload  = event.tool === 'eraser'
+                  ? { x: Math.round(event.x), y: Math.round(event.y) }
+                  : { x: Math.round(event.x), y: Math.round(event.y), color: event.color };
+                fetch(endpoint, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify(payload)
+                }).then(r2 => {
+                  if (r2.ok) {
+                    // Retry succeeded — treat exactly like an original success
+                    window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
+                    _totalPixelCount++;
+                    _currentStreak = Math.max(_currentStreak, 1);
+                    checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
+                    updateStreakBadge();
+                    lastPlaceAt = Date.now();
+                  } else {
+                    // Retry also failed (genuine cooldown or server error) —
+                    // now roll back the optimistic pixel so the canvas stays honest.
+                    paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+                    lastPlaceAt = 0;
+                    redraw();
+                  }
+                  updateCooldownLabel();
+                }).catch(() => {
+                  paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+                  lastPlaceAt = 0;
+                  redraw();
+                  updateCooldownLabel();
+                });
+              }, retryAfter);
+              // Update the bar immediately to show the short remaining wait
+              updateCooldownLabel();
+            } else {
+              // Non-429 error (400 bad request, 500 server error, etc.) —
+              // roll back the optimistic paint right away; cooldown is consumed.
+              paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+              redraw();
+              updateCooldownLabel();
             }
-            redraw();
-            updateCooldownLabel();
           }).catch(() => {
             console.warn('[sp] pixel save failed:', res.status);
+            // Could not parse error body — treat conservatively: roll back.
             paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-            if (res.status === 429) {
-              lastPlaceAt = 0;
-            }
+            if (res.status === 429) lastPlaceAt = 0;
             redraw();
             updateCooldownLabel();
           });
