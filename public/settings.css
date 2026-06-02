@@ -250,8 +250,11 @@
   outline: none;
   cursor: pointer;
   transition: background 0.15s;
-  /* Ensure iOS touch target is tall enough — range inputs are hard to grab */
-  touch-action: pan-x;
+  /* iOS Safari: touch-action must NOT be pan-x on range inputs.
+     pan-x tells the browser to treat horizontal touches as scroll gestures,
+     which prevents the range thumb from being dragged. Use none so the
+     browser passes all touch events to the range input's own handler. */
+  touch-action: none;
 }
 /* iOS Safari requires ::-webkit-slider-runnable-track to be styled
    separately; without it the custom thumb appears but the track renders
@@ -264,8 +267,8 @@
 .settings-volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #38bdf8;
   border: 2px solid rgba(255, 255, 255, 0.2);
@@ -273,7 +276,7 @@
   box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
   transition: transform 0.1s;
   /* Centre the thumb vertically on the track */
-  margin-top: -7.5px;
+  margin-top: -9.5px;
 }
 .settings-volume-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
@@ -284,8 +287,8 @@
   background: rgba(255, 255, 255, 0.12);
 }
 .settings-volume-slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #38bdf8;
   border: 2px solid rgba(255, 255, 255, 0.2);

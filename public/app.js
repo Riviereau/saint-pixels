@@ -129,6 +129,7 @@ const SFX = (() => {
    */
   function play(name, minInterval = 80, volume = 0.5) {
     if (!enabled) return;
+    if (masterVolume === 0) return; // hard mute — don't create Audio elements at all
     const now = Date.now();
     if (lastAt[name] && now - lastAt[name] < minInterval) return;
     lastAt[name] = now;

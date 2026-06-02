@@ -217,10 +217,8 @@
     volIcon.textContent  = pct === 0 ? '🔇' : pct < 50 ? '🔉' : '🔊';
   }
 
-  // applyVolume is called from both 'input' (desktop drag) and 'change'
-  // (iOS fires 'change' reliably; 'input' may be skipped during a drag).
-  // Always committing volume inside 'change' ensures the preview sound on
-  // release plays at the *new* level, not the stale one.
+  // applyVolume is called from 'input', 'change', and the pointer/touch
+  // fallback below.  Always commits the new volume to SFX and localStorage.
   function applyVolume() {
     const raw = parseInt(slider.value, 10);
     const v = isNaN(raw) ? 1 : Math.max(0, Math.min(1, raw / 100));
@@ -231,13 +229,38 @@
   }
 
   // 'input'  — fires continuously on desktop while dragging; gives live feedback.
-  // 'change' — fires on iOS (and on desktop on release); always commit here too
-  //            so the preview sound uses the correct volume.
+  // 'change' — fires on iOS on release; always commit here and play preview.
   slider.addEventListener('input',  applyVolume);
   slider.addEventListener('change', () => {
     applyVolume(); // ensure volume is committed on iOS before playing preview
-    if (window.SFX) SFX.play('click', 0, 0.6);
+    if (window.SFX && SFX.getVolume() > 0) SFX.play('click', 0, 0.6);
   });
+
+  // ── iOS Safari pointer/touch fallback for range inputs ────────────────────
+  // iOS WebKit sometimes fails to fire 'input' events during a range drag when
+  // the slider is inside a scrollable container or modal with backdrop-filter.
+  // We listen to pointermove (or touchmove if pointer events aren't available)
+  // directly on the slider and call applyVolume() ourselves so the label and
+  // SFX volume update in real-time even when the native event is swallowed.
+  function _rangeFromPointer(e) {
+    const touch = e.touches ? e.touches[0] : e;
+    const rect  = slider.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const newVal = Math.round(ratio * 100);
+    if (slider.value !== String(newVal)) {
+      slider.value = newVal;
+      applyVolume();
+    }
+  }
+
+  // Use pointer events when available (Chrome, modern Safari), fall back to touch
+  if (window.PointerEvent) {
+    slider.addEventListener('pointermove', (e) => {
+      if (e.buttons > 0 || (e.pointerType === 'touch')) _rangeFromPointer(e);
+    }, { passive: true });
+  } else {
+    slider.addEventListener('touchmove', _rangeFromPointer, { passive: true });
+  }
 
   // Expose re-render so app.js can call window.__refreshAchievements() after unlock
   window.__refreshAchievements = renderAchievements;
