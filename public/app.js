@@ -454,7 +454,9 @@ const DEFAULT_PALETTE = [
   { id: 10, label: 'Pink', color: '#ec4899' },
   { id: 11, label: 'Light Brown', color: '#a0785a' },
   { id: 12, label: 'Beige', color: '#f5deb3' },
-  { id: 13, label: 'Gray', color: '#888888' }
+  { id: 13, label: 'Gray', color: '#888888' },
+  { id: 14, label: 'Dark Amber', color: '#925c01' },
+  { id: 15, label: 'Dark Sienna', color: '#6d2300' }
 ];
 const paletteColors = [];
 const CUSTOM_PALETTE_KEY = 'sp_customPalette';
