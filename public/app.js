@@ -1630,67 +1630,49 @@ function broadcastEvent(event) {
             console.warn('[sp] pixel save failed:', res.status, data?.error);
 
             if (res.status === 429) {
-              // Cooldown boundary race: the client fired right as its timer
-              // expired but the server clock hadn't quite caught up.  The
-              // server's grace window (COOLDOWN_GRACE_MS) absorbs most of
-              // these, but as a second safety net we silently retry once after
-              // the server-reported remaining time (or 100 ms minimum).
-              // The optimistic pixel stays visible — no jarring erase/redraw.
-              const retryAfter = Math.max(100, data?.cooldown ?? 100);
-              // Keep the gate LOCKED for the retry window — do NOT set lastPlaceAt = 0.
-              // Set it so canPlacePixel() stays false for exactly retryAfter ms,
-              // preventing optimistic paints that would just get rolled back.
-              lastPlaceAt = Date.now() - (_activeCooldownMs - retryAfter);
-              setTimeout(() => {
-                const token = getStoredToken();
-                if (!token) return;
-                const endpoint = event.tool === 'eraser' ? '/api/erase' : '/api/pixel';
-                const payload  = event.tool === 'eraser'
-                  ? { x: Math.round(event.x), y: Math.round(event.y) }
-                  : { x: Math.round(event.x), y: Math.round(event.y), color: event.color };
-                fetch(endpoint, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify(payload)
-                }).then(r2 => {
-                  if (r2.ok) {
-                    // Retry succeeded — treat exactly like an original success
-                    window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
-                    _totalPixelCount++;
-                    _currentStreak = Math.max(_currentStreak, 1);
-                    checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
-                    updateStreakBadge();
-                    lastPlaceAt = Date.now();
-                  } else {
-                    // Retry also failed (genuine cooldown or server error) —
-                    // roll back the optimistic pixel. Leave lastPlaceAt as-is so
-                    // the cooldown bar reflects the real remaining wait.
-                    paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-                    redraw();
-                  }
-                  updateCooldownLabel();
-                }).catch(() => {
-                  // Network error on retry — roll back but don't touch lastPlaceAt.
-                  paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-                  redraw();
-                  updateCooldownLabel();
-                });
-              }, retryAfter);
-              // Update the bar immediately to show the short remaining wait
+              // Server rejected due to cooldown. Two cases:
+              //
+              // A) Tiny boundary race (remaining <= 100 ms): the request arrived
+              //    at the server a few ms before the grace window kicked in.
+              //    Treat it as a success — keep the optimistic pixel and stamp
+              //    lastPlaceAt so the full cooldown runs from now.
+              //
+              // B) Genuine early click (remaining > 100 ms): the user spammed
+              //    before the cooldown was actually up. Roll back the pixel and
+              //    lock the gate for the real remaining duration so no further
+              //    spam placements can slip through.
+              const remaining = data?.cooldown ?? 0;
+              if (remaining <= 100) {
+                // Case A — boundary race, keep the pixel.
+                window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
+                _totalPixelCount++;
+                _currentStreak = Math.max(_currentStreak, 1);
+                checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
+                updateStreakBadge();
+                lastPlaceAt = Date.now();
+              } else {
+                // Case B — genuinely too early, roll back and lock the gate.
+                paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+                redraw();
+                // Position lastPlaceAt so canPlacePixel() stays false for
+                // exactly `remaining` ms from now.
+                lastPlaceAt = Date.now() - (_activeCooldownMs - remaining);
+              }
               updateCooldownLabel();
             } else {
               // Non-429 error (400 bad request, 500 server error, etc.) —
-              // roll back the optimistic paint right away; cooldown is consumed.
+              // roll back the optimistic paint right away.
+              // lastPlaceAt was already stamped at paint time so the cooldown
+              // bar counts down normally — no extra gate manipulation needed.
               paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
               redraw();
               updateCooldownLabel();
             }
           }).catch(() => {
-            console.warn('[sp] pixel save failed:', res.status);
-            // Could not parse error body — treat conservatively: roll back.
+            // Could not parse error body — roll back conservatively.
+            // Don't touch lastPlaceAt; it was stamped at paint time.
+            console.warn('[sp] pixel save failed (unparseable response):', res.status);
             paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-            // Do not reset lastPlaceAt here — the 429 branch above already
-            // set it correctly to lock the gate for the retry window.
             redraw();
             updateCooldownLabel();
           });
