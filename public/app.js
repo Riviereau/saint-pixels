@@ -1637,7 +1637,10 @@ function broadcastEvent(event) {
               // the server-reported remaining time (or 100 ms minimum).
               // The optimistic pixel stays visible — no jarring erase/redraw.
               const retryAfter = Math.max(100, data?.cooldown ?? 100);
-              lastPlaceAt = 0; // reset so canPlacePixel() returns true after delay
+              // Keep the gate LOCKED for the retry window — do NOT set lastPlaceAt = 0.
+              // Set it so canPlacePixel() stays false for exactly retryAfter ms,
+              // preventing optimistic paints that would just get rolled back.
+              lastPlaceAt = Date.now() - (_activeCooldownMs - retryAfter);
               setTimeout(() => {
                 const token = getStoredToken();
                 if (!token) return;
@@ -1660,15 +1663,15 @@ function broadcastEvent(event) {
                     lastPlaceAt = Date.now();
                   } else {
                     // Retry also failed (genuine cooldown or server error) —
-                    // now roll back the optimistic pixel so the canvas stays honest.
+                    // roll back the optimistic pixel. Leave lastPlaceAt as-is so
+                    // the cooldown bar reflects the real remaining wait.
                     paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-                    lastPlaceAt = 0;
                     redraw();
                   }
                   updateCooldownLabel();
                 }).catch(() => {
+                  // Network error on retry — roll back but don't touch lastPlaceAt.
                   paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-                  lastPlaceAt = 0;
                   redraw();
                   updateCooldownLabel();
                 });
@@ -1686,7 +1689,8 @@ function broadcastEvent(event) {
             console.warn('[sp] pixel save failed:', res.status);
             // Could not parse error body — treat conservatively: roll back.
             paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-            if (res.status === 429) lastPlaceAt = 0;
+            // Do not reset lastPlaceAt here — the 429 branch above already
+            // set it correctly to lock the gate for the retry window.
             redraw();
             updateCooldownLabel();
           });
