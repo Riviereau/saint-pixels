@@ -2502,6 +2502,14 @@ header.flex {
 .cursor-pointer, #export-png {
   cursor: pointer;
 }
+/* ── Ruler stop button: hidden everywhere by default ─────────────────── */
+/* The button is always injected into the DOM by app.js. Without this    */
+/* rule it renders as an unstyled element on desktop. The mobile media   */
+/* query overrides this to flex only when .ruler-stop-btn--visible fires. */
+#ruler-stop-btn {
+  display: none;
+}
+
 .sp-ruler-label {
   position: absolute;
   z-index: 9000;
