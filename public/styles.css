@@ -1198,8 +1198,33 @@ body.auth-open .tool-list, body.auth-open .color-picker, body.auth-open .fullscr
 body.auth-open #lb-panel {
   display: none !important;
 }
+/* ── Timelapse button visibility ─────────────────────────────────────── */
+/* Large desktop button: shown on desktop, hidden on mobile              */
+#timelapse-topbar-btn { display: inline-flex; }
+/* Small mobile strip button: hidden on desktop, shown on mobile         */
+#mob-timelapse-btn    { display: none; }
+
+/* ── Desktop topbar: no scrollbar, no drag handle ───────────────────── */
+/* The header uses overflow-x-auto from Tailwind, causing an unwanted    */
+/* scroll wheel on desktop. Override here; mobile media queries re-allow */
+/* overflow-x:auto for their own compact layouts.                        */
+@media (min-width: 721px) {
+  header.flex {
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+  }
+}
+
+/* On mid-range desktops (721–1100px) use a tighter aside column */
+@media (min-width: 721px) and (max-width: 1100px) {
+  main[style] {
+    grid-template-columns: 240px minmax(0, 1fr) !important;
+  }
+}
+
+/* ── Topbar drag handle: hidden on desktop (header no longer scrolls) ── */
 .topbar-drag-handle {
-  display: flex;
+  display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1309,6 +1334,11 @@ header.flex {
   .brand-tagline, .brand-contribute, .brand-discord {
     display: none !important;
   }
+  /* Swap timelapse buttons: large desktop one off, compact mobile one on */
+  #timelapse-topbar-btn { display: none !important; }
+  #mob-timelapse-btn    { display: inline-flex !important; }
+  /* Hide drag handle on mobile — the header scrolls natively */
+  .topbar-drag-handle   { display: none !important; }
   body > div.app-shell header, header.flex {
     position: fixed !important;
     top: 0 !important;
@@ -1832,6 +1862,10 @@ header.flex {
   .brand-tagline, .brand-contribute, .brand-discord {
     display: none !important;
   }
+  /* Swap timelapse buttons on landscape mobile too */
+  #timelapse-topbar-btn { display: none !important; }
+  #mob-timelapse-btn    { display: inline-flex !important; }
+  .topbar-drag-handle   { display: none !important; }
   header.flex {
     position: fixed;
     top: 0;
