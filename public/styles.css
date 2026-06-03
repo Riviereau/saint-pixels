@@ -1159,7 +1159,6 @@ canvas.shift-pan {
   position: absolute;
   left: 24px;
   top: 50%;
-  transform: translateY(-50%);
   z-index: 9999;
   background: rgba(55,55,56,0.85);
   backdrop-filter: blur(12px);
