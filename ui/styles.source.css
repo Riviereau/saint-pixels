@@ -248,6 +248,7 @@ header.flex { will-change: transform; }
 .mob-contribute-btn,
 .mob-donate-btn,
 .mob-discord-btn,
+.mob-reddit-btn,
 .mob-live-count { display: none !important; }
 /* Toolbox spacer in palette — hidden on desktop */
 .palette-toolbox-spacer { display: none !important; }
@@ -380,6 +381,7 @@ header.flex { will-change: transform; }
   .mob-contribute-btn,
   .mob-donate-btn,
   .mob-discord-btn,
+  .mob-reddit-btn,
   .mob-live-count {
     display: inline-flex !important;
     white-space: nowrap !important;
@@ -553,6 +555,43 @@ header.flex { will-change: transform; }
     box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
     align-items: center !important;
     justify-content: center !important;
+  }
+
+  /* ── Ruler stop button — pill above palette while ruler is drawing ── */
+  #ruler-stop-btn {
+    position: fixed !important;
+    bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px) + 12px) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 260 !important;
+    display: none !important; /* JS adds .ruler-stop-btn--visible to show */
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 8px 20px !important;
+    border-radius: 999px !important;
+    border: 1px solid rgba(248, 113, 113, 0.6) !important;
+    background: rgba(239, 68, 68, 0.18) !important;
+    color: #fca5a5 !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    transition: background 0.15s, border-color 0.15s, color 0.15s !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  #ruler-stop-btn.ruler-stop-btn--visible {
+    display: flex !important;
+  }
+  #ruler-stop-btn:active {
+    background: rgba(239, 68, 68, 0.32) !important;
+    border-color: rgba(248, 113, 113, 0.9) !important;
+    color: #fff !important;
   }
 
   /* ── Tool list — fixed column on the left above palette ────── */
@@ -1409,3 +1448,267 @@ header.flex { will-change: transform; }
   .lb-filters { gap: 3px; padding: 6px 10px; }
   .lb-filter-btn { font-size: 0.68rem; padding: 3px 7px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   NEW ADDITIONS
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Pointer-device cursor fix ──────────────────────────────── */
+@media (pointer: fine) {
+  .toggle-btn, .tool {
+    cursor: pointer;
+  }
+}
+
+/* ── Reddit / social buttons ────────────────────────────────── */
+.brand-reddit:hover,
+.mob-reddit-btn:hover {
+  background-color: color-mix(in oklab, var(--color-orange-400) 15%, transparent) !important;
+  border-color: color-mix(in oklab, var(--color-orange-400) 80%, transparent) !important;
+}
+
+.brand-reddit:hover {
+  transform: translateY(-1px);
+}
+
+/* ── cursor-pointer utility + export button ─────────────────── */
+.cursor-pointer,
+#export-png {
+  cursor: pointer;
+}
+
+/* ── Ruler labels (sp-ruler-*) ──────────────────────────────── */
+.sp-ruler-label {
+  position: absolute;
+  z-index: 9000;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 6px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(0, 229, 255, 0.55);
+  border-radius: 8px;
+  color: #00e5ff;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: auto;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.25), 0 2px 8px rgba(0,0,0,0.6);
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+.sp-ruler-icon {
+  color: rgba(0, 229, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.sp-ruler-dist {
+  font-size: 12px;
+}
+
+.sp-ruler-axis {
+  font-size: 10px;
+  color: rgba(0, 229, 255, 0.65);
+  background: rgba(0, 229, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.sp-ruler-trash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 2px;
+  color: #ef4444;
+  cursor: pointer;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transition: opacity 0.15s, background 0.15s, width 0.15s;
+  flex-shrink: 0;
+}
+
+.sp-ruler-label:hover .sp-ruler-trash {
+  opacity: 0.7;
+  width: 17px;
+}
+
+.sp-ruler-trash:hover {
+  opacity: 1 !important;
+  background: rgba(239, 68, 68, 0.18);
+}
+
+/* ── Event banner ───────────────────────────────────────────── */
+.event-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 18px;
+  background: linear-gradient(90deg, rgba(250,204,21,0.18) 0%, rgba(251,146,60,0.18) 100%);
+  border-bottom: 1px solid rgba(250,204,21,0.3);
+  color: #fde68a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  animation: event-banner-pulse 2.5s ease-in-out infinite;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.event-banner__icon { font-size: 1rem; flex-shrink: 0; }
+.event-banner__text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.event-banner__text strong { color: #fbbf24; }
+.event-banner__timer { flex-shrink: 0; background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.35); border-radius: 8px; padding: 2px 9px; font-size: 0.78rem; }
+.event-banner__timer strong { color: #fbbf24; }
+.event-banner--upcoming .event-banner__text::before { content: '⏳ Next Cooldown Reduction Event '; }
+
+/* ── Achievement notifications ──────────────────────────────── */
+.achievement-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.achievement-popup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: rgba(128, 128, 192, 0.96);
+  border: 1px solid rgb(105, 168, 196);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(56,189,248,0.1);
+  min-width: 260px;
+  max-width: min(400px, calc(100vw - 32px));
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+}
+
+.achievement-popup--ultra {
+  border-color: rgba(251,191,36,0.7);
+  background: linear-gradient(135deg, rgba(30,30,31,0.97) 0%, rgba(45,35,10,0.97) 100%);
+  box-shadow: 0 8px 40px rgba(251,191,36,0.3), 0 0 0 1px rgba(251,191,36,0.15);
+  animation: ultra-shimmer 2s linear infinite;
+}
+
+.achievement-popup--visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.achievement-icon { font-size: 1.8rem; flex-shrink: 0; }
+.achievement-text { flex: 1; min-width: 0; }
+
+.achievement-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #38bdf8;
+  margin-bottom: 2px;
+}
+
+.achievement-popup--ultra .achievement-label { color: #fbbf24; }
+.achievement-name { font-size: 0.95rem; font-weight: 700; color: #f1f5f9; }
+.achievement-desc { font-size: 0.75rem; color: #94a3b8; margin-top: 1px; }
+
+/* ── Attack warning banner ──────────────────────────────────── */
+.attack-warning {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  z-index: 99998;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: rgba(30,10,10,0.96);
+  border: 1px solid rgba(239,68,68,0.6);
+  border-radius: 14px;
+  box-shadow: 0 6px 28px rgba(239,68,68,0.3);
+  color: #fca5a5;
+  font-size: 0.85rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.attack-warning--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.attack-warning__icon { font-size: 1.1rem; flex-shrink: 0; }
+.attack-warning__text { display: flex; flex-direction: column; gap: 1px; }
+.attack-warning__text strong { color: #f87171; font-size: 0.88rem; }
+.attack-warning__text span { font-size: 0.77rem; color: #fca5a5; opacity: 0.8; }
+
+/* ── Profile modal — streak, fav colour, achievements ───────── */
+.pm-streak-row,
+.pm-fav-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.pm-streak-label {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pm-fav-color-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+}
+
+.pm-achievements-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.pm-ach-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: default;
+  transition: transform 0.15s ease;
+}
+
+.pm-ach-badge:hover { transform: scale(1.15); }

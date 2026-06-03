@@ -2055,6 +2055,8 @@ function setTool(newTool) {
     // Stop the ruler flash loop when switching to any other tool.
     rulerFlashStop();
   }
+  // Keep the mobile ruler stop button in sync with current tool
+  _updateRulerStopBtn();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2100,6 +2102,7 @@ function rulerHandleClick(bx, by) {
     rulerLiveEnd = null;
     rulerRenderDOM();
   }
+  _updateRulerStopBtn();
   redraw();
 }
 
@@ -3049,6 +3052,71 @@ function isLocalDev() {
 
   return false;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ── MOBILE RULER STOP BUTTON ────────────────────────────────────────
+// On mobile portrait, shows a "Stop Ruler" pill above the palette
+// while the ruler is in drawing mode. Hides the cooldown bar so there
+// is room, restores it when any other tool is active.
+// ═══════════════════════════════════════════════════════════════════
+(function () {
+  const isMobilePortrait = () =>
+    window.matchMedia('(max-width: 720px) and (orientation: portrait)').matches;
+
+  // Create the stop button once and append to body
+  const stopBtn = document.createElement('button');
+  stopBtn.id = 'ruler-stop-btn';
+  stopBtn.type = 'button';
+  stopBtn.textContent = '✕  Stop Ruler';
+  document.body.appendChild(stopBtn);
+
+  // Expose update function so setTool() and rulerHandleClick() can call it
+  window._updateRulerStopBtn = function () {
+    const active = tool === 'ruler' && rulerState === 'drawing' && isMobilePortrait();
+    stopBtn.classList.toggle('ruler-stop-btn--visible', active);
+    // Hide cooldown bar while the stop button is showing to avoid overlap
+    const bar = document.getElementById('cooldownBar');
+    if (bar) bar.style.setProperty('opacity', active ? '0' : '', 'important');
+  };
+
+  stopBtn.addEventListener('click', () => {
+    // Cancel the in-progress ruler and switch back to brush
+    rulerState = 'idle';
+    rulerStart = null;
+    rulerLiveEnd = null;
+    setTool('brush');
+    redraw();
+  });
+
+  // Also re-evaluate on orientation change
+  window.matchMedia('(max-width: 720px) and (orientation: portrait)')
+    .addEventListener('change', () => window._updateRulerStopBtn());
+})();
+
+// ═══════════════════════════════════════════════════════════════════
+// ── MOBILE LB TOGGLE HEIGHT — track tool-list dynamically ───────────
+// Sets --lb-tool-list-bottom on :root so the leaderboard toggle tab
+// always sits just above the tool-list regardless of its current height.
+// ═══════════════════════════════════════════════════════════════════
+(function () {
+  function updateLbToggleBottom() {
+    const toolList = document.querySelector('.tool-list');
+    if (!toolList) return;
+    const rect = toolList.getBoundingClientRect();
+    const fromBottom = window.innerHeight - rect.top;
+    document.documentElement.style.setProperty(
+      '--lb-tool-list-bottom', fromBottom + 'px'
+    );
+  }
+
+  // Run immediately, on resize, and on orientation change
+  updateLbToggleBottom();
+  window.addEventListener('resize', updateLbToggleBottom);
+  window.addEventListener('orientationchange', updateLbToggleBottom);
+
+  // Also re-measure after the first paint since fixed elements may shift
+  requestAnimationFrame(() => { updateLbToggleBottom(); });
+})();
 
 window.addEventListener('load', () => {
   // 1. Size the canvas and draw the white board instantly (fixes the blue flash)
