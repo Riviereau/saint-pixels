@@ -1236,10 +1236,11 @@ function drawGrid() {
     ys.push(y);
   }
 
-  const useLineGrid = scale < 8;
-  if (useLineGrid) {
-    // At intermediate zoom levels the cross-grid is too expensive to redraw
-    // continuously. Lines are much faster and still give good visual feedback.
+  // PC: lines (fast and clean); Mobile: cross markers
+  const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+
+  if (!isTouchDevice) {
+    // PC: line grid (always — fast and visual)
     gridCtx.strokeStyle = 'rgba(255,255,255,0.12)';
     gridCtx.lineWidth = 1;
     gridCtx.beginPath();
@@ -1265,7 +1266,7 @@ function drawGrid() {
     }
     gridCtx.stroke();
   } else {
-    // Cross markers at every corner: each arm extends 25% into the adjacent cell.
+    // Mobile: cross markers at every corner
     const armBase = Math.min(scale * 0.25, 6);
     const thick = Math.min(Math.max(scale * 0.15, 1), 2);
 
