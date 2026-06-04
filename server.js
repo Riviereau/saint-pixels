@@ -84,6 +84,16 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 
+// ── Additional security headers ───────────────────────────────────────────────
+// Referrer-Policy: don't leak the full URL to third parties (hCaptcha CDN etc.)
+// Permissions-Policy: explicitly revoke powerful APIs this app doesn't use.
+app.use((req, res, next) => {
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
+  next();
+});
+
 // ── Body parsing — hard cap to blunt large-payload floods ────────────────────
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
@@ -114,6 +124,7 @@ db.pragma('busy_timeout = 5000');
 const { setDb: setSessionDb, createSession, closeSession, getSession } = require('./src/helpers/session.js');
 const { setDb: setCooldownDb, getCooldown, COOLDOWN_MS } = require('./src/helpers/cooldown.js');
 const { setDb: setAntiCheatDb } = require('./src/helpers/AntiCheat.js');
+const { checkIpBan, banCheckMiddleware, setDb: setBanDb } = require('./src/helpers/ban.js');
 const { hashPassword, verifyPassword } = require('./src/helpers/password.js');
 const { requireCaptcha }         = require('./src/helpers/captcha.js');
 const { sendVerificationEmail }  = require('./src/helpers/mailer.js');
@@ -122,7 +133,7 @@ const { initializeDatabase, runMaintenance } = require('./src/setup/database.js'
 const { initializeSSE, broadcastSSE, setDb: setSseDb } = require('./src/setup/sse.js');
 const { initializeChat }         = require('./src/setup/chat.js');
 const { initializeTimelapse }    = require('./src/setup/timelapse.js');
-const { localBypassMiddleware }  = require('./src/helpers/localBypass.js'); // <-- Added
+const { localBypassMiddleware }  = require('./src/helpers/localBypass.js');
 
 // ── Local Bypass Middleware ───────────────────────────────────────────────────
 app.use(localBypassMiddleware); // <-- Activates req.localBypassUser if valid
@@ -238,6 +249,7 @@ setSessionDb(db);
 setCooldownDb(db);
 setSseDb(db);
 setAntiCheatDb(db);
+setBanDb(db);
 
 // ── Safe email validator — O(n), no backtracking, RFC 5321 length cap ────────
 function isValidEmail(str) {
@@ -274,9 +286,16 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => safeIp(req),
   message: { error: 'Too many requests. Please slow down.' },
-  skip: (req) => req.method === 'GET' && req.path === '/api/stream',
+  skip: (req) => (req.method === 'GET' && req.path === '/api/stream') ||
+                 (req.method === 'GET' && req.path === '/api/health'),
 });
+
+// ── Health check — bypasses the global limiter so uptime monitors don't ──────
+// burn rate-limit quota. Returns 200 + a tiny JSON payload.
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+
 app.use(globalLimiter);
+app.use('/api', banCheckMiddleware);
 
 // ── Pixel limiter: 60 placements / min / IP ───────────────────────────────────
 const pixelLimiter = rateLimit({
@@ -458,11 +477,15 @@ function sseConnectionGuard(req, res, next) {
     return res.status(429).json({ error: 'Too many SSE connections from this IP.' });
   }
   sseConnectionsPerIp.set(ip, current + 1);
-  res.on('close', () => {
+  // Use once() — both 'finish' and 'close' can fire on the same response in
+  // Node's keep-alive path, which would decrement the counter twice and corrupt
+  // the per-IP count (allowing more connections than the cap allows).
+  const _decrement = () => {
     const c = sseConnectionsPerIp.get(ip) || 1;
     if (c <= 1) sseConnectionsPerIp.delete(ip);
     else sseConnectionsPerIp.set(ip, c - 1);
-  });
+  };
+  res.once('close', _decrement);
   next();
 }
 
@@ -557,6 +580,15 @@ app.post('/api/register', registerLimiter, requireCaptcha, async (req, res) => {
     const emailTaken    = db.prepare('SELECT id FROM accounts WHERE email = ?').get(email.toLowerCase());
     if (emailTaken)
       return res.status(409).json({ error: 'An account with that email already exists.' });
+
+    // ── IP ban check — prevents banned players creating new accounts ──────────
+    // Checked after username/email uniqueness so the error messages above still
+    // fire for genuinely taken handles (avoids leaking ban status via 409 vs 403).
+    const ipBan = checkIpBan(ip);
+    if (ipBan.found) {
+      return res.status(403).json({ error: ipBan.reason });
+    }
+    // ── end IP ban check ──────────────────────────────────────────────────────
 
     const hashed = await hashPassword(password);
     db.prepare('INSERT INTO accounts (username, password, ip, created_at, email, email_verified) VALUES (?, ?, ?, ?, ?, 0)')
@@ -930,30 +962,47 @@ app.get('/api/streak', streakLimiter, (req, res) => {
 // ── Leaderboard API ───────────────────────────────────────────────────────────
 const leaderboardLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, keyGenerator: (req) => safeIp(req) });
 
-const PERIOD_SQL = {
-  today:   `AND day = '${getDayUTC4()}'`,
-  week:    `AND day >= date('now', '-6 days', 'start of day')`,
-  month:   `AND day >= date('now', 'start of month')`,
-  year:    `AND day >= date('now', 'start of year')`,
-  decade:  '',
-  alltime: '',
-};
+// Build a parameterized { clause, params } pair for the leaderboard period.
+// getDayUTC4() is called at request time so date boundaries are always current.
+// ALL user-controlled input (req.query.period) is validated against the whitelist
+// before this function is called — the resulting date strings are computed
+// server-side and never derived from user input.
+function buildLeaderboardFilter(period) {
+  const now  = new Date(Date.now() - 4 * 60 * 60 * 1000); // UTC-4
+  const today = now.toISOString().slice(0, 10);
+
+  if (period === 'today') {
+    return { clause: 'AND day = ?', params: [today] };
+  }
+  if (period === 'week') {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - 6);
+    return { clause: 'AND day >= ?', params: [d.toISOString().slice(0, 10)] };
+  }
+  if (period === 'month') {
+    return { clause: 'AND day >= ?', params: [today.slice(0, 7) + '-01'] };
+  }
+  if (period === 'year') {
+    return { clause: 'AND day >= ?', params: [today.slice(0, 4) + '-01-01'] };
+  }
+  if (period === 'decade') {
+    const decadeStart = String(Math.floor(parseInt(today.slice(0, 4), 10) / 10) * 10) + '-01-01';
+    return { clause: 'AND day >= ?', params: [decadeStart] };
+  }
+  // alltime — no filter
+  return { clause: '', params: [] };
+}
 
 app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
   const period = ['today','week','month','year','decade','alltime'].includes(req.query.period)
     ? req.query.period : 'today';
-  const dayFilter = period === 'today'
-    ? `AND day = '${getDayUTC4()}'`
-    : period === 'week'   ? `AND day >= date('now', '-6 days')`
-    : period === 'month'  ? `AND day >= date('now', '-29 days')`
-    : period === 'year'   ? `AND day >= date('now', '-364 days')`
-    : '';
+  const { clause, params } = buildLeaderboardFilter(period);
   try {
     const rows = db.prepare(`
       SELECT username, SUM(count) AS count
-      FROM pixel_counts WHERE 1=1 ${dayFilter}
+      FROM pixel_counts WHERE 1=1 ${clause}
       GROUP BY username ORDER BY count DESC LIMIT 50
-    `).all();
+    `).all(...params);
     return res.json({ leaderboard: rows });
   } catch (err) {
     console.error('[leaderboard] error:', err);

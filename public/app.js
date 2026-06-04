@@ -11,7 +11,87 @@ function dispatchStateChange(detail) {
 }
 document.addEventListener('DOMContentLoaded', () => {
 
-// ── Block scroll-wheel from scrolling any element except the canvas viewport ──
+// ═══════════════════════════════════════════════════════════════════
+// ── BAN SCREEN ──────────────────────────────────────────────────────
+// Displayed whenever the server returns { error: 'banned', ... }.
+// Replaces the auth overlay with a full-page message so banned users
+// cannot simply dismiss the dialog and keep using the app.
+// ═══════════════════════════════════════════════════════════════════
+
+/** Escape a string for safe insertion into HTML (prevents XSS via server-
+ *  supplied ban reason strings). */
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Replace the page content with a full-screen ban notice.
+ * @param {{ reason?: string, message?: string, expiresAt?: number }} info
+ */
+function showBanScreen(info = {}) {
+  // Build expiry line only when the server provides a timestamp
+  let expiryLine = '';
+  if (info.expiresAt) {
+    const d = new Date(info.expiresAt);
+    // Format as local date + time so the player knows exactly when it lifts
+    expiryLine = `<p style="margin:.4em 0 0;font-size:.9em;opacity:.75;">
+      Ban expires: ${escapeHtml(d.toLocaleString())}
+    </p>`;
+  }
+
+  const reason  = escapeHtml(info.reason  || 'No reason provided.');
+  const message = escapeHtml(info.message || 'You are banned from Saint Pixels.');
+
+  // Overlay the entire viewport — pointer-events:all prevents interaction with
+  // the canvas or any other element behind it.
+  const screen = document.createElement('div');
+  screen.id = 'ban-screen';
+  screen.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:99999',
+    'display:flex', 'flex-direction:column',
+    'align-items:center', 'justify-content:center',
+    'background:rgba(10,10,15,0.97)',
+    'color:#fff', 'font-family:sans-serif',
+    'text-align:center', 'padding:2rem',
+    'pointer-events:all',
+  ].join(';');
+
+  screen.innerHTML = `
+    <div style="font-size:3rem;margin-bottom:.5rem;">🔨</div>
+    <h1 style="margin:0 0 .5rem;font-size:1.6rem;">${message}</h1>
+    <p  style="margin:0;opacity:.8;max-width:480px;">${reason}</p>
+    ${expiryLine}
+    <p style="margin:1.5rem 0 0;font-size:.8em;opacity:.5;">
+      If you believe this is a mistake, contact a moderator.
+    </p>`;
+
+  // Close the auth overlay (if open) and attach the ban screen
+  document.body.classList.remove('auth-open');
+  document.body.appendChild(screen);
+}
+
+/**
+ * Inspect an API response object.  If it signals a ban, show the ban screen
+ * and return true so the caller can bail out early.  Otherwise return false.
+ *
+ * @param {{ error?: string, reason?: string, message?: string, expiresAt?: number }} data
+ * @param {Response} response  — the original fetch Response (used to check status)
+ * @returns {boolean}  true when a ban screen was shown
+ */
+function handleApiBanResponse(data, response) {
+  if (response.status === 403 && data?.error === 'banned') {
+    showBanScreen(data);
+    return true;
+  }
+  return false;
+}
+
+// ── end BAN SCREEN ────────────────────────────────────────────────────────────
 // Prevents aside, chat panel, and other overflow containers from being
 // accidentally scrolled with the mouse wheel.
 document.addEventListener('wheel', (e) => {
@@ -563,8 +643,10 @@ function paintInitPixelsChunked(pixels) {
         paintPixel(p.x, p.y, 1, 'brush', p.color.startsWith('#') ? p.color : '#' + p.color);
       }
     }
-    // Redraw once per chunk so the canvas updates progressively
-    redraw();
+    // We are already inside a rAF callback — call the render body directly
+    // instead of scheduling another rAF via redraw(), which would double-wrap
+    // and cause stutter during the init phase.
+    _doRender();
     if (i < pixels.length) {
       requestAnimationFrame(paintChunk);
     }
@@ -1106,8 +1188,10 @@ function canPlacePixel() {
 function drawGrid() {
   const dpr = window.devicePixelRatio || 1;
 
-  gridCanvas.width  = canvas.width;
-  gridCanvas.height = canvas.height;
+  // Do NOT resize gridCanvas here — resizeViewport() already keeps it in sync
+  // with canvas.  Resizing on every drawGrid call is extremely expensive
+  // (allocates + clears a new backing store each time) and was the primary
+  // source of lag during zoom and pan.
 
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
@@ -1217,77 +1301,82 @@ function toggleGrid() {
 
 let isRedrawPending = false;
 
+/** The actual render work — called from inside a rAF callback. */
+function _doRender() {
+  clampOffsets();
+  
+  const dpr = window.devicePixelRatio || 1;
+  
+  // offsetX/Y are always whole numbers (rounded at every write site),
+  // so no rounding is needed here — just use them directly.
+  const ox = offsetX;
+  const oy = offsetY;
+  
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Keep pixels crisp at any zoom level
+  ctx.imageSmoothingEnabled = false;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  
+  const boardW = Math.round(BOARD_WIDTH * scale);
+  const boardH = Math.round(BOARD_HEIGHT * scale);
+  
+  // Draw the white board background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(ox, oy, boardW, boardH);
+
+  // ── Occlusion culling ──────────────────────────────────────────────
+  // Compute the visible board region in board-pixel coordinates so we
+  // only blit the portion of the buffer that's actually on screen.
+  const vpW_css = canvas.width / dpr;
+  const vpH_css = canvas.height / dpr;
+
+  // Board rect in viewport-CSS pixels
+  const bLeft   = ox;
+  const bTop    = oy;
+  const bRight  = ox + boardW;
+  const bBottom = oy + boardH;
+
+  // Visible intersection (viewport is 0,0 → vpW,vpH)
+  const visL = Math.max(0, bLeft);
+  const visT = Math.max(0, bTop);
+  const visR = Math.min(vpW_css, bRight);
+  const visB = Math.min(vpH_css, bBottom);
+
+  if (visR > visL && visB > visT) {
+    // Map the visible screen rect back to source board-pixel coords
+    const srcX = (visL - ox) / scale;
+    const srcY = (visT - oy) / scale;
+    const srcW = (visR - visL) / scale;
+    const srcH = (visB - visT) / scale;
+
+    // Draw only the visible slice — skip off-screen pixels entirely
+    ctx.drawImage(
+      bufferCanvas,
+      srcX, srcY, srcW, srcH,
+      visL, visT, visR - visL, visB - visT
+    );
+  }
+
+  // Redraw grid only when scale/offset changed — grid lives on its own canvas
+  drawGridIfDirty();
+
+  // Overlay is cursor-only; clear and redraw just the cursor highlight
+  overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  drawCursor();
+  rulerDrawOverlay();
+}
+
 function redraw() {
   if (isRedrawPending) return;
   isRedrawPending = true;
 
   requestAnimationFrame(() => {
     isRedrawPending = false;
-    clampOffsets();
-    
-    const dpr = window.devicePixelRatio || 1;
-    
-    // offsetX/Y are always whole numbers (rounded at every write site),
-    // so no rounding is needed here — just use them directly.
-    const ox = offsetX;
-    const oy = offsetY;
-    
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Keep pixels crisp at any zoom level
-    ctx.imageSmoothingEnabled = false;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    const boardW = Math.round(BOARD_WIDTH * scale);
-    const boardH = Math.round(BOARD_HEIGHT * scale);
-    
-    // Draw the white board background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(ox, oy, boardW, boardH);
-
-    // ── Occlusion culling ──────────────────────────────────────────────
-    // Compute the visible board region in board-pixel coordinates so we
-    // only blit the portion of the buffer that's actually on screen.
-    const vpW_css = canvas.width / dpr;
-    const vpH_css = canvas.height / dpr;
-
-    // Board rect in viewport-CSS pixels
-    const bLeft   = ox;
-    const bTop    = oy;
-    const bRight  = ox + boardW;
-    const bBottom = oy + boardH;
-
-    // Visible intersection (viewport is 0,0 → vpW,vpH)
-    const visL = Math.max(0, bLeft);
-    const visT = Math.max(0, bTop);
-    const visR = Math.min(vpW_css, bRight);
-    const visB = Math.min(vpH_css, bBottom);
-
-    if (visR > visL && visB > visT) {
-      // Map the visible screen rect back to source board-pixel coords
-      const srcX = (visL - ox) / scale;
-      const srcY = (visT - oy) / scale;
-      const srcW = (visR - visL) / scale;
-      const srcH = (visB - visT) / scale;
-
-      // Draw only the visible slice — skip off-screen pixels entirely
-      ctx.drawImage(
-        bufferCanvas,
-        srcX, srcY, srcW, srcH,
-        visL, visT, visR - visL, visB - visT
-      );
-    }
-
-    // Redraw grid only when scale/offset changed — grid lives on its own canvas
-    drawGridIfDirty();
-
-    // Overlay is cursor-only; clear and redraw just the cursor highlight
-    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
-    overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
-    drawCursor();
-    rulerDrawOverlay();
+    _doRender();
   });
 }
 
@@ -2633,12 +2722,19 @@ function stopAction(event) {
   }
 }
 
+// Accumulated wheel state — all ticks within a single animation frame are
+// merged so that fast trackpad scrolling never queues more than one redraw.
+let _wheelRafId = null;
+let _wheelPivotX = 0;   // viewport-CSS px — anchor point for the current batch
+let _wheelPivotY = 0;
+let _wheelFactor = 1;   // multiplicative zoom accumulated this frame
+
 function handleWheel(event) {
   event.preventDefault();
-  
+
   const direction = -Math.sign(event.deltaY);
 
-  // Prevent unecessary redraws if attempting to zoom in at MAX_ZOOM_SCALE, or out at MIN_ZOOM_LEVEL
+  // Bail early only when already at the hard limit AND this tick would push further.
   if (scale === MAX_ZOOM_SCALE && direction > 0) return;
   if (scale === MIN_ZOOM_SCALE && direction < 0) return;
 
@@ -2646,36 +2742,45 @@ function handleWheel(event) {
   const mouseX = event.clientX - rect.left;
   const mouseY = event.clientY - rect.top;
 
-  const boardX = (mouseX - offsetX) / scale;
-  const boardY = (mouseY - offsetY) / scale;
-  
-  // scale factor per wheel tick
-  let nextZoom = scale * (direction > 0 ? 1.12 : 0.88);
-  nextZoom = clamp(nextZoom, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
-  scale = nextZoom;
-  
-  offsetX = Math.round(mouseX - boardX * scale);
-  offsetY = Math.round(mouseY - boardY * scale);
+  if (_wheelRafId === null) {
+    // First tick of this frame — set the pivot (anchor point stays fixed).
+    _wheelPivotX = mouseX;
+    _wheelPivotY = mouseY;
+    _wheelFactor = 1;
 
-  clampOffsets();
+    _wheelRafId = requestAnimationFrame(() => {
+      _wheelRafId = null;
 
-  // If the user is panning at the same time (e.g. holding the middle mouse
-  // button while scrolling), the wheel just changed offsetX/Y so panStartX/Y
-  // is now stale. Re-anchor it to the post-zoom offset so the next mousemove
-  // delta is computed correctly and the view doesn't teleport.
-  if (isPanning) {
-    panStartX = event.clientX - offsetX;
-    panStartY = event.clientY - offsetY;
+      const boardX = (_wheelPivotX - offsetX) / scale;
+      const boardY = (_wheelPivotY - offsetY) / scale;
+
+      let nextZoom = clamp(scale * _wheelFactor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+      scale = nextZoom;
+
+      offsetX = Math.round(_wheelPivotX - boardX * scale);
+      offsetY = Math.round(_wheelPivotY - boardY * scale);
+
+      clampOffsets();
+
+      // Re-anchor pan origin if zooming while holding middle-mouse-pan
+      if (isPanning) {
+        panStartX = _wheelPivotX + rect.left - offsetX;
+        panStartY = _wheelPivotY + rect.top  - offsetY;
+      }
+
+      zoomInput.value = Math.round(scale * 100);
+      dispatchStateChange({ zoomLevel: Math.round(scale * 100) });
+
+      // Snap cursor to pointer position after zoom
+      const newCoords = getCanvasCoords(_wheelPivotX + rect.left, _wheelPivotY + rect.top);
+      cursorPosition = { x: newCoords.x, y: newCoords.y };
+
+      redraw();
+    });
   }
 
-  zoomInput.value = Math.round(scale * 100);
-  dispatchStateChange({ zoomLevel: Math.round(scale * 100) });
-  
-  // NEW: Instantly recalculate the cursor position based on the new zoom scale
-  const newCoords = getCanvasCoords(event.clientX, event.clientY);
-  cursorPosition = { x: newCoords.x, y: newCoords.y };
-  
-  redraw();
+  // Accumulate factor — multiple ticks in the same frame compound correctly.
+  _wheelFactor *= (direction > 0 ? 1.12 : 0.88);
 }
 
 function handlePanStart(event) {
@@ -3499,6 +3604,8 @@ let lastTouchX = 0;
 let lastTouchY = 0;
 /** True while a single-finger touch pan is actively moving — suppresses cursor overlay redraws. */
 let isTouchPanning = false;
+/** rAF id for batched pinch-zoom redraws — ensures at most one redraw per frame during pinch. */
+let _touchPinchRafId = null;
 /** CSS-px position where the current touch began — used to measure drag distance for the ruler tool. */
 let touchStartX = 0;
 let touchStartY = 0;
@@ -3604,7 +3711,14 @@ viewport.addEventListener("touchmove", (e) => {
       clampOffsets();
       zoomInput.value = Math.round(scale * 100);
       dispatchStateChange({ zoomLevel: Math.round(scale * 100) });
-      redraw();
+
+      // Batch into rAF — pinch fires many events per frame on high-DPI screens.
+      if (!_touchPinchRafId) {
+        _touchPinchRafId = requestAnimationFrame(() => {
+          _touchPinchRafId = null;
+          redraw();
+        });
+      }
     }
     lastTouchDistance = distance;
   }

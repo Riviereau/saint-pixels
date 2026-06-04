@@ -82,8 +82,11 @@ function pruneWindow(arr, windowMs) {
   if (i > 0) arr.splice(0, i);
 }
 
-// Clean up stale entries every 5 minutes to avoid unbounded memory growth
-setInterval(() => {
+// Clean up stale entries every 5 minutes to avoid unbounded memory growth.
+// The interval ID is stored so the timer can be cleared on process exit and
+// so test harnesses can tear it down cleanly (without this, Jest / Mocha leak
+// open handles and warn on every run).
+const _statePruneInterval = setInterval(() => {
   const cutoff = Date.now() - Math.max(BURST_WINDOW_MS, IP_BURST_WINDOW_MS) * 2;
   for (const [k, v] of _userState) {
     if (v.lastAt < cutoff) _userState.delete(k);
@@ -93,6 +96,8 @@ setInterval(() => {
     if (v.timestamps.length === 0) _ipState.delete(k);
   }
 }, 5 * 60 * 1_000);
+// Unref so the timer doesn't prevent a clean process.exit() in scripts/tests.
+if (_statePruneInterval.unref) _statePruneInterval.unref();
 
 // ── Content sanitisation ──────────────────────────────────────────────────────
 
@@ -215,8 +220,12 @@ async function send(req, res) {
   }
   _ipInFlight.add(ip);
   // Always release — whether we return early or the handler completes.
-  res.on('finish', () => _ipInFlight.delete(ip));
-  res.on('close',  () => _ipInFlight.delete(ip));
+  // Use once() so a response that emits both 'finish' and 'close' (which Node
+  // can do on keep-alive connections) doesn't attempt a second delete and
+  // potentially race with a new request from the same IP.
+  const _releaseInFlight = () => _ipInFlight.delete(ip);
+  res.once('finish', _releaseInFlight);
+  res.once('close',  _releaseInFlight);
 
   // ── Input type check ───────────────────────────────────────────────────────
   // Reject arrays, objects, numbers — only plain strings are valid.

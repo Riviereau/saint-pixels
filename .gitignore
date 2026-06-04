@@ -8,6 +8,11 @@ database.sqlite-wal
 *.sqlite
 *.db
 
+# ── Ban-list — NEVER commit these ─────────────────────────────────────────────
+ban-list.json
+INTEGRATION.md
+server-changes.md
+
 # ── Environment / secrets — NEVER commit these ────────────────────────────────
 .env
 .env.*

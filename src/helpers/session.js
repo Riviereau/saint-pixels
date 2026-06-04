@@ -1,33 +1,20 @@
-const crypto = require('crypto');
+const crypto   = require('crypto');
+const { checkBan, buildBanPayload } = require('./ban');
 
 /** Sessions TTL: 30 days in milliseconds */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** Injected by initializeDatabase / server startup */
 let _db = null;
 
-/**
- * Call once at startup to wire up the database.
- * @param {import('better-sqlite3').Database} db
- */
-function setDb(db) {
-  _db = db;
-}
+function setDb(db) { _db = db; }
 
-/**
- * Create a new session for the given username.
- * Returns the Bearer token string.
- * @param {string} username
- * @returns {string}
- */
 function createSession(username) {
   const token = crypto.randomBytes(32).toString('hex');
-  const now = Date.now();
+  const now   = Date.now();
   _db.prepare(
     'INSERT INTO sessions (token, username, created_at, expires_at) VALUES (?, ?, ?, ?)'
   ).run(token, username, now, now + SESSION_TTL_MS);
 
-  // Opportunistically prune expired sessions (1-in-50 chance to keep it cheap)
   if (Math.random() < 0.02) {
     _db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
   }
@@ -35,11 +22,6 @@ function createSession(username) {
   return token;
 }
 
-/**
- * Destroy a session by token.
- * @param {string} token
- * @returns {boolean}
- */
 function closeSession(token) {
   if (!token) return false;
   const info = _db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
@@ -47,23 +29,16 @@ function closeSession(token) {
 }
 
 /**
- * Look up a valid (non-expired) session from a request.
- * Returns { username, created_at } or null.
- *
- * When the mobileDebug bypass is active and the request comes from a
- * private/loopback IP, localBypassMiddleware will have already set
- * req.localBypassUser.  In that case we return a synthetic session
- * immediately — no DB lookup, no token required.
- *
- * @param {import('express').Request} req
- * @returns {{ username: string, created_at: number } | null}
+ * Returns:
+ *   { username, created_at }                          — valid session, not banned
+ *   { banned: true, reason, message, expiresAt }      — valid session but banned
+ *   null                                               — no valid session
  */
 function getSession(req) {
-  // ── mobileDebug bypass ───────────────────────────────────────────────────
-  // localBypassMiddleware sets req.localBypassUser for private-network IPs
-  // when MOBILE_DEBUG=true.  Return a synthetic session so all downstream
-  // handlers (PlacePixel, Chat, /api/me, etc.) see an authenticated user.
+  // mobileDebug bypass
   if (req && req.localBypassUser) {
+    const ban = checkBan(req.localBypassUser);
+    if (ban) return buildBanPayload(ban);
     return { username: req.localBypassUser, created_at: Date.now() };
   }
 
@@ -75,7 +50,29 @@ function getSession(req) {
     'SELECT username, created_at FROM sessions WHERE token = ? AND expires_at > ?'
   ).get(token, Date.now());
 
-  return row || null;
+  if (!row) return null;
+
+  const ban = checkBan(row.username);
+  if (ban) return buildBanPayload(ban);
+
+  return row;
 }
 
-module.exports = { setDb, createSession, closeSession, getSession };
+/**
+ * Express middleware — intercepts banned users and returns 403.
+ * Plug in as: app.use('/api', banCheckMiddleware)
+ */
+function banCheckMiddleware(req, res, next) {
+  const session = getSession(req);
+  if (session && session.banned === true) {
+    return res.status(403).json({
+      error:     'banned',
+      message:   session.message,
+      reason:    session.reason,
+      expiresAt: session.expiresAt,
+    });
+  }
+  next();
+}
+
+module.exports = { setDb, createSession, closeSession, getSession, banCheckMiddleware };

@@ -25,6 +25,12 @@ let _db = null;
 // active region while bounding the per-connect query cost.
 const PIXEL_INIT_LIMIT = 500_000;
 
+// Hard ceiling on the total number of concurrent SSE clients the server
+// will accept.  Beyond this, new connections receive 503 so they back off
+// immediately rather than holding a socket open and consuming memory.
+// Tune upward if you run on beefier hardware.
+const SSE_MAX_CLIENTS = 500;
+
 /**
  * Inject the database so new SSE connections can receive existing pixel history.
  * @param {import('better-sqlite3').Database} db
@@ -67,6 +73,14 @@ function initializeSSE(app, db, guardMiddleware) {
   if (db) _db = db;
 
   const handler = (req, res) => {
+    // Global connection cap — prevent memory exhaustion from too many open sockets.
+    if (clients.size >= SSE_MAX_CLIENTS) {
+      res.status(503).set('Retry-After', '30').json({
+        error: 'Too many concurrent connections. Please retry shortly.',
+      });
+      return;
+    }
+
     res.setHeader('Content-Type',      'text/event-stream');
     res.setHeader('Cache-Control',     'no-cache');
     res.setHeader('Connection',        'keep-alive');
