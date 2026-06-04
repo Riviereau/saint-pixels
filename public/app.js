@@ -10,6 +10,35 @@ function dispatchStateChange(detail) {
   window.dispatchEvent(new CustomEvent('sp-state-change', { detail }));
 }
 document.addEventListener('DOMContentLoaded', () => {
+
+// ── Block scroll-wheel from scrolling any element except the canvas viewport ──
+// Prevents aside, chat panel, and other overflow containers from being
+// accidentally scrolled with the mouse wheel.
+document.addEventListener('wheel', (e) => {
+  // Always allow wheel events on the canvas viewport (zoom / pan)
+  if (e.target.closest('#viewport')) return;
+  // Block wheel on any other scrollable container
+  const scrollable = e.target.closest(
+    'aside, #chat-messages, #pm-modal, [class*="overflow-y-auto"], [class*="overflow-y-scroll"]'
+  );
+  if (scrollable) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, { passive: false });
+
+// ── Block arrow keys from scrolling any element except inputs/textareas ──
+// Arrow keys are used for canvas cursor movement; they must not scroll
+// sidebars, modals, or any other overflow container.
+const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'PageUp', 'PageDown', 'Home', 'End']);
+document.addEventListener('keydown', (e) => {
+  if (!ARROW_KEYS.has(e.key)) return;
+  // Always allow in text inputs / textareas (cursor movement / selection)
+  if (e.target.closest('input, textarea, select')) return;
+  // Block the browser's default scroll behaviour everywhere else
+  e.preventDefault();
+}, { capture: true, passive: false });
+
 // Prevent default form submission (replaces the removed onsubmit="return false;" attr,
 // which was blocked by Content-Security-Policy script-src-attr 'none').
 document.getElementById('authForm')?.addEventListener('submit', e => e.preventDefault());
