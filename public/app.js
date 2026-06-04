@@ -484,6 +484,22 @@ const GRID_DOT_SCREEN_PX = 3;
 // Connects to /api/stream and applies pixels placed by other users instantly.
 let _sseSource = null;
 
+// Tracks cells the current user painted optimistically in the last 5 seconds.
+// Used to skip stale init-bundle entries on SSE reconnect so we never
+// overwrite a freshly-placed local pixel with an older server snapshot.
+// Key: "x,y" string.  Value: timestamp of the local paint.
+const _recentLocalCells = new Map();
+const RECENT_LOCAL_TTL_MS = 5000;
+function _markLocalCell(x, y) {
+  const key = `${x},${y}`;
+  _recentLocalCells.set(key, Date.now());
+  // Lazy prune: remove entries older than the TTL whenever we add a new one
+  const cutoff = Date.now() - RECENT_LOCAL_TTL_MS;
+  for (const [k, t] of _recentLocalCells) {
+    if (t < cutoff) _recentLocalCells.delete(k);
+  }
+}
+
 // Batch rapid incoming remote pixels into a single rAF redraw.
 // When many players are painting simultaneously the SSE stream can deliver
 // dozens of pixel events per frame; calling redraw() for each one wastes CPU.
@@ -507,10 +523,18 @@ function connectSSE() {
     try {
       const event = JSON.parse(e.data);
       if (event.type === 'init') {
-        // Server sent the full canvas history — paint all pixels on connect
+        // Server sent the full canvas history — paint all pixels on connect.
+        // Skip cells where the current user has a recent optimistic paint
+        // (within 5 s) so a reconnect doesn't overwrite locally-placed pixels
+        // with stale server state from just before our last placement.
         if (Array.isArray(event.pixels)) {
+          const now = Date.now();
           event.pixels.forEach(p => {
             if (typeof p.x === 'number' && typeof p.y === 'number') {
+              // If we placed something on this cell very recently, trust our
+              // local optimistic state — the server version may be one event
+              // behind us.
+              if (_recentLocalCells.has(`${p.x},${p.y}`) ) return;
               if (p.color === 'erase') {
                 paintPixel(p.x, p.y, 1, 'eraser', null);
               } else if (typeof p.color === 'string') {
@@ -975,7 +999,11 @@ function updateCooldownLabel() {
 }
 
 function canPlacePixel() {
-  return !!currentUser && Date.now() - lastPlaceAt >= _activeCooldownMs;
+  // Require the full cooldown PLUS a tiny safety margin (20 ms) before
+  // allowing the next placement.  This ensures the HTTP request always
+  // reaches the server well after the cooldown window, not at the exact
+  // millisecond boundary where clock skew could still cause a 429.
+  return !!currentUser && Date.now() - lastPlaceAt >= _activeCooldownMs + 20;
 }
 
 // ─── Grid: corner dots drawn in viewport space ───────────────────────────────
@@ -1516,6 +1544,8 @@ function applyToolAtCell(x, y) {
   // 1. Paint immediately to the buffer and flush to screen — zero latency
   paintPixel(x, y);
   lastPlaceAt = Date.now();
+  // Track this cell so SSE reconnect init-bundles don't overwrite it
+  _markLocalCell(x, y);
 
   // SFX + particles for brush/eraser
   if (tool === 'eraser') {
@@ -1621,6 +1651,8 @@ function broadcastEvent(event) {
       }).then(res => {
         if (res.ok) {
           window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
+          // Refresh the recent-cell guard now that the server confirmed the paint
+          _markLocalCell(event.x, event.y);
           // Update running total and check achievements
           _totalPixelCount++;
           _currentStreak = Math.max(_currentStreak, 1); // at minimum 1 today
@@ -1644,8 +1676,10 @@ function broadcastEvent(event) {
               //    lock the gate for the real remaining duration so no further
               //    spam placements can slip through.
               const remaining = data?.cooldown ?? 0;
-              if (remaining <= 100) {
-                // Case A — boundary race, keep the pixel.
+              if (remaining <= 150) {
+                // Case A — boundary race (click fired at the exact moment the
+                // cooldown expired; server received it slightly early due to
+                // clock skew or network latency).  Keep the optimistic pixel.
                 window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
                 _totalPixelCount++;
                 _currentStreak = Math.max(_currentStreak, 1);
@@ -2937,6 +2971,12 @@ document.addEventListener('keydown', event => {
     case 'A': moveColorFocus(-1, 0); break;
     case 'd':
     case 'D': moveColorFocus(1, 0); break;
+
+    // Q / E scroll the topbar left / right — avoids conflict with arrow keys
+    case 'q':
+    case 'Q': window._scrollTopbarLeft?.();  break;
+    case 'e':
+    case 'E': window._scrollTopbarRight?.(); break;
     
     case '1': setTool('brush'); break;
     case '2': setTool('eraser'); break;
@@ -3263,6 +3303,8 @@ function moveColorFocus(dx, dy) {
 // --- TOPBAR DRAG LOGIC ---
 // Uses scrollLeft instead of transform so the header never shrinks away
 // from the right edge (which exposed the background behind it).
+// Q / E (and < / >) scroll the topbar left/right without conflicting
+// with the arrow keys that move the canvas cursor.
 (function () {
   const header = document.querySelector('header.flex');
   const handle = document.getElementById('topbar-drag-handle');
@@ -3301,6 +3343,13 @@ function moveColorFocus(dx, dy) {
   document.addEventListener('mouseup',  onUp);
   document.addEventListener('touchend', onUp);
   window.addEventListener('resize', () => { header.scrollLeft = 0; });
+
+  // Q = scroll topbar left, E = scroll topbar right
+  // These keys are exposed globally so the keydown handler below can call them.
+  const TOPBAR_SCROLL_STEP = 120; // CSS pixels per key press
+  window._scrollTopbarLeft  = () => { header.scrollLeft = Math.max(0, header.scrollLeft - TOPBAR_SCROLL_STEP); };
+  window._scrollTopbarRight = () => { header.scrollLeft += TOPBAR_SCROLL_STEP; };
+})();
 })();
 
 // --- FULLSCREEN LOGIC ---
@@ -3525,27 +3574,30 @@ viewport.addEventListener("touchend", (e) => {
      // as clientY so the offset doesn't overshoot at non-100% browser zoom.
      const dpr = window.devicePixelRatio || 1;
      const vvScale = (window.visualViewport && window.visualViewport.scale) || 1;
-     // Both iOS and Android tend to report clientY at or near the top of the
-     // contact ellipse rather than its centroid, making the placed pixel appear
-     // below where the finger actually landed.
+     // Both iOS and Android report clientY at or near the TOP of the touch
+     // contact ellipse rather than its centroid, so placed pixels appear lower
+     // than where the finger landed.  We correct by shifting clientY upward by
+     // half the contact height (radiusY), normalised to CSS pixels.
      //
-     // iOS: radiusY is a fixed hardware constant (~11 physical px) that
-     // overcorrects at low zoom, so we apply a small fixed upward nudge instead.
+     // radiusY on iOS is in CSS pixels (already scaled by DPR internally).
+     // radiusY on Android/Chrome is in physical px — divide by DPR to get CSS px.
+     // We then divide by vvScale to convert from visual-CSS px to layout px,
+     // matching the coordinate space of clientY.
      //
-     // Android/Chrome: radiusY is in physical pixels; half of it (capped at 10
-     // CSS px) brings us to the contact centroid reliably.
+     // We cap the correction at 14 CSS px to avoid overshooting on
+     // unusually large or missing radiusY values.
      const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
      let adjustedClientY = touch.clientY;
-     if (isIOS) {
-       // Small fixed upward nudge for iOS — enough to hit the centroid without
-       // overshooting on pinch-zoomed views.
-       adjustedClientY = touch.clientY - 4;
-     } else {
-       // Android: radiusY in physical px → CSS px, then take half (centroid).
-       const radiusY = (touch.radiusY || 0) / dpr / vvScale;
-       adjustedClientY = touch.clientY - Math.min(radiusY * 0.5, 10);
-     }
+     // Raw radiusY → normalise to layout-CSS px
+     const rawRadiusY = touch.radiusY || 0;
+     // iOS reports radiusY in CSS px; Android in physical px
+     const radiusCssPx = isIOS ? rawRadiusY : rawRadiusY / dpr;
+     // Convert visual-CSS px to layout px (matters when browser is pinch-zoomed)
+     const radiusLayoutPx = radiusCssPx / vvScale;
+     // Half the contact height = centroid offset; clamp to [4, 14] CSS px
+     const yCorrection = Math.min(Math.max(radiusLayoutPx * 0.5, 4), 14);
+     adjustedClientY = touch.clientY - yCorrection;
      const coords = getCanvasCoords(touch.clientX, adjustedClientY);
      // Snap cursorPosition to the exact tap location BEFORE placing.
      // On Android, touchmove fires for tiny jitter during a tap and leaves

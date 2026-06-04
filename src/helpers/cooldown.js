@@ -10,14 +10,14 @@ const COOLDOWN_MS = 3000;
  * clock skew and network latency mean the server may see the request
  * arrive 10–80 ms before the cooldown has technically elapsed.  Without
  * this buffer the server rejects the pixel with a 429, the client erases
- * the optimistically-painted pixel, and the user has to click a second
- * time — the "ghost click" bug.
+ * the optimistically-painted pixel, and the user has to place it again —
+ * the "ghost click" bug.
  *
- * 50 ms is small enough that it cannot be abused to meaningfully speed up
- * pixel placement (< 2 % of the 3 s cooldown) but large enough to absorb
- * typical client/server clock drift and round-trip jitter.
+ * 100 ms absorbs typical client/server clock drift and round-trip jitter
+ * (previously 50 ms — raised to also cover high-latency connections).
+ * At < 3.5 % of the 3 s cooldown, this cannot be meaningfully exploited.
  */
-const COOLDOWN_GRACE_MS = 50;
+const COOLDOWN_GRACE_MS = 100;
 
 /**
  * @param {import('better-sqlite3').Database} db
