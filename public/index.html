@@ -409,8 +409,18 @@
         </section>
 
         <section class="mb-0">
-          <h2 class="m-0 mb-2 text-[0.95rem] font-semibold">Help</h2>
-          <ul class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list">
+          <h2 class="m-0 mb-2 text-[0.95rem] font-semibold flex items-center justify-between">
+            Help
+            <button
+              id="help-toggle-btn"
+              type="button"
+              aria-expanded="false"
+              aria-controls="help-section-content"
+              class="help-toggle-btn px-2 py-0.5 rounded-lg border border-white/10 bg-white/5 text-slate-400 text-[0.75rem] font-semibold hover:bg-sky-400/15 hover:border-sky-400/60 hover:text-sky-300 transition-all"
+              title="Toggle help tips"
+            >Show</button>
+          </h2>
+          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list" style="display:none;" aria-hidden="true">
             <li>Left click the board to place a pixel</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">W</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">A</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">S</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">D</kbd> to navigate palette colors</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">Q</kbd> / <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">E</kbd> to scroll the top bar left / right</li>

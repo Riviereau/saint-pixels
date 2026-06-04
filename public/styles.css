@@ -3108,10 +3108,25 @@ header.flex {
 }
 
 /* ── Desktop: compact left panel so no scrollbar appears ────────────────── */
+/* Help toggle button — desktop only */
+.help-toggle-btn { display: none; }
+
 @media (hover: hover) and (pointer: fine) {
-  /* Hide the Help section — saves the most vertical space */
+  .help-toggle-btn { display: inline-flex; align-items: center; }
+
+  /* Hide the Help section content by default — saves vertical space */
+  aside section:has(.help-list) .help-list {
+    display: none !important;
+  }
+
+  /* When open, allow it to show (JS adds .help-section-open to the section) */
+  aside section.help-section-open .help-list {
+    display: grid !important;
+  }
+
+  /* Keep the section header visible so the toggle button shows */
   aside section:has(.help-list) {
-    display: none;
+    display: block;
   }
 
   /* Tighter aside padding and gaps */

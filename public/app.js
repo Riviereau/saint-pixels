@@ -4161,4 +4161,19 @@ if (resetConfirmBtn) {
   if (rt) openResetModal(true, rt);
 })();
 
+// ── Help section toggle (desktop only) ───────────────────────────────────────
+(function initHelpToggle() {
+  const btn = document.getElementById('help-toggle-btn');
+  const content = document.getElementById('help-section-content');
+  if (!btn || !content) return;
+
+  btn.addEventListener('click', () => {
+    const section = btn.closest('section');
+    const isOpen = section.classList.toggle('help-section-open');
+    btn.textContent = isOpen ? 'Hide' : 'Show';
+    btn.setAttribute('aria-expanded', String(isOpen));
+    content.setAttribute('aria-hidden', String(!isOpen));
+  });
+})();
+
 }); // end DOMContentLoaded
