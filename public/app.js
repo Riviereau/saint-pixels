@@ -542,11 +542,48 @@ function scheduleRemoteRedraw() {
   });
 }
 
+// ── Chunked init-pixel painting ─────────────────────────────────────────────
+// The SSE init bundle can contain up to 500 000 pixels. Painting them all
+// synchronously in one forEach freezes the main thread for several seconds.
+// Instead we split the array into chunks and paint one chunk per animation
+// frame, keeping the UI responsive throughout.
+const SSE_INIT_CHUNK_SIZE = 5000; // pixels per frame — ~1–2 ms per chunk
+
+function paintInitPixelsChunked(pixels) {
+  let i = 0;
+  function paintChunk() {
+    const end = Math.min(i + SSE_INIT_CHUNK_SIZE, pixels.length);
+    for (; i < end; i++) {
+      const p = pixels[i];
+      if (typeof p.x !== 'number' || typeof p.y !== 'number') continue;
+      if (_recentLocalCells.has(`${p.x},${p.y}`)) continue;
+      if (p.color === 'erase') {
+        paintPixel(p.x, p.y, 1, 'eraser', null);
+      } else if (typeof p.color === 'string') {
+        paintPixel(p.x, p.y, 1, 'brush', p.color.startsWith('#') ? p.color : '#' + p.color);
+      }
+    }
+    // Redraw once per chunk so the canvas updates progressively
+    redraw();
+    if (i < pixels.length) {
+      requestAnimationFrame(paintChunk);
+    }
+  }
+  requestAnimationFrame(paintChunk);
+}
+
+// Exponential backoff for SSE reconnects: starts at 2 s, doubles each attempt,
+// caps at 30 s. Reset to base on a successful connection.
+let _sseRetryDelay = 2000;
+const SSE_RETRY_BASE  = 2000;
+const SSE_RETRY_MAX   = 30000;
+
 function connectSSE() {
   if (_sseSource) { _sseSource.close(); }
-  const token = getStoredToken();
-  const url = token ? `/api/stream?token=${encodeURIComponent(token)}` : '/api/stream';
-  _sseSource = new EventSource(url);
+  // Do NOT include the auth token in the URL — query-string tokens are recorded
+  // in server access logs and browser history. The SSE endpoint is public-read;
+  // authentication is handled separately via /api/me.
+  _sseSource = new EventSource('/api/stream');
 
   _sseSource.onmessage = (e) => {
     try {
@@ -557,21 +594,10 @@ function connectSSE() {
         // (within 5 s) so a reconnect doesn't overwrite locally-placed pixels
         // with stale server state from just before our last placement.
         if (Array.isArray(event.pixels)) {
-          const now = Date.now();
-          event.pixels.forEach(p => {
-            if (typeof p.x === 'number' && typeof p.y === 'number') {
-              // If we placed something on this cell very recently, trust our
-              // local optimistic state — the server version may be one event
-              // behind us.
-              if (_recentLocalCells.has(`${p.x},${p.y}`) ) return;
-              if (p.color === 'erase') {
-                paintPixel(p.x, p.y, 1, 'eraser', null);
-              } else if (typeof p.color === 'string') {
-                paintPixel(p.x, p.y, 1, 'brush', p.color.startsWith('#') ? p.color : '#' + p.color);
-              }
-            }
-          });
-          redraw();
+          // Reset backoff — we have a working connection
+          _sseRetryDelay = SSE_RETRY_BASE;
+          // Paint in chunks across animation frames to avoid freezing the UI
+          paintInitPixelsChunked(event.pixels);
         }
       } else if (event.type === 'pixel') {
         if (event.user !== currentUser) {
@@ -594,6 +620,8 @@ function connectSSE() {
       } else if (event.type === 'clients') {
         // Update live player count from server SSE (authoritative count)
         dispatchStateChange({ liveCount: event.count });
+        // A 'clients' message means the connection is alive — reset backoff
+        _sseRetryDelay = SSE_RETRY_BASE;
       } else if (event.type === 'event') {
         // Cooldown event started/updated from server broadcast
         updateEventBanner(event.active, event.endsAt, event.cooldownMs);
@@ -612,10 +640,13 @@ function connectSSE() {
     const thisSource = _sseSource;
     if (thisSource) thisSource.close();
     _sseSource = null;
-    // Auto-reconnect after 3 seconds on connection drop (502, network error, etc.)
+    // Exponential backoff: 2 s → 4 s → 8 s … capped at 30 s.
+    // Prevents a reconnect storm when the server is temporarily unavailable.
+    const delay = _sseRetryDelay;
+    _sseRetryDelay = Math.min(_sseRetryDelay * 2, SSE_RETRY_MAX);
     setTimeout(() => {
       if (!_sseSource) connectSSE();
-    }, 3000);
+    }, delay);
   };
 }
 
@@ -762,7 +793,7 @@ function ensureRainbowInPalette(list) {
   });
 }
 
-async function updateAuthState() {
+async function updateAuthState(retryCount = 0) {
   const token = getStoredToken();
   if (!token) {
     currentUser = null;
@@ -773,11 +804,34 @@ async function updateAuthState() {
   }
 
   try {
-    const response = await fetch('/api/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 s hard timeout
+    let response;
+    try {
+      response = await fetch('/api/me', {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
+      // 401/403 = token genuinely invalid — clear it and show login
+      if (response.status === 401 || response.status === 403) {
+        clearToken();
+        currentUser = null;
+        dispatchStateChange({ currentUser: null, emailVerified: false });
+        document.body.classList.add('auth-open');
+        authUsername.focus();
+        return;
+      }
+      // 5xx or other transient server error — retry once after 2 s
+      if (retryCount < 1) {
+        setTimeout(() => updateAuthState(retryCount + 1), 2000);
+        return;
+      }
+      // Retry exhausted — show login overlay
       clearToken();
       currentUser = null;
       dispatchStateChange({ currentUser: null, emailVerified: false });
@@ -815,6 +869,12 @@ async function updateAuthState() {
     authMessage.textContent = '';
     updateCooldownLabel();
   } catch (error) {
+    // Network failure (offline, DNS, AbortError from timeout) — retry once
+    if (retryCount < 1) {
+      setTimeout(() => updateAuthState(retryCount + 1), 2000);
+      return;
+    }
+    // Retry exhausted — clear state and show login
     currentUser = null;
     window.__username  = null;
     window.__authToken = null;

@@ -92,6 +92,25 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 const dbFile = process.env.DATABASE_PATH || path.join(__dirname, 'database.sqlite');
 const db = new Database(dbFile);
 
+// ── SQLite performance & concurrency pragmas ──────────────────────────────────
+// WAL (Write-Ahead Logging): allows concurrent reads during writes — critical
+// when SSE connections (reads) overlap with pixel placements (writes).
+// Without WAL, SQLite uses exclusive write locks that block every reader.
+db.pragma('journal_mode = WAL');
+// Persist WAL across connections (default is DELETE which recreates on open).
+db.pragma('wal_autocheckpoint = 1000');
+// Synchronous = NORMAL: safe with WAL (no data loss on crash, only on OS crash),
+// much faster than FULL (the default) which fsync()s on every transaction.
+db.pragma('synchronous = NORMAL');
+// 64 MB page cache — reduces disk I/O for the pixel table which is hot-read
+// on every SSE connect (up to 500k rows scanned per new connection).
+db.pragma('cache_size = -65536');
+// Keep temp tables in memory rather than on disk.
+db.pragma('temp_store = MEMORY');
+// Busy timeout: if another writer holds the lock, wait up to 5 s before
+// returning SQLITE_BUSY. Prevents spurious 500 errors under write bursts.
+db.pragma('busy_timeout = 5000');
+
 const { setDb: setSessionDb, createSession, closeSession, getSession } = require('./src/helpers/session.js');
 const { setDb: setCooldownDb, getCooldown, COOLDOWN_MS } = require('./src/helpers/cooldown.js');
 const { setDb: setAntiCheatDb } = require('./src/helpers/AntiCheat.js');
