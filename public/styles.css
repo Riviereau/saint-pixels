@@ -1731,8 +1731,8 @@ header.flex {
     position: fixed !important;
     bottom: calc(var(--mob-spawn-h) + env(safe-area-inset-bottom, 0px)) !important;
     /* Start right after the tool-list (48px wide) so colors fill the remaining width */
-    left: 48px !important;
-    right: 0 !important;
+    left: 0px !important;
+    right: 0px !important;
     top: auto !important;
     transform: none !important;
     height: var(--mob-palette-h) !important;
@@ -1743,7 +1743,7 @@ header.flex {
     align-items: center !important;
     justify-content: center !important;
     gap: 5px !important;
-    padding: 6px 10px !important;
+    padding: 6px 36px 6px 36px!important;
     box-sizing: border-box !important;
     border-radius: 0 !important;
     border: none !important;

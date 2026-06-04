@@ -24,7 +24,14 @@ app.use((req, res, next) => {
   res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
   next();
 });
-
+app.get('/admin/download-history', (req, res) => {
+  const fs = require('fs');
+  const filePath = process.env.JSON_HISTORY_PATH;
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  res.download(filePath, 'pixel-history.json');
+});
 app.use((req, res, next) => {
   helmet.contentSecurityPolicy({
     directives: {
