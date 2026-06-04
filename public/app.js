@@ -1236,38 +1236,65 @@ function drawGrid() {
     ys.push(y);
   }
 
-  // Cross markers at every corner: each arm extends 25% into the adjacent cell.
-  const armBase = Math.min(scale * 0.25, 6);
-  const thick = Math.min(Math.max(scale * 0.15, 1), 2);
-
-  // White glow first
-  gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
-  for (const y of ys) {
+  const useLineGrid = scale < 8;
+  if (useLineGrid) {
+    // At intermediate zoom levels the cross-grid is too expensive to redraw
+    // continuously. Lines are much faster and still give good visual feedback.
+    gridCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+    gridCtx.lineWidth = 1;
+    gridCtx.beginPath();
     for (const x of xs) {
-      // Clamp arms so they never go outside the board
-      const left  = Math.min(armBase, x - offsetX);
-      const right = Math.min(armBase, boardScreenR - x);
-      const up    = Math.min(armBase, y - offsetY);
-      const down  = Math.min(armBase, boardScreenB - y);
-
-      // Horizontal bar
-      gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
-      // Vertical bar
-      gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+      gridCtx.moveTo(x + 0.5, clipT);
+      gridCtx.lineTo(x + 0.5, clipB);
     }
-  }
+    for (const y of ys) {
+      gridCtx.moveTo(clipL, y + 0.5);
+      gridCtx.lineTo(clipR, y + 0.5);
+    }
+    gridCtx.stroke();
 
-  // Dark core on top
-  gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
-  for (const y of ys) {
+    gridCtx.strokeStyle = 'rgba(0,0,0,0.18)';
+    gridCtx.beginPath();
     for (const x of xs) {
-      const left  = Math.min(armBase, x - offsetX);
-      const right = Math.min(armBase, boardScreenR - x);
-      const up    = Math.min(armBase, y - offsetY);
-      const down  = Math.min(armBase, boardScreenB - y);
+      gridCtx.moveTo(x + 0.5, clipT);
+      gridCtx.lineTo(x + 0.5, clipB);
+    }
+    for (const y of ys) {
+      gridCtx.moveTo(clipL, y + 0.5);
+      gridCtx.lineTo(clipR, y + 0.5);
+    }
+    gridCtx.stroke();
+  } else {
+    // Cross markers at every corner: each arm extends 25% into the adjacent cell.
+    const armBase = Math.min(scale * 0.25, 6);
+    const thick = Math.min(Math.max(scale * 0.15, 1), 2);
 
-      gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
-      gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+    // White glow first
+    gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
+    for (const y of ys) {
+      for (const x of xs) {
+        const left  = Math.min(armBase, x - offsetX);
+        const right = Math.min(armBase, boardScreenR - x);
+        const up    = Math.min(armBase, y - offsetY);
+        const down  = Math.min(armBase, boardScreenB - y);
+
+        gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
+        gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+      }
+    }
+
+    // Dark core on top
+    gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
+    for (const y of ys) {
+      for (const x of xs) {
+        const left  = Math.min(armBase, x - offsetX);
+        const right = Math.min(armBase, boardScreenR - x);
+        const up    = Math.min(armBase, y - offsetY);
+        const down  = Math.min(armBase, boardScreenB - y);
+
+        gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
+        gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+      }
     }
   }
 
@@ -1300,6 +1327,19 @@ function toggleGrid() {
 }
 
 let isRedrawPending = false;
+let isOverlayRedrawPending = false;
+
+function redrawOverlay() {
+  if (isOverlayRedrawPending) return;
+  isOverlayRedrawPending = true;
+  requestAnimationFrame(() => {
+    isOverlayRedrawPending = false;
+    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+    overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    drawCursor();
+    rulerDrawOverlay();
+  });
+}
 
 /** The actual render work — called from inside a rAF callback. */
 function _doRender() {
@@ -1573,7 +1613,7 @@ function moveCursor(dx, dy) {
   const y = clamp(cursorPosition.y + dy, 0, BOARD_HEIGHT - 1);
   cursorPosition = { x, y };
   updateStatus(x, y);
-  redraw();
+  redrawOverlay();
 }
 
 function armKeyboardCursorAfterArrow() {
@@ -2882,7 +2922,11 @@ canvas.addEventListener('mousemove', event => {
   }
 
   if (cellChanged || isMouseDown) {
-    redraw();
+    if (tool === 'ruler' || isMouseDown) {
+      redraw();
+    } else {
+      redrawOverlay();
+    }
   }
 });
 
