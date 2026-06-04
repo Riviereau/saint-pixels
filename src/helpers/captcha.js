@@ -20,6 +20,10 @@ function verifyCaptcha(token) {
 
     // If no secret is configured (local dev without .env), skip verification.
     if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[captcha] HCAPTCHA_SECRET not set in production');
+        return resolve({ success: false, errorCodes: ['missing-secret'] });
+      }
       console.warn('[captcha] HCAPTCHA_SECRET not set — skipping captcha verification (dev mode)');
       return resolve({ success: true });
     }
@@ -58,8 +62,7 @@ function verifyCaptcha(token) {
 
     req.on('error', (err) => {
       console.error('[captcha] hCaptcha request failed:', err.message);
-      // Fail open on network error so users aren't blocked by captcha outages.
-      resolve({ success: true });
+      resolve({ success: false, errorCodes: ['network-error'] });
     });
 
     req.write(postData);

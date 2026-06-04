@@ -4,7 +4,6 @@
  * Drop  <script src="/chat.js"></script>  after app.js in index.html.
  *
  * Requires app.js to expose after login / session restore:
- *   window.__authToken  — Bearer token string
  *   window.__username   — logged-in username string
  *
  * Requires app.js SSE handler to forward chat events:
@@ -183,8 +182,7 @@
     const text = input.value.trim();
     if (!text) return;
 
-    const token = window.__authToken;
-    if (!token) {
+    if (!window.__username) {
       appendSystem('You must be logged in to chat.');
       return;
     }
@@ -196,9 +194,9 @@
     try {
       const res = await fetch('/api/chat', {
         method:  'POST',
+        credentials: 'same-origin',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ message: text }),
       });

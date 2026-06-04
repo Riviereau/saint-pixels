@@ -528,7 +528,7 @@ async function fetchStreakAndStats() {
   if (!currentUser) return;
   try {
     const res = await fetch('/api/streak', {
-      headers: { 'Authorization': `Bearer ${getStoredToken()}` }
+      credentials: 'same-origin',
     });
     if (!res.ok) return;
     const d = await res.json();
@@ -571,7 +571,6 @@ const DEFAULT_PALETTE = [
 ];
 const paletteColors = [];
 const CUSTOM_PALETTE_KEY = 'sp_customPalette';
-const TOKEN_KEY = 'sp_token';
 const EVENT_KEY = 'sp_last_event';
 const PIXEL_HISTORY_KEY = 'sp_pixel_history';
 // Declared here (top of DOMContentLoaded) so clearToken(), updateAuthState(),
@@ -799,16 +798,7 @@ function saveCustomPalette(list) {
   localStorage.setItem(CUSTOM_PALETTE_KEY, JSON.stringify(list));
 }
 
-function getStoredToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-function saveToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
 function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(EMAIL_VERIFIED_KEY);
 }
 
@@ -876,22 +866,13 @@ function ensureRainbowInPalette(list) {
 }
 
 async function updateAuthState(retryCount = 0) {
-  const token = getStoredToken();
-  if (!token) {
-    currentUser = null;
-    dispatchStateChange({ currentUser: null, emailVerified: false });
-    document.body.classList.add('auth-open');
-    authUsername.focus();
-    return;
-  }
-
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 s hard timeout
     let response;
     try {
       response = await fetch('/api/me', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'same-origin',
         signal: controller.signal,
       });
     } finally {
@@ -945,7 +926,6 @@ async function updateAuthState(retryCount = 0) {
     }
     // Expose auth state for chat.js
     window.__username  = data.username;
-    window.__authToken = token;
     dispatchStateChange({ currentUser: data.username, emailVerified });
     document.body.classList.remove('auth-open');
     authMessage.textContent = '';
@@ -959,7 +939,6 @@ async function updateAuthState(retryCount = 0) {
     // Retry exhausted — clear state and show login
     currentUser = null;
     window.__username  = null;
-    window.__authToken = null;
     dispatchStateChange({ currentUser: null, emailVerified: false });
     document.body.classList.add('auth-open');
     authUsername.focus();
@@ -986,7 +965,6 @@ function setCurrentUser(username, emailVerified = false, cooldown = 0) {
 
   // Expose auth state for chat.js
   window.__username  = username;
-  window.__authToken = getStoredToken();
   dispatchStateChange({ currentUser: username, emailVerified: !!emailVerified });
   document.body.classList.remove('auth-open');
   showAuthMessage('');
@@ -1008,19 +986,15 @@ function setCurrentUser(username, emailVerified = false, cooldown = 0) {
 }
 
 async function handleLogout() {
-  const token = getStoredToken();
-  if (token) {
-    try {
-      await fetch('/api/logout', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-    } catch (e) {
-      // ignore network errors
-    }
+  try {
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch (e) {
+    // ignore network errors
   }
   clearToken();
   currentUser = null;
   // Clear auth globals used by chat.js
   window.__username  = null;
-  window.__authToken = null;
   
   // Reset placement cooldown on logout
   lastPlaceAt = 0; 
@@ -1053,6 +1027,7 @@ async function handleLogin(event) {
   try {
     const response = await fetch('/api/login', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, captchaToken })
     });
@@ -1065,7 +1040,6 @@ async function handleLogin(event) {
     }
 
     resetCaptcha();
-    saveToken(data.token);
     // Pass the cooldown data to setCurrentUser
     setCurrentUser(data.username, data.emailVerified, data.cooldown);
   } catch (error) {
@@ -1104,6 +1078,7 @@ async function handleRegister(event) {
   try {
     const response = await fetch('/api/register', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, email, captchaToken })
     });
@@ -1116,11 +1091,7 @@ async function handleRegister(event) {
     }
 
     resetCaptcha();
-    // Save token and immediately update UI — no need for a separate updateAuthState() round-trip
-    // because the register response already contains username, emailVerified, and cooldown.
-    saveToken(data.token);
-    // Expose auth token for chat.js before setCurrentUser dispatches state
-    window.__authToken = data.token;
+    // Immediately update UI — the session cookie was set by the server.
     setCurrentUser(data.username, data.emailVerified, data.cooldown);
     // Show the verification message (e.g. "Check your email") after the overlay closes
     if (data.message) setTimeout(() => showAuthMessage(data.message, false), 100);
@@ -1856,22 +1827,20 @@ function broadcastEvent(event) {
     setTimeout(() => appendHistory(event), 0);
 
     // Persist to server (leaderboard + pixel history)
-    const token = getStoredToken();
-    if (token) {
-      const endpoint = event.tool === 'eraser' ? '/api/erase' : '/api/pixel';
-      // Coerce x/y to integers — the server guard uses parseInt() but sending
-      // floats can cause subtle mismatches on fractional zoom coords.
-      const payload = event.tool === 'eraser'
-        ? { x: Math.round(event.x), y: Math.round(event.y) }
-        : { x: Math.round(event.x), y: Math.round(event.y), color: event.color };
-      fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      }).then(res => {
+    const endpoint = event.tool === 'eraser' ? '/api/erase' : '/api/pixel';
+    // Coerce x/y to integers — the server guard uses parseInt() but sending
+    // floats can cause subtle mismatches on fractional zoom coords.
+    const payload = event.tool === 'eraser'
+      ? { x: Math.round(event.x), y: Math.round(event.y) }
+      : { x: Math.round(event.x), y: Math.round(event.y), color: event.color };
+    fetch(endpoint, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    }).then(res => {
         if (res.ok) {
           window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
           // Refresh the recent-cell guard now that the server confirmed the paint
@@ -1941,7 +1910,6 @@ function broadcastEvent(event) {
         console.warn('[sp] pixel save network error:', err.message);
       });
     }
-  }
   if (event.type === 'clear') {
     setTimeout(() => localStorage.setItem(PIXEL_HISTORY_KEY, JSON.stringify([])), 0);
   }
@@ -3117,13 +3085,9 @@ if (resendVerifyBtn) {
     resendVerifyBtn.style.opacity = '0.5';
     if (resendMsg) resendMsg.textContent = 'Sending…';
     try {
-      const token = getStoredToken();
       const res = await fetch('/api/resend-verification', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        credentials: 'same-origin',
       });
       const data = await res.json();
       if (resendMsg) {
