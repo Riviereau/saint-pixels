@@ -161,8 +161,9 @@ const CROP_H = CROP_Y1 - CROP_Y0;   // crop height in board pixels
 const CROP_ENABLED = CROP_ARG !== null;
 
 // Output dimensions: scale is applied to the crop region (or full board if no crop).
-const OUT_W   = Math.round(CROP_W / SCALE);
-const OUT_H   = Math.round(CROP_H / SCALE);
+// H.264 (libx264) requires both width and height to be even — snap up if needed.
+const OUT_W   = Math.ceil(Math.round(CROP_W / SCALE) / 2) * 2;
+const OUT_H   = Math.ceil(Math.round(CROP_H / SCALE) / 2) * 2;
 
 // Events-per-frame (may be fractional — we accumulate)
 const EVENTS_PER_FRAME = PPS / FPS;
@@ -387,6 +388,7 @@ if (SCALE === 1 && !CROP_ENABLED) {
   outCtx    = ctx;
 } else {
   // A separate output canvas is needed for scaling and/or cropping.
+  // OUT_W and OUT_H are already snapped to even, so this is the correct size.
   outCanvas = createCanvas(OUT_W, OUT_H);
   outCtx    = outCanvas.getContext('2d');
 }
@@ -412,8 +414,8 @@ const ffmpegArgs = [
   '-s', `${OUT_W}x${OUT_H}`,
   '-r', String(FPS),
   '-i', 'pipe:0',
+  '-vf', 'format=yuv420p',
   '-c:v', 'libx264',
-  '-pix_fmt', 'yuv420p',
   '-preset', 'fast',
   '-crf', '18',
   '-movflags', '+faststart',

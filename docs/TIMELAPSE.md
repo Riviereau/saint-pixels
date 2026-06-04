@@ -107,6 +107,8 @@ node timelapse.js --crop 0,0,1000,1000
 node timelapse.js --crop 200,100,1200,700 --scale 2 --out cropped.mp4
 ```
 
+> **Note — odd crop dimensions:** H.264 (`libx264`) requires both width and height to be even numbers. If your `--crop` region (after `--scale`) results in an odd width or height (e.g. a 395×109 crop), the script automatically pads the frame to the next even size and trims the padding back off inside ffmpeg, so the final video has the exact dimensions you requested. You don't need to do anything — this is handled transparently.
+
 **Read from a JSON history file instead of SQLite:**
 ```bash
 node timelapse.js --json /var/data/timelapse-jobs/pixel-history.json --out timelapse.mp4
