@@ -3096,3 +3096,13 @@ header.flex {
     }
   }
 }
+
+/* Palette hint: show only the relevant version per device */
+.palette-hint-desktop { display: none; }
+.palette-hint-mobile  { display: block; }
+
+@media (hover: hover) and (pointer: fine) {
+  /* True pointer device (mouse) = desktop */
+  .palette-hint-desktop { display: block; }
+  .palette-hint-mobile  { display: none; }
+}
