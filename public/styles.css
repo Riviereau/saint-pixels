@@ -1054,14 +1054,25 @@
     align-items: flex-start !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    padding: 24px 0 env(keyboard-inset-height, 0px);
+    /* Use dynamic viewport height so the overlay never hides behind the mobile
+       browser chrome (address bar + nav bar). dvh falls back to vh on older browsers. */
     min-height: 100dvh;
-    height: auto !important;
+    height: 100dvh !important;
+    padding: 16px 12px env(safe-area-inset-bottom, 16px);
   }
   #authOverlay > div {
     margin: auto;
-    margin-top: 16px;
-    margin-bottom: max(24px, env(safe-area-inset-bottom));
+    margin-top: 12px;
+    margin-bottom: max(20px, env(safe-area-inset-bottom));
+    /* Prevent the card from being too wide on small phones */
+    width: min(420px, 100%);
+    padding: 1.25rem !important;
+  }
+  /* hCaptcha compact widget: allow it to centre on narrow screens */
+  .h-captcha {
+    display: flex;
+    justify-content: flex-start;
+    overflow: hidden;
   }
 }
 .viewport canvas {

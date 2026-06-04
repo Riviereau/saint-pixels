@@ -1034,12 +1034,14 @@ async function handleRegister(event) {
     }
 
     resetCaptcha();
-    // Save token and update auth state so the overlay closes immediately
+    // Save token and immediately update UI — no need for a separate updateAuthState() round-trip
+    // because the register response already contains username, emailVerified, and cooldown.
     saveToken(data.token);
-    await updateAuthState(); 
-    // Fallback: ensure UI shows the new username and syncs cooldown
+    // Expose auth token for chat.js before setCurrentUser dispatches state
+    window.__authToken = data.token;
     setCurrentUser(data.username, data.emailVerified, data.cooldown);
-    if (data.message) showAuthMessage(data.message, false);
+    // Show the verification message (e.g. "Check your email") after the overlay closes
+    if (data.message) setTimeout(() => showAuthMessage(data.message, false), 100);
   } catch (error) {
     resetCaptcha();
     showAuthMessage('Unable to reach server.');
@@ -2936,32 +2938,21 @@ setAuthMode('login');
 syncPasswordAutocomplete();
 
 // ─── Rules modal ─────────────────────────────────────────────────────────────
-const rulesModal     = document.getElementById('rulesModal');
-const rulesModalClose = document.getElementById('rulesModalClose');
+// The rules window is #sp-rules-window (managed by rules.js).
+// The authRulesLink inside the auth form needs to open it; rules.js also wires
+// #topbarRulesBtn. We only need to handle the auth-form link here, and only if
+// rules.js hasn't already claimed it (rules.js runs after app.js).
 const authRulesLink  = document.getElementById('authRulesLink');
 
-function openRulesModal() {
-  if (rulesModal) rulesModal.style.display = 'grid';
-}
-function closeRulesModal() {
-  if (rulesModal) rulesModal.style.display = 'none';
+function openRulesWindow() {
+  const win = document.getElementById('sp-rules-window');
+  if (win) win.style.display = 'flex';
 }
 
-if (authRulesLink)   authRulesLink.addEventListener('click', openRulesModal);
-if (rulesModalClose) rulesModalClose.addEventListener('click', closeRulesModal);
-
-// Close modal on backdrop click
-if (rulesModal) {
-  rulesModal.addEventListener('click', (e) => {
-    if (e.target === rulesModal) closeRulesModal();
-  });
-}
-// Close modal on Escape key
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && rulesModal && rulesModal.style.display === 'grid') {
-    closeRulesModal();
-  }
-});
+// Wire the auth-form "community rules" link — rules.js will also wire it,
+// but since addEventListener stacks, having two listeners is harmless
+// (both call open on the same element). Use a named function so it's clear.
+if (authRulesLink) authRulesLink.addEventListener('click', openRulesWindow);
 
 // ─── Email verification banner ───────────────────────────────────────────────
 const resendVerifyBtn = document.getElementById('resendVerifyBtn');
@@ -3026,16 +3017,21 @@ if (logoutButton) {
   });
 }
 
-authPassword.addEventListener('keydown', event => {
+if (authPassword) authPassword.addEventListener('keydown', event => {
   if (event.key === 'Enter') {
     event.preventDefault();
     if (authMode === 'register') handleRegister(); else handleLogin();
   }
 });
-authUsername.addEventListener('keydown', event => {
+if (authUsername) authUsername.addEventListener('keydown', event => {
   if (event.key === 'Enter') {
     event.preventDefault();
-    if (authMode === 'register') handleRegister(); else handleLogin();
+    // On Enter in the username field: if password is empty, move focus there instead of submitting
+    if (authPassword && !authPassword.value) {
+      authPassword.focus();
+    } else {
+      if (authMode === 'register') handleRegister(); else handleLogin();
+    }
   }
 });
 
@@ -4166,6 +4162,14 @@ if (resetConfirmBtn) {
   const btn = document.getElementById('help-toggle-btn');
   const content = document.getElementById('help-section-content');
   if (!btn || !content) return;
+
+  // On desktop (hover: hover) the CSS hides .help-list by default.
+  // Set aria-hidden to match the hidden CSS state on desktop; on mobile
+  // the button is hidden via CSS and the list is always visible.
+  const isDesktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  if (isDesktop) {
+    content.setAttribute('aria-hidden', 'true');
+  }
 
   btn.addEventListener('click', () => {
     const section = btn.closest('section');

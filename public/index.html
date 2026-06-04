@@ -67,6 +67,11 @@
           id="authUsername"
           name="username"
           autocomplete="username"
+          inputmode="text"
+          spellcheck="false"
+          autocorrect="off"
+          autocapitalize="off"
+          enterkeyhint="next"
           class="w-full px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-slate-100 focus:outline-none focus:border-sky-400/60"
         />
       </label>
@@ -78,6 +83,7 @@
             id="authPassword"
             name="password"
             autocomplete="current-password"
+            enterkeyhint="done"
             class="w-full px-4 py-3 pr-12 rounded-2xl border border-white/10 bg-white/5 text-slate-100 focus:outline-none focus:border-sky-400/60"
           />
           <button
@@ -147,6 +153,10 @@
           id="authEmail"
           name="email"
           autocomplete="email"
+          inputmode="email"
+          spellcheck="false"
+          autocorrect="off"
+          autocapitalize="off"
           placeholder="you@example.com"
           class="w-full px-4 py-3 rounded-2xl border border-white/10 bg-white/5 text-slate-100 focus:outline-none focus:border-sky-400/60"
         />
@@ -177,7 +187,7 @@
           class="h-captcha"
           data-sitekey="__VITE_HCAPTCHA_SITEKEY__"
           data-theme="dark"
-          data-size="normal"
+          data-size="compact"
         ></div>
       </div>
 
@@ -420,7 +430,7 @@
               title="Toggle help tips"
             >Show</button>
           </h2>
-          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list" style="display:none;" aria-hidden="true">
+          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list" aria-hidden="false">
             <li>Left click the board to place a pixel</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">W</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">A</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">S</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">D</kbd> to navigate palette colors</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">Q</kbd> / <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">E</kbd> to scroll the top bar left / right</li>
