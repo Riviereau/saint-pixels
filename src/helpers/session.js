@@ -3,7 +3,6 @@ const { checkBan, buildBanPayload } = require('./ban');
 
 /** Sessions TTL: 30 days in milliseconds */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const SESSION_COOKIE_NAME = 'sp_session';
 
 let _db = null;
 
@@ -29,23 +28,6 @@ function closeSession(token) {
   return info.changes > 0;
 }
 
-function getTokenFromRequest(req) {
-  const auth = (req.headers.authorization || '').trim();
-  const [type, token] = auth.split(' ');
-  if (type === 'Bearer' && token) return token;
-
-  const cookieHeader = req.headers.cookie || '';
-  const cookies = cookieHeader.split(';').map(c => c.trim());
-  for (const cookie of cookies) {
-    if (!cookie) continue;
-    const [name, ...rest] = cookie.split('=');
-    if (name === SESSION_COOKIE_NAME) {
-      return rest.join('=');
-    }
-  }
-  return null;
-}
-
 /**
  * Returns:
  *   { username, created_at }                          — valid session, not banned
@@ -60,8 +42,9 @@ function getSession(req) {
     return { username: req.localBypassUser, created_at: Date.now() };
   }
 
-  const token = getTokenFromRequest(req);
-  if (!token) return null;
+  const auth = req.headers.authorization || '';
+  const [type, token] = auth.split(' ');
+  if (type !== 'Bearer' || !token) return null;
 
   const row = _db.prepare(
     'SELECT username, created_at FROM sessions WHERE token = ? AND expires_at > ?'
@@ -92,4 +75,4 @@ function banCheckMiddleware(req, res, next) {
   next();
 }
 
-module.exports = { setDb, createSession, closeSession, getSession, getTokenFromRequest, banCheckMiddleware };
+module.exports = { setDb, createSession, closeSession, getSession, banCheckMiddleware };

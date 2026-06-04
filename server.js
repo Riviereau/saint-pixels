@@ -121,7 +121,7 @@ db.pragma('temp_store = MEMORY');
 // returning SQLITE_BUSY. Prevents spurious 500 errors under write bursts.
 db.pragma('busy_timeout = 5000');
 
-const { setDb: setSessionDb, createSession, closeSession, getSession, getTokenFromRequest } = require('./src/helpers/session.js');
+const { setDb: setSessionDb, createSession, closeSession, getSession } = require('./src/helpers/session.js');
 const { setDb: setCooldownDb, getCooldown, COOLDOWN_MS } = require('./src/helpers/cooldown.js');
 const { setDb: setAntiCheatDb } = require('./src/helpers/AntiCheat.js');
 const { checkIpBan, banCheckMiddleware, setDb: setBanDb } = require('./src/helpers/ban.js');
@@ -129,33 +129,6 @@ const { hashPassword, verifyPassword } = require('./src/helpers/password.js');
 const { requireCaptcha }         = require('./src/helpers/captcha.js');
 const { sendVerificationEmail }  = require('./src/helpers/mailer.js');
 const { initializeActions }      = require('./src/setup/actions.js');
-
-const SESSION_COOKIE_NAME = 'sp_session';
-const SESSION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // seconds
-
-function setSessionCookie(res, token) {
-  const cookieParts = [
-    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Strict',
-    `Max-Age=${SESSION_COOKIE_MAX_AGE}`,
-  ];
-  if (process.env.NODE_ENV === 'production') {
-    cookieParts.push('Secure');
-  }
-  res.setHeader('Set-Cookie', cookieParts.join('; '));
-}
-
-function clearSessionCookie(res) {
-  const cookieParts = [
-    `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
-  ];
-  if (process.env.NODE_ENV === 'production') {
-    cookieParts.push('Secure');
-  }
-  res.setHeader('Set-Cookie', cookieParts.join('; '));
-}
 const { initializeDatabase, runMaintenance } = require('./src/setup/database.js');
 const { initializeSSE, broadcastSSE, setDb: setSseDb } = require('./src/setup/sse.js');
 const { initializeChat }         = require('./src/setup/chat.js');
@@ -631,9 +604,9 @@ app.post('/api/register', registerLimiter, requireCaptcha, async (req, res) => {
     });
 
     const token = createSession(username);
-    setSessionCookie(res, token);
     return res.json({ 
       username, 
+      token, 
       emailVerified: false, 
       message: 'Account created! Check your email to verify your address.',
       cooldown: 0 // New users have no initial cooldown
@@ -661,11 +634,11 @@ app.post('/api/login', authLimiter, requireCaptcha, async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials.' });
 
     const token = createSession(row.username);
-    setSessionCookie(res, token);
     const cooldownLeft = getCooldown(row.username); // Fetch current cooldown
 
     return res.json({ 
       username: row.username, 
+      token, 
       emailVerified: !!row.email_verified,
       cooldown: cooldownLeft 
     });
@@ -799,8 +772,7 @@ app.get('/api/me', meLimiter, (req, res) => {
 });
 
 app.post('/api/logout', logoutLimiter, (req, res) => {
-  const token = getTokenFromRequest(req);
-  clearSessionCookie(res);
+  const [, token] = (req.headers.authorization || '').split(' ');
   res.json({ success: closeSession(token) });
 });
 
