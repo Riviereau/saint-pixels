@@ -954,7 +954,7 @@ async function handleRegister(event) {
   }
 
   const captchaToken = getCaptchaToken();
-  if (!captchaToken) {
+  if (!captchaToken && !isLocalDev()) {
     showAuthMessage('Please complete the captcha.');
     return;
   }
@@ -973,6 +973,7 @@ async function handleRegister(event) {
       return;
     }
 
+    resetCaptcha();
     // Save token and update auth state so the overlay closes immediately
     saveToken(data.token);
     await updateAuthState(); 
@@ -980,6 +981,7 @@ async function handleRegister(event) {
     setCurrentUser(data.username, data.emailVerified, data.cooldown);
     if (data.message) showAuthMessage(data.message, false);
   } catch (error) {
+    resetCaptcha();
     showAuthMessage('Unable to reach server.');
   }
 }

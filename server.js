@@ -533,9 +533,11 @@ app.post('/api/register', registerLimiter, requireCaptcha, async (req, res) => {
 
   try {
     const usernameTaken = db.prepare('SELECT id FROM accounts WHERE username = ?').get(username);
-    const emailTaken    = db.prepare('SELECT id FROM accounts WHERE email = ?').get(email.toLowerCase());
-    if (usernameTaken || emailTaken)
+    if (usernameTaken)
       return res.status(409).json({ error: 'Username already taken.' });
+    const emailTaken    = db.prepare('SELECT id FROM accounts WHERE email = ?').get(email.toLowerCase());
+    if (emailTaken)
+      return res.status(409).json({ error: 'An account with that email already exists.' });
 
     const hashed = await hashPassword(password);
     db.prepare('INSERT INTO accounts (username, password, ip, created_at, email, email_verified) VALUES (?, ?, ?, ?, ?, 0)')
