@@ -3350,7 +3350,6 @@ function moveColorFocus(dx, dy) {
   window._scrollTopbarLeft  = () => { header.scrollLeft = Math.max(0, header.scrollLeft - TOPBAR_SCROLL_STEP); };
   window._scrollTopbarRight = () => { header.scrollLeft += TOPBAR_SCROLL_STEP; };
 })();
-})();
 
 // --- FULLSCREEN LOGIC ---
 const fullscreenBtn = document.getElementById('fullscreen-btn');
