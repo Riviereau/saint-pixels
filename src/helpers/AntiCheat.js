@@ -21,21 +21,6 @@
 /** @type {import('better-sqlite3').Database|null} */
 let _db = null;
 
-/**
- * In-memory map of IPs with concurrent in-flight requests.
- * Tracks the count of concurrent (overlapping) requests from the same IP to
- * close the race-condition window where two simultaneous requests both pass
- * checkIp before either has called recordIp.
- *
- * Using a count instead of a boolean Set means legitimate rapid-but-sequential
- * HTTP/2 requests (where the next request arrives before 'finish' fires on the
- * previous response) are NOT incorrectly blocked — only truly concurrent
- * requests (count > 1) are rejected.
- *
- * @type {Map<string, number>}
- */
-const _ipInFlight = new Map();
-
 // Single source-of-truth cooldown: imported from cooldown.js so AntiCheat
 // always matches the per-user cooldown without a separate hardcode.
 const { COOLDOWN_MS: BASE_COOLDOWN_MS } = require('./cooldown.js');
@@ -211,19 +196,6 @@ function ipCooldownMiddleware(req, res, next) {
   const ip = req.ip || req.socket?.remoteAddress || 'unknown';
   const username = _getUsernameFromReq(req) || '__unknown__';
 
-  // If this IP already has MORE THAN ONE concurrent request in-flight, reject.
-  // This closes the race where two simultaneous requests both pass checkIp
-  // before either has called recordIp — while allowing rapid-but-sequential
-  // requests (HTTP/2 pipelining / fast clients) that arrive before 'finish'
-  // fires on the previous response.
-  const inFlight = _ipInFlight.get(ip) || 0;
-  if (inFlight >= 1) {
-    return res.status(429).json({
-      error: 'IP cooldown active.',
-      cooldown: BASE_COOLDOWN_MS,
-    });
-  }
-
   const result = checkIp(ip, username);
   if (!result.allowed) {
     return res.status(429).json({
@@ -231,17 +203,6 @@ function ipCooldownMiddleware(req, res, next) {
       cooldown: result.cooldown,
     });
   }
-
-  // Increment the in-flight counter for this IP for the duration of the request
-  _ipInFlight.set(ip, inFlight + 1);
-  // Always decrement — whether the handler succeeds, throws, or responds early
-  const releaseInFlight = () => {
-    const c = _ipInFlight.get(ip) || 1;
-    if (c <= 1) _ipInFlight.delete(ip);
-    else _ipInFlight.set(ip, c - 1);
-  };
-  res.on('finish', releaseInFlight);
-  res.on('close',  releaseInFlight);
 
   next();
 }
