@@ -35,6 +35,8 @@ The canvas size is **1920x1080** and every pixel matters.
 | `Scroll` | Zoom in/out |
 | `w` `a` `s` `d` | Move through color palette |
 | Arrow keys | Move selecting cursor |
+| `Shift + Arrow keys` | Jump 5 pixels |
+| `Ctrl + Arrow keys` | Jump 10 pixels |
 | `q` `e` | To scroll the top bar left / right |
 
 ## License
