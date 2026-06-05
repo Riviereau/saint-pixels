@@ -598,7 +598,7 @@ let _sseSource = null;
 // overwrite a freshly-placed local pixel with an older server snapshot.
 // Key: "x,y" string.  Value: timestamp of the local paint.
 const _recentLocalCells = new Map();
-const RECENT_LOCAL_TTL_MS = 5000;
+const RECENT_LOCAL_TTL_MS = 15000; // 15 s — covers multiple cooldown cycles on reconnect
 function _markLocalCell(x, y) {
   const key = `${x},${y}`;
   _recentLocalCells.set(key, Date.now());
@@ -631,12 +631,14 @@ const SSE_INIT_CHUNK_SIZE = 5000; // pixels per frame — ~1–2 ms per chunk
 
 function paintInitPixelsChunked(pixels) {
   let i = 0;
+  // Snapshot protected cells NOW so they can't expire mid-run across frames.
+  const _protected = new Set(_recentLocalCells.keys());
   function paintChunk() {
     const end = Math.min(i + SSE_INIT_CHUNK_SIZE, pixels.length);
     for (; i < end; i++) {
       const p = pixels[i];
       if (typeof p.x !== 'number' || typeof p.y !== 'number') continue;
-      if (_recentLocalCells.has(`${p.x},${p.y}`)) continue;
+      if (_protected.has(`${p.x},${p.y}`)) continue;
       if (p.color === 'erase') {
         paintPixel(p.x, p.y, 1, 'eraser', null);
       } else if (typeof p.color === 'string') {
