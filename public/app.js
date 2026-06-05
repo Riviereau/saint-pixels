@@ -1440,10 +1440,15 @@ function _doRender() {
   // Redraw grid only when scale/offset changed — grid lives on its own canvas
   drawGridIfDirty();
 
-  // During active panning the cursor position doesn't change — skip the overlay
-  // clear+redraw entirely.  This removes one canvas clear + draw call per frame
-  // while panning, which is the hottest render path.
-  if (isPanning) return;
+  // During active panning, clear the overlay so the stale cursor highlight
+  // doesn't sit frozen on screen while the canvas scrolls beneath it.
+  // We don't redraw the cursor here because drawCursor() already returns early
+  // when tool === 'hand', so just clearing is enough and keeps this path fast.
+  if (isPanning) {
+    overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+    overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    return;
+  }
 
   // Overlay is cursor-only; clear and redraw just the cursor highlight
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
