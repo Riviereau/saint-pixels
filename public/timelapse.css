@@ -1,9 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   TIMELAPSE  —  public/timelapse.css
+   TIMELAPSE  —  public/timelapse.css  (v2)
 
-   Styles for the timelapse info / help modal triggered by the topbar
-   "Timelapse" button.  Follows the same design tokens as settings.css
-   and ios.css so it fits seamlessly into the Saint-Pixels UI.
+   Bigger modal, fullscreen support, zoom reset button, download button,
+   crisp pixel-art rendering, progress thumb, improved mobile layout.
 
    Z-index: 11500 — above settings (11000), below rules (99999).
    ═══════════════════════════════════════════════════════════════════════ */
@@ -13,13 +12,13 @@
   position: fixed;
   inset: 0;
   z-index: 11500;
-  background: rgba(0, 0, 0, 0.68);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.75rem;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -31,13 +30,14 @@
 
 /* ── Modal card ───────────────────────────────────────────────────────── */
 #timelapse-modal {
-  background: rgba(20, 20, 24, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(16, 16, 20, 0.99);
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 18px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.85);
   width: 100%;
-  max-width: 860px;
-  max-height: 88vh;
+  /* Wider than v1 (was 860px) — gives more room to the canvas */
+  max-width: 1100px;
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -48,12 +48,21 @@
   transform: translateY(0);
 }
 
+/* Fullscreen — fill the entire screen */
+#timelapse-modal:fullscreen,
+#timelapse-modal:-webkit-full-screen {
+  max-width: 100vw;
+  max-height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
 /* ── Header ───────────────────────────────────────────────────────────── */
 .tl-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.9rem 1.15rem 0.7rem;
+  padding: 0.85rem 1.2rem 0.65rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   flex-shrink: 0;
   gap: 0.75rem;
@@ -139,17 +148,30 @@
 .tl-panel {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 1.15rem 1.2rem;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0;
   -webkit-overflow-scrolling: touch;
+  min-height: 0;
 }
 .tl-panel.hidden { display: none; }
 .tl-panel::-webkit-scrollbar { width: 4px; }
 .tl-panel::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
+}
+
+/* The player panel doesn't scroll — the canvas + controls fill the space */
+#tl-panel-player {
+  overflow: hidden;
+}
+
+/* CLI / About panels do scroll */
+#tl-panel-cli,
+#tl-panel-about {
+  overflow-y: auto;
+  padding: 1rem 1.2rem 1.2rem;
+  gap: 0.9rem;
 }
 
 /* ── Section label ────────────────────────────────────────────────────── */
@@ -174,7 +196,7 @@
   font-weight: 600;
 }
 
-/* ── Info chips (What / Keeps) ────────────────────────────────────────── */
+/* ── Info chips ───────────────────────────────────────────────────────── */
 .tl-chips {
   display: flex;
   flex-direction: column;
@@ -190,19 +212,19 @@
   line-height: 1.5;
 }
 .tl-chip.purple {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgba(167, 139, 250, 0.07);
+  border: 1px solid rgba(167, 139, 250, 0.18);
+  color: #c4b5fd;
 }
 .tl-chip.sky {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgba(56, 189, 248, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  color: #7dd3fc;
 }
 .tl-chip.amber {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgba(250, 204, 21, 0.06);
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  color: #fde68a;
 }
 .tl-chip-dot {
   flex-shrink: 0;
@@ -211,9 +233,18 @@
   border-radius: 50%;
   margin-top: 0.38em;
 }
-.tl-chip.purple .tl-chip-dot { background: #94a3b8; }
-.tl-chip.sky    .tl-chip-dot { background: #94a3b8; }
-.tl-chip.amber  .tl-chip-dot { background: #94a3b8; }
+.tl-chip.purple .tl-chip-dot { background: #a78bfa; }
+.tl-chip.sky    .tl-chip-dot { background: #38bdf8; }
+.tl-chip.amber  .tl-chip-dot { background: #facc15; }
+.tl-chip kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 0.74rem;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  padding: 0 4px;
+  color: #e2e8f0;
+}
 
 /* ── Command block ────────────────────────────────────────────────────── */
 .tl-cmd-block {
@@ -282,7 +313,7 @@
 }
 .tl-option-row {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 150px 1fr;
   gap: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 0.79rem;
@@ -329,20 +360,16 @@
 .tl-req-icon {
   font-size: 1rem;
   flex-shrink: 0;
-  margin-top: 0.05em;
-}
-.tl-req-item strong {
-  color: #e2e8f0;
-  font-weight: 600;
+  margin-top: 1px;
 }
 .tl-req-item code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: ui-monospace, monospace;
   font-size: 0.75rem;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
-  padding: 0px 5px;
-  color: #cbd5e1;
+  padding: 0 4px;
+  color: #e2e8f0;
 }
 
 /* ── FAQ / accordion items ────────────────────────────────────────────── */
@@ -400,7 +427,7 @@
 }
 .tl-faq-item.open .tl-faq-a { display: block; }
 
-/* ── Speed guide (fps/pps visual) ─────────────────────────────────────── */
+/* ── Speed guide ──────────────────────────────────────────────────────── */
 .tl-speed-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -435,55 +462,59 @@
   line-height: 1.4;
 }
 
-/* ── Mobile ───────────────────────────────────────────────────────────── */
-@media (max-width: 540px) {
-  #timelapse-overlay {
-    align-items: flex-end;
-    padding: 0;
-  }
-  #timelapse-modal {
-    max-width: 100%;
-    max-height: 90vh;
-    border-radius: 18px 18px 0 0;
-    transform: translateY(20px);
-  }
-  #timelapse-overlay.visible #timelapse-modal {
-    transform: translateY(0);
-  }
-  .tl-option-row {
-    grid-template-columns: 110px 1fr;
-  }
-  .tl-speed-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .tl-speed-grid .tl-speed-card:last-child {
-    grid-column: 1 / -1;
-  }
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    PLAYER TAB — canvas, controls, progress bar, buttons
-   These classes are used by the Player tab panel only.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Canvas area ────────────────────────────────────────────────────────── */
 .tl-canvas-wrap {
   position: relative;
-  background: #1a1a1e;
+  background: #111114;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 320px;
+  /* Taller than v1 (was 320px min / 480px max) */
+  min-height: 380px;
+  flex: 1;
   overflow: hidden;
 }
+
+/* Fullscreen: make the canvas fill the available space */
+#timelapse-modal:fullscreen .tl-canvas-wrap,
+#timelapse-modal:-webkit-full-screen .tl-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+}
+
+/* Canvas element — rendered at 1920×1080, scaled down via CSS */
 .tl-canvas {
+  /* Natural aspect ratio (1920:1080 = 16:9) — fill the wrap as much as possible */
   max-width: 100%;
-  max-height: 480px;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  /* CRISP pixel-art rendering — no interpolation */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   display: none; /* shown by JS after load */
+  /* CSS transform origin for zoom/pan */
+  transform-origin: center center;
+  /* Smooth-ish zoom transitions */
+  transition: transform 0.05s ease-out;
+  /* Don't let the cursor show grab when not zoomed */
+  will-change: transform;
 }
+
+.tl-canvas-wrap:has(.tl-canvas[style*="scale"]) {
+  cursor: grab;
+}
+.tl-canvas-wrap[style*="grabbing"] {
+  cursor: grabbing;
+}
+
 .tl-placeholder {
   position: absolute;
   inset: 0;
@@ -491,52 +522,125 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.65rem;
   color: #475569;
-  font-size: 0.83rem;
+  font-size: 0.85rem;
   pointer-events: none;
 }
-.tl-placeholder svg { opacity: 0.4; }
+.tl-placeholder svg { opacity: 0.35; }
+
+/* ── Fullscreen button ───────────────────────────────────────────────────── */
+.tl-fullscreen-btn {
+  position: absolute;
+  bottom: 0.6rem;
+  right: 0.6rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+  z-index: 10;
+}
+.tl-fullscreen-btn:hover {
+  background: rgba(167, 139, 250, 0.25);
+  border-color: rgba(167, 139, 250, 0.6);
+  color: #e2e8f0;
+}
+
+/* ── Zoom reset button ───────────────────────────────────────────────────── */
+.tl-zoom-reset {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 0.6rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 7px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+  z-index: 10;
+}
+.tl-zoom-reset:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e2e8f0;
+}
+.tl-zoom-reset.hidden { display: none; }
 
 /* ── Progress bar ────────────────────────────────────────────────────────── */
 .tl-progress-wrap {
-  padding: 0.55rem 1.15rem 0;
+  padding: 0.65rem 1.2rem 0;
   cursor: pointer;
+  flex-shrink: 0;
 }
 .tl-progress-bg {
-  height: 4px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
+.tl-progress-bg:hover { filter: brightness(1.25); }
 .tl-progress-fill {
   height: 100%;
   width: 0%;
-  background: #a78bfa;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
   border-radius: 999px;
   transition: width 0.05s linear;
+  pointer-events: none;
+}
+/* Draggable thumb on the progress bar */
+.tl-progress-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #c4b5fd;
+  border: 2px solid rgba(255,255,255,0.3);
+  box-shadow: 0 0 6px rgba(167,139,250,0.6);
+  pointer-events: none;
+  transition: left 0.05s linear;
 }
 
 /* ── Controls row ────────────────────────────────────────────────────────── */
 .tl-controls {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 1.15rem 0.85rem;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem 0.9rem;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .tl-btn {
-  border-radius: 8px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.78rem;
+  border-radius: 9px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   white-space: nowrap;
   border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 .tl-btn:disabled {
   opacity: 0.4;
@@ -554,13 +658,14 @@
   border-color: rgba(167, 139, 250, 0.7);
 }
 
-/* Play / Pause — neutral, accent when playing */
+/* Play / Pause */
 .tl-btn--play {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
   color: #94a3b8;
-  min-width: 4rem;
+  min-width: 4.5rem;
   text-align: center;
+  justify-content: center;
 }
 .tl-btn--play:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
@@ -572,16 +677,29 @@
   background: rgba(167, 139, 250, 0.12);
 }
 
-/* Reset — subtle */
+/* Reset */
 .tl-btn--reset {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);
   color: #64748b;
-  padding: 0.35rem 0.65rem;
+  padding: 0.4rem 0.75rem;
 }
 .tl-btn--reset:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
   color: #94a3b8;
+}
+
+/* Download PNG */
+.tl-btn--download {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #7dd3fc;
+  padding: 0.4rem 0.75rem;
+}
+.tl-btn--download:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #bae6fd;
 }
 
 /* ── Speed control ───────────────────────────────────────────────────────── */
@@ -590,7 +708,7 @@
   align-items: center;
   gap: 0.45rem;
   flex: 1;
-  min-width: 120px;
+  min-width: 130px;
 }
 .tl-speed-label-text {
   font-size: 0.72rem;
@@ -613,10 +731,11 @@
 
 /* ── Counter ─────────────────────────────────────────────────────────────── */
 .tl-counter {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: #475569;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  margin-left: auto;
 }
 
 /* ── Topbar button ───────────────────────────────────────────────────────── */
@@ -660,16 +779,35 @@
   border-color: rgba(192, 132, 252, 0.8);
 }
 
-/* ── Mobile responsive (extends existing @media block) ─────────────────── */
-@media (max-width: 540px) {
-  .tl-canvas { max-height: 260px; }
+/* ── Mobile (≤ 700px) ────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  #timelapse-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  #timelapse-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(20px);
+  }
+  #timelapse-overlay.visible #timelapse-modal {
+    transform: translateY(0);
+  }
+  .tl-canvas-wrap {
+    min-height: 240px;
+  }
+  .tl-canvas { max-height: 300px; }
   .tl-controls {
-    gap: 0.4rem;
+    gap: 0.35rem;
     padding: 0.5rem 0.75rem 0.7rem;
   }
   .tl-btn {
-    padding: 0.3rem 0.55rem;
-    font-size: 0.73rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.75rem;
   }
   .tl-speed-wrap { min-width: 100px; }
+  .tl-option-row { grid-template-columns: 110px 1fr; }
+  .tl-speed-grid { grid-template-columns: 1fr 1fr; }
+  .tl-speed-grid .tl-speed-card:last-child { grid-column: 1 / -1; }
 }

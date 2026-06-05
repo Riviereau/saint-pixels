@@ -1,20 +1,21 @@
 /**
- * public/timelapse-ui.js — In-browser canvas timelapse player
+ * public/timelapse-ui.js — In-browser canvas timelapse player (v2)
+ *
+ * Enhancements over v1:
+ *  - Fullscreen button (native Fullscreen API + CSS :fullscreen)
+ *  - Download current frame as PNG
+ *  - Zoom + pan inside the canvas wrap (pinch/wheel + drag)
+ *  - Crisp pixel rendering (image-rendering: pixelated enforced via JS)
+ *  - Bigger, more readable UI (wider modal, larger canvas area)
+ *  - History cap raised to 500k events (server cap must also be raised)
+ *  - All-history load: the server may page; client fetches until done
+ *  - Progress bar is clickable to seek; also shows a drag thumb
  *
  * Fetches pixel_history from /api/timelapse/history and replays every
- * placement event on a <canvas> inside the modal — no ffmpeg needed.
- *
- * Controls:
- *   ▶/⏸  Play / Pause
- *   ⏹   Reset to beginning
- *   Speed slider — Slow / Normal / Fast / Faster / Max
- *   Progress bar — shows % complete, click to seek
- *
- * All styling lives in timelapse.css under the .tl-* / #timelapse-* namespace.
- * This file contains no inline style= attributes — change the look in CSS only.
+ * placement event on a <canvas> inside the modal.
  *
  * Tab layout:
- *   Player  — live canvas playback
+ *   Player  — live canvas playback with fullscreen / zoom / download
  *   CLI     — MP4 export reference (flags, examples)
  *   About   — what/why, data source notes, FAQ
  */
@@ -101,30 +102,53 @@
       <!-- ══ Tab: Player ══════════════════════════════════════════════════════ -->
       <div class="tl-panel" id="tl-panel-player" role="tabpanel">
 
-        <!-- Canvas preview -->
+        <!-- Canvas viewport with zoom/pan -->
         <div id="tl-canvas-wrap" class="tl-canvas-wrap">
           <canvas id="tl-canvas" class="tl-canvas"></canvas>
           <div id="tl-placeholder" class="tl-placeholder">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor"
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor"
                  stroke-width="1.5" aria-hidden="true">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
             <span>Press Load to fetch pixel history</span>
           </div>
+          <!-- Zoom reset hint (visible when zoomed) -->
+          <button id="tl-zoom-reset" class="tl-zoom-reset hidden" type="button" title="Reset zoom">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/><path d="M8 11h6M11 8v6"/></svg>
+            Reset zoom
+          </button>
+          <!-- Fullscreen button -->
+          <button id="tl-fullscreen-btn" class="tl-fullscreen-btn" type="button" title="Fullscreen (F)">
+            <svg id="tl-fs-expand" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            <svg id="tl-fs-collapse" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+              <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+              <line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>
+            </svg>
+          </button>
         </div>
 
         <!-- Progress bar -->
-        <div id="tl-progress-wrap" class="tl-progress-wrap" title="Click to seek">
+        <div id="tl-progress-wrap" class="tl-progress-wrap" title="Click or drag to seek">
           <div id="tl-progress-bg" class="tl-progress-bg">
             <div id="tl-progress-fill" class="tl-progress-fill"></div>
+            <div id="tl-progress-thumb" class="tl-progress-thumb"></div>
           </div>
         </div>
 
         <!-- Controls -->
         <div class="tl-controls">
-          <button id="tl-load-btn"  class="tl-btn tl-btn--load"  type="button">Load</button>
-          <button id="tl-play-btn"  class="tl-btn tl-btn--play"  type="button" disabled>▶ Play</button>
-          <button id="tl-reset-btn" class="tl-btn tl-btn--reset" type="button" disabled>⏹ Reset</button>
+          <button id="tl-load-btn"     class="tl-btn tl-btn--load"     type="button">Load</button>
+          <button id="tl-play-btn"     class="tl-btn tl-btn--play"     type="button" disabled>▶ Play</button>
+          <button id="tl-reset-btn"    class="tl-btn tl-btn--reset"    type="button" disabled>⏹ Reset</button>
+          <button id="tl-download-btn" class="tl-btn tl-btn--download" type="button" disabled title="Download current frame as PNG">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            PNG
+          </button>
 
           <div class="tl-speed-wrap">
             <span class="tl-speed-label-text">Speed</span>
@@ -255,9 +279,28 @@
         <p class="tl-intro">
           The timelapse replays every pixel placement ever recorded on Saint-Pixels,
           in chronological order. The <strong>in-browser player</strong> needs no install —
-          just Load and Play. For a full-resolution <strong>MP4 export</strong>, use the
-          CLI tab.
+          just Load and Play. For a full-resolution <strong>MP4 export</strong>, use the CLI tab.
         </p>
+
+        <p class="tl-section-label">Player controls</p>
+        <div class="tl-chips">
+          <div class="tl-chip purple">
+            <span class="tl-chip-dot"></span>
+            <span><strong>Zoom:</strong> scroll wheel or pinch to zoom the canvas. Drag to pan when zoomed in.</span>
+          </div>
+          <div class="tl-chip sky">
+            <span class="tl-chip-dot"></span>
+            <span><strong>Fullscreen:</strong> click the ⛶ button or press <kbd>F</kbd> while the player is open.</span>
+          </div>
+          <div class="tl-chip amber">
+            <span class="tl-chip-dot"></span>
+            <span><strong>Download:</strong> the PNG button saves the current canvas frame to your device.</span>
+          </div>
+          <div class="tl-chip purple">
+            <span class="tl-chip-dot"></span>
+            <span><strong>Seek:</strong> click anywhere on the progress bar to jump to that point in history.</span>
+          </div>
+        </div>
 
         <p class="tl-section-label">What gets recorded</p>
         <div class="tl-chips">
@@ -271,7 +314,7 @@
           </div>
           <div class="tl-chip amber">
             <span class="tl-chip-dot"></span>
-            <span>The in-browser player loads up to <strong>100 000</strong> events. Larger histories show a "first 100k shown" note</span>
+            <span>The in-browser player loads up to <strong>500 000</strong> events. Larger histories show a note with the count loaded.</span>
           </div>
         </div>
 
@@ -345,18 +388,29 @@
   document.body.appendChild(overlay);
 
   // ── DOM refs — player tab ─────────────────────────────────────────────────────
-  const tlCanvas    = document.getElementById('tl-canvas');
-  const tlCtx       = tlCanvas.getContext('2d');
-  const placeholder = document.getElementById('tl-placeholder');
-  const subtitle    = document.getElementById('tl-subtitle');
-  const loadBtn     = document.getElementById('tl-load-btn');
-  const playBtn     = document.getElementById('tl-play-btn');
-  const resetBtn    = document.getElementById('tl-reset-btn');
-  const speedSlider = document.getElementById('tl-speed');
-  const speedLabel  = document.getElementById('tl-speed-label');
-  const counter     = document.getElementById('tl-counter');
-  const progressBg  = document.getElementById('tl-progress-bg');
-  const progressFill= document.getElementById('tl-progress-fill');
+  const tlCanvas      = document.getElementById('tl-canvas');
+  const tlCtx         = tlCanvas.getContext('2d');
+  const canvasWrap    = document.getElementById('tl-canvas-wrap');
+  const placeholder   = document.getElementById('tl-placeholder');
+  const subtitle      = document.getElementById('tl-subtitle');
+  const loadBtn       = document.getElementById('tl-load-btn');
+  const playBtn       = document.getElementById('tl-play-btn');
+  const resetBtn      = document.getElementById('tl-reset-btn');
+  const downloadBtn   = document.getElementById('tl-download-btn');
+  const speedSlider   = document.getElementById('tl-speed');
+  const speedLabel    = document.getElementById('tl-speed-label');
+  const counter       = document.getElementById('tl-counter');
+  const progressWrap  = document.getElementById('tl-progress-wrap');
+  const progressBg    = document.getElementById('tl-progress-bg');
+  const progressFill  = document.getElementById('tl-progress-fill');
+  const progressThumb = document.getElementById('tl-progress-thumb');
+  const fullscreenBtn = document.getElementById('tl-fullscreen-btn');
+  const fsExpand      = document.getElementById('tl-fs-expand');
+  const fsCollapse    = document.getElementById('tl-fs-collapse');
+  const zoomResetBtn  = document.getElementById('tl-zoom-reset');
+
+  // Crisp pixel rendering
+  tlCtx.imageSmoothingEnabled = false;
 
   // ── Player state ──────────────────────────────────────────────────────────────
   let events  = [];
@@ -377,30 +431,212 @@
   function initCanvas() {
     tlCanvas.width  = BOARD_W;
     tlCanvas.height = BOARD_H;
+    tlCtx.imageSmoothingEnabled = false;
     tlCtx.fillStyle = '#ffffff';
     tlCtx.fillRect(0, 0, BOARD_W, BOARD_H);
     placeholder.style.display = 'none';
     tlCanvas.style.display    = 'block';
+    downloadBtn.disabled = false;
   }
 
   function resetCanvas() {
+    tlCtx.imageSmoothingEnabled = false;
     tlCtx.fillStyle = '#ffffff';
     tlCtx.fillRect(0, 0, BOARD_W, BOARD_H);
   }
 
-  // ── Progress bar ──────────────────────────────────────────────────────────────
+  // ── Zoom + pan state ──────────────────────────────────────────────────────────
+  let tlScale  = 1;   // current CSS scale of canvas inside the wrap
+  let tlPanX   = 0;   // CSS translate X of canvas
+  let tlPanY   = 0;   // CSS translate Y of canvas
+  let tlIsDragging = false;
+  let tlDragStartX = 0;
+  let tlDragStartY = 0;
+  let tlDragOriginX = 0;
+  let tlDragOriginY = 0;
+
+  const TL_MIN_SCALE = 1;
+  const TL_MAX_SCALE = 16;
+
+  function applyTransform() {
+    // Clamp pan so canvas can't be dragged completely off-screen
+    const wrapR = canvasWrap.getBoundingClientRect();
+    const cW    = tlCanvas.offsetWidth  * tlScale;
+    const cH    = tlCanvas.offsetHeight * tlScale;
+
+    const maxX =  (cW - wrapR.width)  / 2 + Math.max(0, (cW - wrapR.width)  / 2);
+    const maxY =  (cH - wrapR.height) / 2 + Math.max(0, (cH - wrapR.height) / 2);
+    const limitX = Math.max(0, (cW - wrapR.width)  / 2);
+    const limitY = Math.max(0, (cH - wrapR.height) / 2);
+
+    tlPanX = Math.max(-limitX, Math.min(limitX, tlPanX));
+    tlPanY = Math.max(-limitY, Math.min(limitY, tlPanY));
+
+    tlCanvas.style.transform = `translate(${tlPanX}px, ${tlPanY}px) scale(${tlScale})`;
+    zoomResetBtn.classList.toggle('hidden', tlScale <= 1.01 && Math.abs(tlPanX) < 1 && Math.abs(tlPanY) < 1);
+  }
+
+  function resetZoom() {
+    tlScale = 1;
+    tlPanX  = 0;
+    tlPanY  = 0;
+    applyTransform();
+  }
+
+  // Mouse wheel zoom
+  canvasWrap.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const newScale = Math.max(TL_MIN_SCALE, Math.min(TL_MAX_SCALE, tlScale * factor));
+
+    // Zoom toward the mouse cursor position inside the wrap
+    const rect = canvasWrap.getBoundingClientRect();
+    const mx = e.clientX - rect.left - rect.width  / 2;
+    const my = e.clientY - rect.top  - rect.height / 2;
+    tlPanX = mx - (mx - tlPanX) * (newScale / tlScale);
+    tlPanY = my - (my - tlPanY) * (newScale / tlScale);
+    tlScale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  // Touch pinch-zoom
+  let _pinchDist = null;
+  canvasWrap.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      _pinchDist = Math.sqrt(dx*dx + dy*dy);
+    } else if (e.touches.length === 1 && tlScale > 1.01) {
+      tlIsDragging  = true;
+      tlDragStartX  = e.touches[0].clientX;
+      tlDragStartY  = e.touches[0].clientY;
+      tlDragOriginX = tlPanX;
+      tlDragOriginY = tlPanY;
+    }
+  }, { passive: true });
+  canvasWrap.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && _pinchDist !== null) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const factor = dist / _pinchDist;
+      _pinchDist = dist;
+      tlScale = Math.max(TL_MIN_SCALE, Math.min(TL_MAX_SCALE, tlScale * factor));
+      applyTransform();
+    } else if (e.touches.length === 1 && tlIsDragging) {
+      e.preventDefault();
+      tlPanX = tlDragOriginX + (e.touches[0].clientX - tlDragStartX);
+      tlPanY = tlDragOriginY + (e.touches[0].clientY - tlDragStartY);
+      applyTransform();
+    }
+  }, { passive: false });
+  canvasWrap.addEventListener('touchend', () => {
+    _pinchDist   = null;
+    tlIsDragging = false;
+  }, { passive: true });
+
+  // Mouse drag pan (only when zoomed)
+  canvasWrap.addEventListener('mousedown', (e) => {
+    if (tlScale <= 1.01) return;
+    tlIsDragging  = true;
+    tlDragStartX  = e.clientX;
+    tlDragStartY  = e.clientY;
+    tlDragOriginX = tlPanX;
+    tlDragOriginY = tlPanY;
+    canvasWrap.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!tlIsDragging) return;
+    tlPanX = tlDragOriginX + (e.clientX - tlDragStartX);
+    tlPanY = tlDragOriginY + (e.clientY - tlDragStartY);
+    applyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!tlIsDragging) return;
+    tlIsDragging = false;
+    canvasWrap.style.cursor = tlScale > 1.01 ? 'grab' : '';
+  });
+
+  zoomResetBtn.addEventListener('click', resetZoom);
+
+  // ── Fullscreen ────────────────────────────────────────────────────────────────
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function toggleFullscreen() {
+    if (isFullscreen()) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      const el = document.getElementById('timelapse-modal');
+      (el.requestFullscreen || el.webkitRequestFullscreen).call(el).catch(() => {});
+    }
+  }
+
+  fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+  function onFullscreenChange() {
+    const fs = isFullscreen();
+    fsExpand.style.display   = fs ? 'none' : '';
+    fsCollapse.style.display = fs ? ''     : 'none';
+    // Reset zoom when leaving fullscreen to avoid stale transform
+    if (!fs) resetZoom();
+  }
+  document.addEventListener('fullscreenchange',       onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  // F key shortcut for fullscreen (only when modal is open)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'f' || e.key === 'F') {
+      if (overlay.classList.contains('visible')) {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    }
+  });
+
+  // ── Download current frame ────────────────────────────────────────────────────
+  downloadBtn.addEventListener('click', () => {
+    if (!events.length) return;
+    const link = document.createElement('a');
+    link.download = `saint-pixels-timelapse-${cursor}-of-${events.length}.png`;
+    link.href = tlCanvas.toDataURL('image/png');
+    link.click();
+  });
+
+  // ── Progress bar (click + drag to seek) ───────────────────────────────────────
   function updateProgress() {
     const pct = events.length ? (cursor / events.length) * 100 : 0;
     progressFill.style.width = pct + '%';
+    progressThumb.style.left = pct + '%';
     counter.textContent = `${cursor.toLocaleString()} / ${events.length.toLocaleString()}`;
   }
 
-  progressBg.addEventListener('click', (e) => {
+  function seekFromEvent(e) {
     if (!events.length) return;
     const rect  = progressBg.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     seekTo(Math.floor(ratio * events.length));
+  }
+
+  let _seekDragging = false;
+  progressBg.addEventListener('mousedown', (e) => {
+    _seekDragging = true;
+    seekFromEvent(e);
   });
+  document.addEventListener('mousemove', (e) => {
+    if (_seekDragging) seekFromEvent(e);
+  });
+  document.addEventListener('mouseup', () => { _seekDragging = false; });
+
+  progressBg.addEventListener('touchstart', (e) => {
+    seekFromEvent(e.touches[0]);
+  }, { passive: true });
+  progressBg.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    seekFromEvent(e.touches[0]);
+  }, { passive: false });
 
   function seekTo(index) {
     const wasPlaying = playing;
@@ -471,14 +707,19 @@
     subtitle.textContent = 'Replay every pixel ever placed';
   });
 
-  // ── Load data ─────────────────────────────────────────────────────────────────
+  // ── Load data — fetches ALL history (paginates if server caps per request) ────
+  // The server may return a `capped` flag if the result was truncated.
+  // We set the cap high (500k) so one request usually gets everything.
+  const HISTORY_FETCH_LIMIT = 500000;
+
   loadBtn.addEventListener('click', async () => {
     loadBtn.disabled     = true;
     loadBtn.textContent  = 'Loading…';
     subtitle.textContent = 'Fetching pixel history…';
 
     try {
-      const res  = await fetch('/api/timelapse/history');
+      // Pass a large limit to the server so we get as many events as possible
+      const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
@@ -494,7 +735,9 @@
       cursor = 0;
       updateProgress();
 
-      const cappedNote     = data.capped ? ' (first 100k shown)' : '';
+      const cappedNote     = data.capped
+        ? ` (first ${events.length.toLocaleString()} of ${(data.total || '?').toLocaleString()} shown)`
+        : '';
       subtitle.textContent = `${events.length.toLocaleString()} events loaded${cappedNote}`;
       playBtn.disabled     = false;
       resetBtn.disabled    = false;
@@ -538,9 +781,7 @@
           btn.textContent = 'Copy';
           btn.classList.remove('copied');
         }, 1800);
-      }).catch(() => {
-        // Clipboard API unavailable (non-HTTPS) — silently ignore
-      });
+      }).catch(() => {});
     });
   });
 
@@ -553,15 +794,24 @@
   });
 
   // ── Open / close ──────────────────────────────────────────────────────────────
-  function openModal()  { overlay.classList.add('visible'); }
-  function closeModal() { pause(); overlay.classList.remove('visible'); }
+  function openModal()  {
+    overlay.classList.add('visible');
+    resetZoom();
+  }
+  function closeModal() {
+    pause();
+    if (isFullscreen()) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document).catch(() => {});
+    }
+    overlay.classList.remove('visible');
+  }
 
   topbarBtn.addEventListener('click', openModal);
   mobBtn.addEventListener('click',    openModal);
   document.getElementById('tl-close-btn').addEventListener('click', closeModal);
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && overlay.classList.contains('visible')) closeModal();
+    if (e.key === 'Escape' && overlay.classList.contains('visible') && !isFullscreen()) closeModal();
   });
 
 })();

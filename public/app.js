@@ -1468,11 +1468,15 @@ function _doRender() {
 
   // During active panning, clear the overlay so the stale cursor highlight
   // doesn't sit frozen on screen while the canvas scrolls beneath it.
-  // We don't redraw the cursor here because drawCursor() already returns early
-  // when tool === 'hand', so just clearing is enough and keeps this path fast.
+  // Rulers must still be redrawn (they move with the canvas); skip only the
+  // cursor highlight (drawCursor returns early for 'hand' anyway).
   if (isPanning) {
     overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    // Redraw rulers at their new pan position so they don't disappear
+    if (rulers.length > 0 || (rulerState === 'drawing' && rulerStart)) {
+      rulerDrawOverlay();
+    }
     return;
   }
 

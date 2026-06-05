@@ -421,11 +421,19 @@ function initializeTimelapse(app, db, limiter) {
   // job ID, hits requireTimelapsAuth, and returns 401.
   app.get('/api/timelapse/history', (req, res) => {
     try {
-      const LIMIT = 100_000;
+      const MAX_HISTORY_LIMIT = 1_000_000;
+      const requestedLimit = Math.min(
+        parseInt(req.query.limit, 10) || MAX_HISTORY_LIMIT,
+        MAX_HISTORY_LIMIT
+      );
       const rows = _db.prepare(
         'SELECT username, x, y, color, placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT ?'
-      ).all(LIMIT);
-      return res.json({ events: rows, total: rows.length, capped: rows.length >= LIMIT });
+      ).all(requestedLimit);
+      const capped = rows.length === requestedLimit;
+      const total = capped
+        ? _db.prepare('SELECT COUNT(*) AS n FROM pixel_history').get().n
+        : rows.length;
+      return res.json({ events: rows, capped, total });
     } catch (err) {
       console.error('[timelapse/history]', err);
       return res.status(500).json({ error: 'Could not load timelapse data.' });
