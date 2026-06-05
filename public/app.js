@@ -932,11 +932,12 @@ async function updateAuthState(retryCount = 0) {
     currentUser = data.username;
     
     // Sync local cooldown timer with server remaining time.
-    // Use _activeCooldownMs (live value, synced from the server via
-    // fetchEventStatus / SSE) so canPlacePixel() and the bar both agree,
-    // even when a speed-up event is active.
+    // Use the server-supplied cooldownMs total so the formula is correct
+    // even before fetchEventStatus() has resolved.
+    const totalMs = (data.cooldownMs > 0) ? data.cooldownMs : _activeCooldownMs;
+    if (totalMs > 0) _activeCooldownMs = totalMs;
     if (data.cooldown && data.cooldown > 0) {
-      lastPlaceAt = Date.now() - (_activeCooldownMs - data.cooldown);
+      lastPlaceAt = Date.now() - (totalMs - data.cooldown);
     } else {
       lastPlaceAt = 0; // Ready to place
     }
@@ -977,15 +978,17 @@ function showAuthMessage(message, isError = true) {
   authMessage.style.color = isError ? '#fca5a5' : '#86efac';
 }
 
-function setCurrentUser(username, emailVerified = false, cooldown = 0) {
+function setCurrentUser(username, emailVerified = false, cooldown = 0, cooldownMs = 0) {
   currentUser = username;
   
   // Sync local cooldown timer with server remaining time.
-  // Use _activeCooldownMs (live value, synced from the server via
-  // fetchEventStatus / SSE) so canPlacePixel() and the bar both agree,
-  // even when a speed-up event is active.
+  // Prefer the server-supplied cooldownMs total (included in login/me responses)
+  // so the formula is correct even before fetchEventStatus() resolves.
+  // Fall back to _activeCooldownMs only when the server didn't send it.
+  const totalMs = cooldownMs > 0 ? cooldownMs : _activeCooldownMs;
+  if (totalMs > 0) _activeCooldownMs = totalMs; // keep in sync for bar/gate
   if (cooldown && cooldown > 0) {
-    lastPlaceAt = Date.now() - (_activeCooldownMs - cooldown);
+    lastPlaceAt = Date.now() - (totalMs - cooldown);
   } else {
     lastPlaceAt = 0; // Ready to place
   }
@@ -1073,8 +1076,9 @@ async function handleLogin(event) {
 
     resetCaptcha();
     saveToken(data.token);
-    // Pass the cooldown data to setCurrentUser
-    setCurrentUser(data.username, data.emailVerified, data.cooldown);
+    // Pass cooldown remaining AND total so setCurrentUser can sync correctly
+    // even before fetchEventStatus() resolves.
+    setCurrentUser(data.username, data.emailVerified, data.cooldown, data.cooldownMs);
   } catch (error) {
     resetCaptcha();
     showAuthMessage('Unable to reach server.');
@@ -1128,7 +1132,7 @@ async function handleRegister(event) {
     saveToken(data.token);
     // Expose auth token for chat.js before setCurrentUser dispatches state
     window.__authToken = data.token;
-    setCurrentUser(data.username, data.emailVerified, data.cooldown);
+    setCurrentUser(data.username, data.emailVerified, data.cooldown, data.cooldownMs);
     // Show the verification message (e.g. "Check your email") after the overlay closes
     if (data.message) setTimeout(() => showAuthMessage(data.message, false), 100);
   } catch (error) {
@@ -1824,22 +1828,6 @@ function applyToolAtCell(x, y) {
     SFX.play(Math.random() < 0.5 ? 'pixel-placed2' : 'pixel-placed3', 80, 0.45);
     spawnParticles(x, y, color || '#ffffff');
   }
-
-  // Draw only the new pixel directly to ctx for instant feedback
-  const ox = offsetX;
-  const oy = offsetY;
-  const px = Math.floor(x * scale + ox);
-  const py = Math.floor(y * scale + oy);
-  const size = Math.max(1, Math.round(pixelSize * scale));
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (tool === 'eraser') {
-    ctx.clearRect(px, py, size, size);
-  } else {
-    ctx.fillStyle = color;
-    ctx.fillRect(px, py, size, size);
-  }
-  ctx.restore();
 
   // 2. Full redraw (grid, cursor, overlay) deferred one frame — invisible delay
   requestAnimationFrame(() => redraw());

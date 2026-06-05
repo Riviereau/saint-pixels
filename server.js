@@ -609,7 +609,8 @@ app.post('/api/register', registerLimiter, requireCaptcha, async (req, res) => {
       token, 
       emailVerified: false, 
       message: 'Account created! Check your email to verify your address.',
-      cooldown: 0 // New users have no initial cooldown
+      cooldown: 0, // New users have no initial cooldown
+      cooldownMs: isEventActive() ? EVENT_COOLDOWN_MS : COOLDOWN_MS,
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -640,7 +641,8 @@ app.post('/api/login', authLimiter, requireCaptcha, async (req, res) => {
       username: row.username, 
       token, 
       emailVerified: !!row.email_verified,
-      cooldown: cooldownLeft 
+      cooldown: cooldownLeft,
+      cooldownMs: isEventActive() ? EVENT_COOLDOWN_MS : COOLDOWN_MS,
     });
   } catch (err) {
     console.error('[login] Unexpected error:', err);
@@ -754,8 +756,9 @@ app.post('/api/reset-password', resetPasswordLimiter, async (req, res) => {
 
 // ── Session ───────────────────────────────────────────────────────────────────
 app.get('/api/me', meLimiter, (req, res) => {
+  const activeCooldownMs = isEventActive() ? EVENT_COOLDOWN_MS : COOLDOWN_MS;
   if (req.localBypassUser) {
-    return res.json({ username: req.localBypassUser, emailVerified: true, cooldown: 0 });
+    return res.json({ username: req.localBypassUser, emailVerified: true, cooldown: 0, cooldownMs: activeCooldownMs });
   }
 
   const session = getSession(req);
@@ -767,7 +770,8 @@ app.get('/api/me', meLimiter, (req, res) => {
   return res.json({ 
     username: session.username, 
     emailVerified: row ? !!row.email_verified : false,
-    cooldown: cooldownLeft 
+    cooldown: cooldownLeft,
+    cooldownMs: activeCooldownMs,
   });
 });
 
