@@ -2331,7 +2331,18 @@ header.flex {
 .profile-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 600;
+  /* z-index hierarchy (highest wins):
+       canvas elements (ruler label, fullscreen btn): ≤ 10000
+       lb-panel:                                       500 / 510 open
+       chat-toggle / chat-panel:                       10500
+       settings-overlay:                               11000
+       profile-modal-overlay:                          12000  ← here
+       ios-reset-overlay:                              12000
+       sp-rules-window:                                99999
+     Profile modal must beat chat (10500), settings (11000), and the
+     fullscreen button (10000) so it always renders on top of everything
+     except the rules window. */
+  z-index: 12000;
   background: rgba(0,0,0,0.65);
   display: flex;
   align-items: center;
@@ -2388,6 +2399,36 @@ header.flex {
 .pm-sub {
   font-size: 0.75rem;
   color: #64748b;
+}
+/* Profile modal header layout — keeps username + ban badge on one row */
+.pm-header-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pm-username-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* Ban badge shown next to banned players' usernames */
+.pm-ban-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 5px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .pm-stats {
   display: grid;
@@ -2523,7 +2564,11 @@ header.flex {
 
 .sp-ruler-label {
   position: absolute;
-  z-index: 9000;
+  /* Canvas-level z-index — must stay below all overlay UI (modals, panels, etc.)
+     The viewport itself is inside the app shell which stacks below z-index 500+,
+     so a value of 20 is more than enough to beat the overlay/grid canvases (z 2-3)
+     while never competing with any modal or panel. */
+  z-index: 20;
   transform: translate(-50%, -50%);
   display: inline-flex;
   align-items: center;

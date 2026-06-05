@@ -537,10 +537,12 @@
 
       <div class="lb-filters" id="lb-filters">
         <button class="lb-filter-btn lb-filter-active" data-period="today">Today</button>
+        <button class="lb-filter-btn" data-period="yesterday">Yesterday</button>
         <button class="lb-filter-btn" data-period="week">Week</button>
         <button class="lb-filter-btn" data-period="month">Month</button>
         <button class="lb-filter-btn" data-period="year">Year</button>
         <button class="lb-filter-btn" data-period="decade">Decade</button>
+        <button class="lb-filter-btn" data-period="century">Century</button>
         <button class="lb-filter-btn" data-period="alltime">All Time</button>
       </div>
 
@@ -637,8 +639,14 @@
     <div class="profile-modal" id="profile-modal" role="dialog" aria-modal="true">
       <div class="pm-header">
         <div class="pm-avatar" id="pm-avatar">?</div>
-        <div>
-          <div class="pm-username" id="pm-username">—</div>
+        <div class="pm-header-info">
+          <div class="pm-username-row">
+            <div class="pm-username" id="pm-username">—</div>
+            <span id="pm-ban-badge" class="pm-ban-badge" style="display:none;" title="This player is banned">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              Banned
+            </span>
+          </div>
           <div class="pm-sub" id="pm-sub">Loading…</div>
         </div>
       </div>

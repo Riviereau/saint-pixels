@@ -1,6 +1,16 @@
 // Injected by initializeActions
 let _db = null;
 
+// Ban module — provides checkBan() for profile responses.
+// Loaded lazily so Leaderboard.js works even if ban.js hasn't been wired up yet.
+let _checkBan = null;
+try {
+  const ban = require('../helpers/ban.js');
+  _checkBan = ban.checkBan;
+} catch {
+  // ban.js not present — ban info simply won't appear in profiles
+}
+
 /**
  * Returns the current day string in UTC-4 (e.g. "2025-05-23")
  * @returns {string}
@@ -14,7 +24,7 @@ function getDayUTC4() {
 /**
  * Build a WHERE clause fragment for filtering by time period.
  * For pixel_counts table (day TEXT "YYYY-MM-DD").
- * @param {'today'|'week'|'month'|'year'|'decade'|'alltime'} period
+ * @param {'today'|'yesterday'|'week'|'month'|'year'|'decade'|'century'|'alltime'} period
  * @returns {{ clause: string, params: string[] }}
  */
 function buildDateFilter(period) {
@@ -23,6 +33,12 @@ function buildDateFilter(period) {
 
   if (period === 'today') {
     return { clause: 'WHERE day = ?', params: [today] };
+  }
+  if (period === 'yesterday') {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - 1);
+    const yest = d.toISOString().slice(0, 10);
+    return { clause: 'WHERE day = ?', params: [yest] };
   }
   if (period === 'week') {
     const d = new Date(now);
@@ -42,6 +58,10 @@ function buildDateFilter(period) {
     const decadeStart = String(Math.floor(parseInt(today.slice(0, 4)) / 10) * 10) + '-01-01';
     return { clause: 'WHERE day >= ?', params: [decadeStart] };
   }
+  if (period === 'century') {
+    const centuryStart = String(Math.floor(parseInt(today.slice(0, 4)) / 100) * 100) + '-01-01';
+    return { clause: 'WHERE day >= ?', params: [centuryStart] };
+  }
   // alltime — no filter
   return { clause: '', params: [] };
 }
@@ -55,7 +75,7 @@ class Leaderboard {
     if (!_db) return res.status(503).json({ error: 'Database not available' });
 
     try {
-      const period = ['today', 'week', 'month', 'year', 'decade', 'alltime'].includes(req.query.period)
+      const period = ['today', 'yesterday', 'week', 'month', 'year', 'decade', 'century', 'alltime'].includes(req.query.period)
         ? req.query.period
         : 'today';
 
@@ -123,12 +143,25 @@ class Leaderboard {
         LIMIT 20
       `).all(username);
 
+      // Check active ban status
+      let banned = false;
+      let banReason = null;
+      if (_checkBan) {
+        const banEntry = _checkBan(username);
+        if (banEntry) {
+          banned = true;
+          banReason = banEntry.reason || null;
+        }
+      }
+
       return res.json({
         username,
         totalPixels: totalRow?.total || 0,
         todayPixels: todayRow?.count || 0,
         allTimeRank: rank,
         recentPixels,
+        banned,
+        banReason,
       });
     } catch (err) {
       console.error('Failed to fetch profile:', err);

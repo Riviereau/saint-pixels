@@ -3893,15 +3893,67 @@ viewport.addEventListener("touchend", (e) => {
       activePeriod = btn.dataset.period;
       hasFetchedOnce = false; // Show loading indicator for the newly selected period
 
-      // Update reset note text
-      if (resetNote) {
-        resetNote.textContent = activePeriod === 'today'
-          ? 'Today resets at midnight · UTC−4'
-          : `Showing ${activePeriod === 'alltime' ? 'all-time' : activePeriod} totals`;
-      }
+      // Update date label and reset note to reflect the selected range
+      updatePeriodLabels();
 
       fetchLeaderboard();
     });
+  }
+
+  // ── Date/range label helpers ─────────────────────────────────
+  function fmtDate(d) {
+    // "May 23" style, UTC-4
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+  }
+  function fmtYear(d) {
+    return d.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'America/New_York' });
+  }
+
+  function getPeriodRange(period) {
+    // All dates in UTC-4
+    const now = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const todayStr = now.toISOString().slice(0, 10);
+    const today = new Date(todayStr + 'T00:00:00Z');
+
+    if (period === 'today') {
+      return { label: fmtDate(today), note: 'Resets at midnight · UTC−4' };
+    }
+    if (period === 'yesterday') {
+      const yest = new Date(today);
+      yest.setUTCDate(yest.getUTCDate() - 1);
+      return { label: fmtDate(yest), note: fmtDate(yest) };
+    }
+    if (period === 'week') {
+      const from = new Date(today);
+      from.setUTCDate(from.getUTCDate() - 6);
+      return { label: `${fmtDate(from)} – ${fmtDate(today)}`, note: 'Last 7 days' };
+    }
+    if (period === 'month') {
+      const from = new Date(todayStr.slice(0, 7) + '-01T00:00:00Z');
+      return { label: today.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'America/New_York' }), note: `Since ${fmtDate(from)}` };
+    }
+    if (period === 'year') {
+      const year = todayStr.slice(0, 4);
+      return { label: year, note: `Jan 1 – ${fmtDate(today)} ${year}` };
+    }
+    if (period === 'decade') {
+      const yr = parseInt(todayStr.slice(0, 4), 10);
+      const decadeStart = Math.floor(yr / 10) * 10;
+      return { label: `${decadeStart}s`, note: `${decadeStart} – ${decadeStart + 9}` };
+    }
+    if (period === 'century') {
+      const yr = parseInt(todayStr.slice(0, 4), 10);
+      const centuryStart = Math.floor(yr / 100) * 100;
+      return { label: `${centuryStart}s`, note: `${centuryStart} – ${centuryStart + 99}` };
+    }
+    // alltime
+    return { label: 'All Time', note: 'All-time totals' };
+  }
+
+  function updatePeriodLabels() {
+    const { label, note } = getPeriodRange(activePeriod);
+    if (dateEl) dateEl.textContent = label;
+    if (resetNote) resetNote.textContent = note;
   }
 
   function closePanel() {
@@ -3913,7 +3965,10 @@ viewport.addEventListener("touchend", (e) => {
     isOpen = !isOpen;
     panel.classList.toggle('lb-open', isOpen);
     SFX.play(isOpen ? 'leaderboard-open' : 'leaderboard-close', 300, 0.45);
-    if (isOpen) fetchLeaderboard();
+    if (isOpen) {
+      updatePeriodLabels();
+      fetchLeaderboard();
+    }
   });
 
   window.addEventListener('sp-state-change', (e) => {
@@ -3940,13 +3995,16 @@ viewport.addEventListener("touchend", (e) => {
   // ── Profile modal ───────────────────────────────────────────
   async function openProfileModal(username) {
     if (!modalOverlay || !username) return;
-    pmAvatar.textContent = username.charAt(0);
+    pmAvatar.textContent = username.charAt(0).toUpperCase();
     pmUsername.textContent = username;
     pmSub.textContent = 'Loading stats…';
     pmTotal.textContent = '—';
     pmToday.textContent = '—';
     pmRank.textContent = '—';
     pmRecent.innerHTML = '<span class="pm-loading">Loading…</span>';
+    // Hide ban badge while loading
+    const pmBanBadge = document.getElementById('pm-ban-badge');
+    if (pmBanBadge) pmBanBadge.style.display = 'none';
     modalOverlay.classList.add('pm-open');
 
     try {
@@ -3957,6 +4015,18 @@ viewport.addEventListener("touchend", (e) => {
       pmTotal.textContent = (d.totalPixels || 0).toLocaleString();
       pmToday.textContent = (d.todayPixels || 0).toLocaleString();
       pmRank.textContent = d.allTimeRank ? `#${d.allTimeRank}` : '—';
+
+      // Show ban badge if the player is banned
+      if (pmBanBadge) {
+        if (d.banned) {
+          pmBanBadge.style.display = '';
+          pmBanBadge.title = d.banReason
+            ? `Banned: ${d.banReason}`
+            : 'This player is banned';
+        } else {
+          pmBanBadge.style.display = 'none';
+        }
+      }
 
       // Streak display
       const pmStreakEl = document.getElementById('pm-streak');
@@ -4045,11 +4115,6 @@ viewport.addEventListener("touchend", (e) => {
   }
 
   // ── Helpers ─────────────────────────────────────────────────
-  function todayUTC4() {
-    const d = new Date(Date.now() - 4 * 60 * 60 * 1000);
-    return d.toISOString().slice(0, 10);
-  }
-
   function msUntilMidnightUTC4() {
     const now = new Date();
     const utc4 = new Date(now.getTime() - 4 * 60 * 60 * 1000);
@@ -4060,7 +4125,7 @@ viewport.addEventListener("touchend", (e) => {
 
   // ── Render ───────────────────────────────────────────────────
   function render(rows) {
-    dateEl.textContent = todayUTC4();
+    updatePeriodLabels();
     if (!rows || rows.length === 0) {
       list.innerHTML = '<li class="lb-empty">No pixels placed yet.</li>';
       return;
