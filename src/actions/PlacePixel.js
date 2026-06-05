@@ -119,6 +119,8 @@ class PlacePixel {
     }
 
     const x = parseInt(req.body.x, 10);
+    const y = parseInt(req.body.y, 10);
+    const color = typeof req.body.color === 'string' ? req.body.color : '';
     if (isNaN(x) || isNaN(y) || !color) {
       return res.status(400).json({ error: 'Invalid pixel coordinates or color.' });
     }
