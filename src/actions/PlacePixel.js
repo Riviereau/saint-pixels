@@ -109,13 +109,16 @@ class PlacePixel {
     }
 
     const cooldownLeft = getCooldown(session.username, _getEffectiveCooldownMs());
-    if (cooldownLeft > 0) {
+    // Allow a 100 ms grace window on the server side.  The client enforces a
+    // 150 ms margin before sending, so requests should always arrive well after
+    // the cooldown expires.  The grace window absorbs any remaining clock-skew
+    // or jitter between the two Date.now() calls so legitimate clicks at the
+    // exact boundary are never rejected with a 429.
+    if (cooldownLeft > 100) {
       return res.status(429).json({ error: 'Cooldown active. Please wait.', cooldown: cooldownLeft });
     }
 
     const x = parseInt(req.body.x, 10);
-    const y = parseInt(req.body.y, 10);
-    const color = typeof req.body.color === 'string' ? req.body.color : '';
     if (isNaN(x) || isNaN(y) || !color) {
       return res.status(400).json({ error: 'Invalid pixel coordinates or color.' });
     }
@@ -191,7 +194,7 @@ class PlacePixel {
     }
 
     const cooldownLeft = getCooldown(session.username, _getEffectiveCooldownMs());
-    if (cooldownLeft > 0) {
+    if (cooldownLeft > 100) {
       return res.status(429).json({ error: 'Cooldown active. Please wait.', cooldown: cooldownLeft });
     }
 

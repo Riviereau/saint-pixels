@@ -1216,11 +1216,23 @@ function updateCooldownLabel() {
 }
 
 function canPlacePixel() {
-  // Require the full cooldown PLUS a tiny safety margin (20 ms) before
-  // allowing the next placement.  This ensures the HTTP request always
-  // reaches the server well after the cooldown window, not at the exact
-  // millisecond boundary where clock skew could still cause a 429.
-  return !!currentUser && Date.now() - lastPlaceAt >= _activeCooldownMs + 20;
+  // Require the full cooldown PLUS a safety margin before allowing the next
+  // placement.  The margin must be large enough that even on a slow connection
+  // the HTTP request arrives at the server *after* the cooldown window closes.
+  //
+  // Why 150 ms:
+  //   • The client stamps lastPlaceAt at click time (optimistic).
+  //   • The fetch is deferred one event-loop tick (setTimeout 0) — adds ~1 ms.
+  //   • The request travels to the server — Railway p95 latency ~60–120 ms.
+  //   • The server checks Date.now() - last_pixel_at >= COOLDOWN_MS.
+  //   • If the request arrives 1 ms before the server's window opens, the
+  //     server returns 429 and the user has to click again (Bug 1).
+  //
+  // 150 ms covers p99 Railway latency and keeps the UX penalty imperceptible
+  // (a 3 000 ms cooldown extended by 0.15 s is indistinguishable).
+  // The 429-handler in broadcastEvent still catches any edge cases that slip
+  // through at even higher latencies and gracefully keeps the optimistic pixel.
+  return !!currentUser && Date.now() - lastPlaceAt >= _activeCooldownMs + 150;
 }
 
 // ─── Grid: corner dots drawn in viewport space ───────────────────────────────
@@ -1925,12 +1937,12 @@ function broadcastEvent(event) {
             if (res.status === 429) {
               // Server rejected due to cooldown. Two cases:
               //
-              // A) Tiny boundary race (remaining <= 100 ms): the request arrived
+              // A) Tiny boundary race (remaining <= 150 ms): the request arrived
               //    at the server a few ms before the grace window kicked in.
               //    Treat it as a success — keep the optimistic pixel and stamp
               //    lastPlaceAt so the full cooldown runs from now.
               //
-              // B) Genuine early click (remaining > 100 ms): the user spammed
+              // B) Genuine early click (remaining > 150 ms): the user spammed
               //    before the cooldown was actually up. Roll back the pixel and
               //    lock the gate for the real remaining duration so no further
               //    spam placements can slip through.
@@ -1973,8 +1985,78 @@ function broadcastEvent(event) {
           });
         }
       }).catch(err => {
-        // Network error — pixel visible locally but not persisted to server.
-        console.warn('[sp] pixel save network error:', err.message);
+        // ── Network error — pixel visible locally but fetch never reached server ──
+        //
+        // This happens when the user is briefly offline, the connection drops
+        // mid-request, or Railway restarts the dyno.  Previous behaviour: log and
+        // silently keep the optimistic pixel — it would vanish on next reload.
+        //
+        // New behaviour:
+        //   1. Roll back the optimistic paint so the board stays in sync with
+        //      the server (the pixel was never saved — showing it is misleading).
+        //   2. Reset lastPlaceAt to 0 so the gate opens immediately — the user
+        //      can try again as soon as they notice or the connection recovers.
+        //   3. Retry once after a short delay.  Most network blips resolve in
+        //      < 2 s (Railway cold-start, mobile handoff, brief packet loss).
+        //      A single retry covers the vast majority of real-world cases
+        //      without building a complex offline queue.
+        console.warn('[sp] pixel save network error (will retry once):', err.message);
+
+        // Roll back immediately so the board reflects server truth
+        paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+        redraw();
+        // Reset gate so the retry (or the user's next click) isn't blocked
+        lastPlaceAt = 0;
+        updateCooldownLabel();
+
+        // Single retry after 1.5 s — enough time for a brief connection blip
+        // to resolve, without frustrating users on genuinely dead connections.
+        // We do NOT retry 429s here (handled above); only network-level failures.
+        const retryTimeout = setTimeout(() => {
+          const retryToken = getStoredToken();
+          if (!retryToken || !currentUser) return; // logged out in the interim
+
+          const retryEndpoint = event.tool === 'eraser' ? '/api/erase' : '/api/pixel';
+          const retryPayload  = event.tool === 'eraser'
+            ? { x: Math.round(event.x), y: Math.round(event.y) }
+            : { x: Math.round(event.x), y: Math.round(event.y), color: event.color };
+
+          fetch(retryEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${retryToken}` },
+            body: JSON.stringify(retryPayload),
+          }).then(retryRes => {
+            if (retryRes.ok) {
+              // Retry succeeded — repaint the pixel and treat as a fresh placement
+              paintPixel(event.x, event.y, event.size || 1, event.tool, event.tool === 'eraser' ? null : event.color);
+              redraw();
+              lastPlaceAt = Date.now();
+              window.dispatchEvent(new CustomEvent('sp-pixel-placed'));
+              _markLocalCell(event.x, event.y);
+              _totalPixelCount++;
+              _currentStreak = Math.max(_currentStreak, 1);
+              checkAchievements({ totalPixels: _totalPixelCount, currentStreak: _currentStreak });
+              updateStreakBadge();
+              updateCooldownLabel();
+              console.info('[sp] pixel retry succeeded');
+            } else if (retryRes.status === 429) {
+              // Server cooldown still active — gate is already open (lastPlaceAt=0),
+              // so the user can click again. Nothing else to do.
+              console.warn('[sp] pixel retry hit cooldown — user can click again');
+            } else {
+              // Retry also failed for a non-network reason — give up cleanly.
+              console.warn('[sp] pixel retry also failed:', retryRes.status);
+            }
+          }).catch(retryErr => {
+            // Still offline — give up. Board is already rolled back; user can retry manually.
+            console.warn('[sp] pixel retry also failed (network):', retryErr.message);
+          });
+        }, 1500);
+
+        // If the user places another pixel before the retry fires, cancel the
+        // retry — the new placement supersedes this one.
+        const cancelRetry = () => { clearTimeout(retryTimeout); };
+        window.addEventListener('sp-pixel-placed', cancelRetry, { once: true });
       });
     }
   }
