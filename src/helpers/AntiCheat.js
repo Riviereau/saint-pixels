@@ -23,7 +23,7 @@ let _db = null;
 
 // Single source-of-truth cooldown: imported from cooldown.js so AntiCheat
 // always matches the per-user cooldown without a separate hardcode.
-const { COOLDOWN_MS: BASE_COOLDOWN_MS } = require('./cooldown.js');
+const { COOLDOWN_MS: BASE_COOLDOWN_MS, COOLDOWN_GRACE_MS } = require('./cooldown.js');
 
 /**
  * When 2+ distinct usernames are seen from the same IP within this window,
@@ -112,7 +112,7 @@ function checkIp(ip, username) {
       ? BASE_COOLDOWN_MS * STRICT_COOLDOWN_MULTIPLIER
       : BASE_COOLDOWN_MS;
 
-    const remaining = row.last_pixel_at + cooldownMs - now;
+    const remaining = row.last_pixel_at + cooldownMs - COOLDOWN_GRACE_MS - now;
     if (remaining > 0) {
       const reason = isMultiAccount
         ? 'Multiple accounts detected from this IP. Extended cooldown applied.'

@@ -4,6 +4,10 @@ const { recordIp } = require('../helpers/AntiCheat.js');
 const fs   = require('fs');
 const path = require('path');
 
+// Board dimensions — must match the client constants in app.js.
+const BOARD_WIDTH  = 1920;
+const BOARD_HEIGHT = 1080;
+
 // Path to the rolling JSON pixel-history file.
 // Set JSON_HISTORY_PATH in your environment (or .env) to override the default.
 // The file stores a JSON array; each new event is appended by rewriting the
@@ -14,6 +18,8 @@ const JSON_HISTORY_PATH = process.env.JSON_HISTORY_PATH
 // Injected by initializeActions
 let _db = null;
 let _broadcast = () => {};
+/** Returns the currently active cooldown duration in ms (event-aware). */
+let _getEffectiveCooldownMs = () => 0;
 
 /**
  * Append one pixel-history event to the JSON file on disk.
@@ -98,19 +104,23 @@ class PlacePixel {
   static execute(req, res) {
     const session = getSession(req);
     if (!session) return res.status(401).json({ error: 'Unauthorized' });
+    if (session.banned) {
+      return res.status(403).json({ error: 'banned', message: session.message, reason: session.reason, expiresAt: session.expiresAt });
+    }
 
-    const cooldownLeft = getCooldown(session.username);
+    const cooldownLeft = getCooldown(session.username, _getEffectiveCooldownMs());
     if (cooldownLeft > 0) {
       return res.status(429).json({ error: 'Cooldown active. Please wait.', cooldown: cooldownLeft });
     }
 
-    // Validate coordinates and color BEFORE resetting the cooldown so that a
-    // malformed request doesn't burn the user's cooldown for nothing.
     const x = parseInt(req.body.x, 10);
     const y = parseInt(req.body.y, 10);
     const color = typeof req.body.color === 'string' ? req.body.color : '';
     if (isNaN(x) || isNaN(y) || !color) {
       return res.status(400).json({ error: 'Invalid pixel coordinates or color.' });
+    }
+    if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) {
+      return res.status(400).json({ error: 'Pixel coordinates out of bounds.' });
     }
     // Strip everything except hex digits and #, then drop any leading #
     const safeColor = color.replace(/[^0-9a-fA-F#]/g, '').replace(/^#+/, '').slice(0, 6);
@@ -176,8 +186,11 @@ class PlacePixel {
   static erase(req, res) {
     const session = getSession(req);
     if (!session) return res.status(401).json({ error: 'Unauthorized' });
+    if (session.banned) {
+      return res.status(403).json({ error: 'banned', message: session.message, reason: session.reason, expiresAt: session.expiresAt });
+    }
 
-    const cooldownLeft = getCooldown(session.username);
+    const cooldownLeft = getCooldown(session.username, _getEffectiveCooldownMs());
     if (cooldownLeft > 0) {
       return res.status(429).json({ error: 'Cooldown active. Please wait.', cooldown: cooldownLeft });
     }
@@ -187,6 +200,9 @@ class PlacePixel {
     const y = parseInt(req.body.y, 10);
     if (isNaN(x) || isNaN(y)) {
       return res.status(400).json({ error: 'Invalid pixel coordinates.' });
+    }
+    if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) {
+      return res.status(400).json({ error: 'Pixel coordinates out of bounds.' });
     }
 
     resetCooldown(session.username);
@@ -234,6 +250,15 @@ class PlacePixel {
    */
   static setDb(db) {
     _db = db;
+  }
+
+  /**
+   * Inject a function that returns the currently active cooldown in ms.
+   * Called from initializeActions after isEventActive is available.
+   * @param {() => number} fn
+   */
+  static setEffectiveCooldownMs(fn) {
+    _getEffectiveCooldownMs = fn;
   }
 
   /**

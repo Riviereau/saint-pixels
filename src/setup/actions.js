@@ -7,11 +7,18 @@ const { ipCooldownMiddleware } = require('../helpers/AntiCheat.js');
  * @param {import('better-sqlite3').Database} db
  * @param {Function} [pixelLimiter]
  * @param {Function} [broadcastSSE]
+ * @param {() => number} [getEffectiveCooldownMs]  — returns the live cooldown in ms (event-aware)
  */
-function initializeActions(app, db, pixelLimiter, broadcastSSE) {
+function initializeActions(app, db, pixelLimiter, broadcastSSE, getEffectiveCooldownMs) {
   // Inject db into actions that need it
   PlacePixel.setDb(db);
   PlacePixel.setBroadcast(broadcastSSE || (() => {}));
+  // Wire the event-aware cooldown so the server enforces the reduced duration
+  // during speed events (isEventActive / EVENT_COOLDOWN_MS live in server.js
+  // and are passed down via this callback to avoid a circular dependency).
+  if (typeof getEffectiveCooldownMs === 'function') {
+    PlacePixel.setEffectiveCooldownMs(getEffectiveCooldownMs);
+  }
   Leaderboard.setDb(db);
 
   // ipCooldownMiddleware is applied first — before the per-request rate limiter

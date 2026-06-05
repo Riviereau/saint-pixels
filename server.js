@@ -496,7 +496,7 @@ initializeActions(app, db, pixelLimiter, (event) => {
   if ((event.type === 'pixel' || event.type === 'erase') && event.user) {
     try { updateStreak(event.user); } catch(e) { /* non-fatal */ }
   }
-});
+}, () => isEventActive() ? EVENT_COOLDOWN_MS : 0);
 // SSE connections must not be subject to requestTimeout (30 s) — they are
 // intentionally long-lived and would otherwise be killed by the server-wide
 // timeout set below, causing Firefox to report "can't establish a connection".

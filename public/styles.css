@@ -1096,7 +1096,7 @@
 }
 #overlay {
   z-index: 3;
-  pointer-events: none;
+  pointer-events: auto;
   will-change: contents;
   contain: strict;
 }

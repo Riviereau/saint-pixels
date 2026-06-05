@@ -29,16 +29,18 @@ function setDb(db) {
 /**
  * Returns the remaining cooldown in ms for a user (0 if none).
  * @param {string} username
+ * @param {number} [effectiveCooldownMs] — override the default COOLDOWN_MS (e.g. during a speed event)
  * @returns {number}
  */
-function getCooldown(username) {
+function getCooldown(username, effectiveCooldownMs) {
   const row = _db.prepare(
     'SELECT last_pixel_at FROM cooldowns WHERE username = ?'
   ).get(username);
   if (!row) return 0;
+  const total = (effectiveCooldownMs > 0 ? effectiveCooldownMs : COOLDOWN_MS);
   // Subtract the grace window so requests arriving right at the boundary
   // (due to clock skew or network jitter) are not incorrectly rejected.
-  const remaining = row.last_pixel_at + COOLDOWN_MS - COOLDOWN_GRACE_MS - Date.now();
+  const remaining = row.last_pixel_at + total - COOLDOWN_GRACE_MS - Date.now();
   return remaining > 0 ? remaining : 0;
 }
 
@@ -54,4 +56,4 @@ function resetCooldown(username) {
   `).run(username, Date.now());
 }
 
-module.exports = { setDb, getCooldown, resetCooldown, COOLDOWN_MS };
+module.exports = { setDb, getCooldown, resetCooldown, COOLDOWN_MS, COOLDOWN_GRACE_MS };
