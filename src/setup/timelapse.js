@@ -404,6 +404,22 @@ function initializeTimelapse(app, db, limiter) {
     });
   });
 
+  // ── GET /api/timelapse/history  (public — no auth) ───────────────────────
+  // MUST be registered before /:id — otherwise Express treats "history" as a
+  // job ID, hits requireTimelapsAuth, and returns 401.
+  app.get('/api/timelapse/history', (req, res) => {
+    try {
+      const LIMIT = 100_000;
+      const rows = _db.prepare(
+        'SELECT username, x, y, color, placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT ?'
+      ).all(LIMIT);
+      return res.json({ events: rows, total: rows.length, capped: rows.length >= LIMIT });
+    } catch (err) {
+      console.error('[timelapse/history]', err);
+      return res.status(500).json({ error: 'Could not load timelapse data.' });
+    }
+  });
+
   // ── GET /api/timelapse/:id ─────────────────────────────────────────────────
   app.get('/api/timelapse/:id', ...mw, requireTimelapsAuth, (req, res) => {
     const job = jobs.get(req.params.id);

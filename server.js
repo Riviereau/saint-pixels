@@ -1010,31 +1010,8 @@ app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
   }
 });
 
-// ── Timelapse history endpoint ────────────────────────────────────────────────
-// Returns pixel_history rows (capped at 100 000) so the in-browser timelapse
-// player can replay them on a canvas without needing ffmpeg or Node canvas.
-// Rate-limited by the existing timelapseLimiter (4 req / 10 min / IP).
-const timelapseDataLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 8,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => safeIp(req),
-  message: { error: 'Too many timelapse requests. Please wait.' },
-});
-
-app.get('/api/timelapse/history', timelapseDataLimiter, (req, res) => {
-  try {
-    const LIMIT = 100_000;
-    const rows = db.prepare(
-      'SELECT username, x, y, color, placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT ?'
-    ).all(LIMIT);
-    return res.json({ events: rows, total: rows.length, capped: rows.length >= LIMIT });
-  } catch (err) {
-    console.error('[timelapse/history]', err);
-    return res.status(500).json({ error: 'Could not load timelapse data.' });
-  }
-});
+// NOTE: /api/timelapse/history is registered inside initializeTimelapse() in
+// timelapse.js — it must come before the /:id wildcard route to avoid the 401.
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => res.status(404).send('Not found'));

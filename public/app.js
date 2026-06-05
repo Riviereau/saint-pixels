@@ -2977,6 +2977,11 @@ canvas.addEventListener('mousemove', event => {
       redrawOverlay();
     }
   }
+
+  // Drive drag-painting — must come after cursor/redraw logic above.
+  if (isMouseDown && !isPanning) {
+    moveAction(event);
+  }
 });
 
 canvas.addEventListener('mouseup', event => {
