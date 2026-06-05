@@ -416,18 +416,49 @@ function initializeTimelapse(app, db, limiter) {
     });
   });
 
-  // ── GET /api/timelapse/history  (public — no auth) ───────────────────────
+  // ── GET /api/timelapse/history  (auth-required) ──────────────────────────
   // MUST be registered before /:id — otherwise Express treats "history" as a
   // job ID, hits requireTimelapsAuth, and returns 401.
+  //
+  // Requires a valid user session token (same Bearer token used everywhere else
+  // in the app). This prevents unauthenticated visitors and scrapers from
+  // bulk-downloading the raw pixel-history log, which contains usernames,
+  // coordinates, colours, and timestamps for every placement ever made.
   app.get('/api/timelapse/history', (req, res) => {
+    // ── Session auth check ───────────────────────────────────────────────────
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required to view timelapse history. Please log in.' });
+    }
+
+    // Validate the token directly against the sessions table.
+    let sessionRow;
+    try {
+      sessionRow = _db.prepare(
+        'SELECT username FROM sessions WHERE token = ? AND expires_at > ?'
+      ).get(token, Date.now());
+    } catch (err) {
+      console.error('[timelapse/history] session lookup error:', err);
+      return res.status(500).json({ error: 'Server error.' });
+    }
+
+    if (!sessionRow) {
+      return res.status(401).json({ error: 'Invalid or expired session. Please log in again.' });
+    }
+
+    // ── Query ────────────────────────────────────────────────────────────────
     try {
       const MAX_HISTORY_LIMIT = 1_000_000;
       const requestedLimit = Math.min(
         parseInt(req.query.limit, 10) || MAX_HISTORY_LIMIT,
         MAX_HISTORY_LIMIT
       );
+      // Include prev_color so the in-browser player can show what was
+      // overwritten at each cell before the new pixel was placed.
       const rows = _db.prepare(
-        'SELECT username, x, y, color, placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT ?'
+        'SELECT username, x, y, color, prev_color, placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT ?'
       ).all(requestedLimit);
       const capped = rows.length === requestedLimit;
       const total = capped

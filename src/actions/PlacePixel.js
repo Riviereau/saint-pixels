@@ -133,6 +133,14 @@ class PlacePixel {
       return res.status(400).json({ error: 'Invalid color value.' });
     }
 
+    // prevColor: optional field sent by the client recording what was on the
+    // canvas at (x,y) before this placement.  Accept only a valid 6-char hex;
+    // anything else is silently dropped so bad/missing values never block saves.
+    const rawPrev = typeof req.body.prevColor === 'string' ? req.body.prevColor : '';
+    const safePrevColor = /^#?[0-9a-fA-F]{6}$/.test(rawPrev)
+      ? rawPrev.replace(/^#/, '').toLowerCase()
+      : null;
+
     // Validation passed — now consume the cooldown
     resetCooldown(session.username);
     // Record this placement against the IP for anti-cheat enforcement
@@ -161,12 +169,14 @@ class PlacePixel {
           VALUES (?, ?, ?, ?, ?)
         `).run(session.username, x, y, safeColor, now);
         // Append-log for timelapse generation — one row per event, never pruned.
+        // prev_color records what was at this cell before this placement so the
+        // timelapse player can show the "old pixel" underneath.
         _db.prepare(`
-          INSERT INTO pixel_history (username, x, y, color, placed_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(session.username, x, y, safeColor, now);
+          INSERT INTO pixel_history (username, x, y, color, prev_color, placed_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(session.username, x, y, safeColor, safePrevColor, now);
         // Mirror the same event to the JSON history file for timelapse --json.
-        appendToJsonHistory({ username: session.username, x, y, color: safeColor, placed_at: now });
+        appendToJsonHistory({ username: session.username, x, y, color: safeColor, prev_color: safePrevColor, placed_at: now });
         // Broadcast uses the same sanitised, #-prefixed color so SSE clients
         // and the DB are always consistent.
         _broadcast({ type: 'pixel', x, y, color: '#' + safeColor, user: session.username });

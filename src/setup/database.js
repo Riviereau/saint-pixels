@@ -83,14 +83,17 @@ function initializeDatabase(db) {
     -- Append-log of every pixel/erase event ever made — used by timelapse.js.
     -- Unlike 'pixels' (which is an upsert table storing only current state),
     -- this table grows indefinitely and is never pruned.
-    -- color = hex string (no #) OR the sentinel value 'erase'.
+    -- color     = hex string (no #) OR the sentinel value 'erase'.
+    -- prev_color = hex string (no #) of what was at (x,y) before this event,
+    --              or NULL if the cell was empty / not tracked.
     CREATE TABLE IF NOT EXISTS pixel_history (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      username  TEXT    NOT NULL,
-      x         INTEGER NOT NULL,
-      y         INTEGER NOT NULL,
-      color     TEXT    NOT NULL,
-      placed_at INTEGER NOT NULL
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      username   TEXT    NOT NULL,
+      x          INTEGER NOT NULL,
+      y          INTEGER NOT NULL,
+      color      TEXT    NOT NULL,
+      prev_color TEXT,
+      placed_at  INTEGER NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_ph_placed_at ON pixel_history(placed_at);
@@ -108,6 +111,19 @@ function initializeDatabase(db) {
     }
   } catch (err) {
     console.error('Migration error (accounts):', err);
+  }
+
+  // ── pixel_history migration: add prev_color if missing ───────────────────────
+  // Databases created before this column was added need a one-time ALTER TABLE.
+  // SQLite does not support IF NOT EXISTS on ALTER TABLE, so we check pragma first.
+  try {
+    const phCols = db.pragma('table_info(pixel_history)').map(c => c.name);
+    if (!phCols.includes('prev_color')) {
+      db.exec('ALTER TABLE pixel_history ADD COLUMN prev_color TEXT');
+      console.log('[db] Migration: added prev_color column to pixel_history');
+    }
+  } catch (err) {
+    console.error('Migration error (pixel_history prev_color):', err);
   }
 
   // ── pixels table migration: old schema had id PK + no UNIQUE(x,y) ────────────

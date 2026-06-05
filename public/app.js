@@ -574,6 +574,26 @@ const CUSTOM_PALETTE_KEY = 'sp_customPalette';
 const TOKEN_KEY = 'sp_token';
 const EVENT_KEY = 'sp_last_event';
 const PIXEL_HISTORY_KEY = 'sp_pixel_history';
+const SELECTED_COLOR_COOKIE = 'sp_selected_color';
+
+// ── Cookie helpers ─────────────────────────────────────────────────────────────
+function setCookie(name, value, days) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Strict`;
+}
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function saveSelectedColor(hex) {
+  try { setCookie(SELECTED_COLOR_COOKIE, hex, 365); } catch { /* ignore */ }
+}
+
+function loadSelectedColor() {
+  try { return getCookie(SELECTED_COLOR_COOKIE) || null; } catch { return null; }
+}
 // Declared here (top of DOMContentLoaded) so clearToken(), updateAuthState(),
 // and checkVerifiedParam() can all reference it without a TDZ ReferenceError.
 const EMAIL_VERIFIED_KEY = 'sp_email_verified';
@@ -854,6 +874,8 @@ async function loadServerPalette() {
       data.colors.forEach(item => paletteColors.push(asPaletteEntry(item)));
       // Ensure the standard rainbow colors are present in the loaded palette
       ensureRainbowInPalette(paletteColors);
+      // Restore previously selected color from cookie
+      _restoreColorFromCookie();
       return;
     }
   } catch (error) {
@@ -863,6 +885,8 @@ async function loadServerPalette() {
   DEFAULT_PALETTE.forEach(item => paletteColors.push(asPaletteEntry(item)));
   // Ensure the defaults include rainbow colors (safety)
   ensureRainbowInPalette(paletteColors);
+  // Restore previously selected color from cookie
+  _restoreColorFromCookie();
 }
 
 /**
@@ -883,6 +907,20 @@ function ensureRainbowInPalette(list) {
       present.add(norm);
     }
   });
+}
+
+/**
+ * Restore the previously selected color from the cookie (called after palette loads).
+ * If the saved color exists in the palette, select it. Otherwise just apply it as a
+ * free color so the cursor preview is correct.
+ */
+function _restoreColorFromCookie() {
+  const saved = loadSelectedColor();
+  if (!saved) return;
+  const norm = normalizeHexColor(saved);
+  if (norm === '#000000' && saved !== '#000000' && saved !== '000000') return; // bad parse
+  // Apply the saved color — setColor will also re-save it (no-op), but that's harmless.
+  setColor(norm);
 }
 
 async function updateAuthState(retryCount = 0) {
@@ -1279,22 +1317,29 @@ function drawGrid() {
   const endCol   = Math.min(BOARD_WIDTH,  Math.ceil((clipR - offsetX) / scale));
   const endRow   = Math.min(BOARD_HEIGHT, Math.ceil((clipB - offsetY) / scale));
 
-  // Collect unique x positions (duplicate-pixel guard for awkward zoom levels)
+  // Collect unique x positions (duplicate-pixel guard for awkward zoom levels).
+  // Do NOT floor here — exact float coords let the canvas anti-alias each line
+  // at its true position, giving perfectly uniform cell widths at any zoom.
+  // The duplicate guard uses Math.round so that two positions which differ by
+  // less than half a pixel (and would alias onto the same physical pixel) are
+  // still collapsed into one line.
   const xs = [];
-  let lastX = -Infinity;
+  let lastXr = -Infinity;
   for (let col = startCol; col <= endCol; col++) {
-    const x = Math.floor(col * scale + offsetX);
-    if (x === lastX || x < clipL || x > clipR + 1) continue;
-    lastX = x;
+    const x  = col * scale + offsetX;
+    const xr = Math.round(x);
+    if (xr === lastXr || x < clipL || x > clipR + 1) continue;
+    lastXr = xr;
     xs.push(x);
   }
 
   const ys = [];
-  let lastY = -Infinity;
+  let lastYr = -Infinity;
   for (let row = startRow; row <= endRow; row++) {
-    const y = Math.floor(row * scale + offsetY);
-    if (y === lastY || y < clipT || y > clipB + 1) continue;
-    lastY = y;
+    const y  = row * scale + offsetY;
+    const yr = Math.round(y);
+    if (yr === lastYr || y < clipT || y > clipB + 1) continue;
+    lastYr = yr;
     ys.push(y);
   }
 
@@ -1307,24 +1352,28 @@ function drawGrid() {
     gridCtx.lineWidth = 1;
     gridCtx.beginPath();
     for (const x of xs) {
-      gridCtx.moveTo(x + 0.5, clipT);
-      gridCtx.lineTo(x + 0.5, clipB);
+      const px = Math.round(x) + 0.5;
+      gridCtx.moveTo(px, clipT);
+      gridCtx.lineTo(px, clipB);
     }
     for (const y of ys) {
-      gridCtx.moveTo(clipL, y + 0.5);
-      gridCtx.lineTo(clipR, y + 0.5);
+      const py = Math.round(y) + 0.5;
+      gridCtx.moveTo(clipL, py);
+      gridCtx.lineTo(clipR, py);
     }
     gridCtx.stroke();
 
     gridCtx.strokeStyle = 'rgba(0,0,0,0.18)';
     gridCtx.beginPath();
     for (const x of xs) {
-      gridCtx.moveTo(x + 0.5, clipT);
-      gridCtx.lineTo(x + 0.5, clipB);
+      const px = Math.round(x) + 0.5;
+      gridCtx.moveTo(px, clipT);
+      gridCtx.lineTo(px, clipB);
     }
     for (const y of ys) {
-      gridCtx.moveTo(clipL, y + 0.5);
-      gridCtx.lineTo(clipR, y + 0.5);
+      const py = Math.round(y) + 0.5;
+      gridCtx.moveTo(clipL, py);
+      gridCtx.lineTo(clipR, py);
     }
     gridCtx.stroke();
   } else {
@@ -1335,28 +1384,32 @@ function drawGrid() {
     // White glow first
     gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
     for (const y of ys) {
+      const ry = Math.round(y);
       for (const x of xs) {
-        const left  = Math.min(armBase, x - offsetX);
-        const right = Math.min(armBase, boardScreenR - x);
-        const up    = Math.min(armBase, y - offsetY);
-        const down  = Math.min(armBase, boardScreenB - y);
+        const rx    = Math.round(x);
+        const left  = Math.min(armBase, rx - offsetX);
+        const right = Math.min(armBase, boardScreenR - rx);
+        const up    = Math.min(armBase, ry - offsetY);
+        const down  = Math.min(armBase, boardScreenB - ry);
 
-        gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
-        gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+        gridCtx.fillRect(rx - left, ry - thick/2, left + right, thick);
+        gridCtx.fillRect(rx - thick/2, ry - up, thick, up + down);
       }
     }
 
     // Dark core on top
     gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
     for (const y of ys) {
+      const ry = Math.round(y);
       for (const x of xs) {
-        const left  = Math.min(armBase, x - offsetX);
-        const right = Math.min(armBase, boardScreenR - x);
-        const up    = Math.min(armBase, y - offsetY);
-        const down  = Math.min(armBase, boardScreenB - y);
+        const rx    = Math.round(x);
+        const left  = Math.min(armBase, rx - offsetX);
+        const right = Math.min(armBase, boardScreenR - rx);
+        const up    = Math.min(armBase, ry - offsetY);
+        const down  = Math.min(armBase, boardScreenB - ry);
 
-        gridCtx.fillRect(x - left, y - thick/2, left + right, thick);
-        gridCtx.fillRect(x - thick/2, y - up, thick, up + down);
+        gridCtx.fillRect(rx - left, ry - thick/2, left + right, thick);
+        gridCtx.fillRect(rx - thick/2, ry - up, thick, up + down);
       }
     }
   }
@@ -1840,6 +1893,16 @@ function applyToolAtCell(x, y) {
     return;
   }
 
+  // Read the existing pixel color at (x, y) BEFORE painting over it.
+  // This is sent to the server so pixel_history can record what was there before.
+  let prevColor = null;
+  if (tool === 'brush') {
+    const prevPixel = bufferCtx.getImageData(x, y, 1, 1).data;
+    if (prevPixel[3] > 0) {
+      prevColor = rgbToHex(prevPixel[0], prevPixel[1], prevPixel[2]);
+    }
+  }
+
   // 1. Paint immediately to the buffer and flush to screen — zero latency
   paintPixel(x, y);
   lastPlaceAt = Date.now();
@@ -1866,6 +1929,7 @@ function applyToolAtCell(x, y) {
       x,
       y,
       color: tool === 'eraser' ? null : color,
+      prevColor: prevColor,
       size: pixelSize,
       tool,
       user: currentUser,
@@ -1923,7 +1987,7 @@ function broadcastEvent(event) {
       // floats can cause subtle mismatches on fractional zoom coords.
       const payload = event.tool === 'eraser'
         ? { x: Math.round(event.x), y: Math.round(event.y) }
-        : { x: Math.round(event.x), y: Math.round(event.y), color: event.color };
+        : { x: Math.round(event.x), y: Math.round(event.y), color: event.color, prevColor: event.prevColor || null };
       fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -2710,6 +2774,9 @@ function setColor(newColor, preferredBtn) {
   dispatchStateChange({ currentColor: norm });
   applyColorSwatchStyles(norm);
 
+  // Persist selected color to cookie so it survives tab close / refresh
+  saveSelectedColor(norm);
+
   // Track which paletteColors slot was last activated so the eyedropper
   // can prefer it over other same-hue slots when resolving ties.
   const activatedIdx = paletteColors.findIndex(e => normalizeHexColor(e.color) === norm);
@@ -2749,6 +2816,9 @@ function setColor(newColor, preferredBtn) {
   if (colorInput) colorInput.value = norm;
   dispatchStateChange({ currentColor: norm });
   applyColorSwatchStyles(norm);
+
+  // Persist selected color to cookie so it survives tab close / refresh
+  saveSelectedColor(norm);
 
   // Track which paletteColors slot was last activated so the eyedropper
   // can prefer it over other same-hue slots when resolving ties.
@@ -3394,6 +3464,18 @@ document.addEventListener('keydown', event => {
   if (target.closest?.('input, textarea, select')) return;
   // Don't steal Enter from focused toolbar/auth buttons (activation uses Enter).
   if (target.closest?.('button') && event.key === 'Enter') return;
+
+  // ── Arrow key jumps with Shift (×5) or Ctrl (×10) ─────────────────────────
+  // These must be handled before the generic hasModifier guard below.
+  if ((event.shiftKey || event.ctrlKey || event.metaKey) && !event.altKey) {
+    const jumpDist = (event.ctrlKey || event.metaKey) ? 10 : event.shiftKey ? 5 : 1;
+    switch (event.key) {
+      case 'ArrowUp':    moveCursorFromArrow(0, -jumpDist, event); return;
+      case 'ArrowDown':  moveCursorFromArrow(0,  jumpDist, event); return;
+      case 'ArrowLeft':  moveCursorFromArrow(-jumpDist, 0, event); return;
+      case 'ArrowRight': moveCursorFromArrow( jumpDist, 0, event); return;
+    }
+  }
 
   // Respect browser shortcuts when modifiers are used
   const hasModifier = event.ctrlKey || event.metaKey || event.altKey;

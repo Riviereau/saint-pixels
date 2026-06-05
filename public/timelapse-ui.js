@@ -653,6 +653,8 @@
   // ── Draw one event ────────────────────────────────────────────────────────────
   function drawEvent(ev) {
     if (ev.color === 'erase' || !ev.color) {
+      // If the server recorded what was there before the erase, show it briefly
+      // then clear it — otherwise just fill white.
       tlCtx.fillStyle = '#ffffff';
     } else {
       tlCtx.fillStyle = '#' + ev.color.replace(/^#/, '');
@@ -718,9 +720,22 @@
     subtitle.textContent = 'Fetching pixel history…';
 
     try {
-      // Pass a large limit to the server so we get as many events as possible
-      const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Include the auth token so the server can verify the request.
+      // The token is stored in localStorage under 'sp_token' by app.js.
+      const token = (() => { try { return localStorage.getItem('sp_token') || ''; } catch { return ''; } })();
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`, { headers });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          subtitle.textContent = 'Please log in to view the timelapse.';
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        loadBtn.disabled    = false;
+        loadBtn.textContent = 'Load';
+        return;
+      }
       const data = await res.json();
 
       events = Array.isArray(data.events) ? data.events : [];
