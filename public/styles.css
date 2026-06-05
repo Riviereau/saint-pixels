@@ -3231,3 +3231,23 @@ header.flex {
 
 /* ── Global: block scrollwheel from scrolling any sidebar/overflow element ── */
 /* Applied via JS (see app.js) — this rule keeps aside non-scrollable on desktop */
+
+/* ── Desktop: larger leaderboard + chat toggle tabs ──────────────────────── */
+/* On pointer-fine devices (mouse) both tabs get extra height and width so   */
+/* they're easier to spot and click. Mobile sizes are unchanged.              */
+@media (hover: hover) and (pointer: fine) {
+  :root { --lb-toggle-w: 36px; }
+
+  .lb-toggle {
+    width: var(--lb-toggle-w);
+    height: 80px;
+    border-radius: 0 14px 14px 0;
+  }
+
+  .chat-toggle-btn {
+    width: 36px;
+    height: 80px;
+    border-radius: 14px 0 0 14px;
+    font-size: 1.15rem;
+  }
+}

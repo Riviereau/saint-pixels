@@ -899,8 +899,14 @@ async function updateAuthState(retryCount = 0) {
     }
 
     if (!response.ok) {
-      // 401/403 = token genuinely invalid — clear it and show login
+      // 401/403 = token genuinely invalid — clear it and show login.
+      // But first check whether the 403 is specifically a ban response —
+      // if so show the ban screen instead of redirecting to the login overlay.
       if (response.status === 401 || response.status === 403) {
+        if (response.status === 403) {
+          const errData = await response.json().catch(() => ({}));
+          if (handleApiBanResponse(errData, response)) return;
+        }
         clearToken();
         currentUser = null;
         dispatchStateChange({ currentUser: null, emailVerified: false });
@@ -1060,6 +1066,7 @@ async function handleLogin(event) {
     const data = await response.json();
     if (!response.ok) {
       resetCaptcha();
+      if (handleApiBanResponse(data, response)) return;
       showAuthMessage(data.error || 'Login failed.');
       return;
     }
@@ -1131,36 +1138,64 @@ async function handleRegister(event) {
 }
 
 let _cooldownRafId = null;
+// Last-written values — used to skip identical DOM writes (prevents style
+// recalculations on every animation frame when the bar hasn't changed).
+let _cooldownLastPct   = -1;
+let _cooldownLastLabel = '';
+let _cooldownLastSec   = -1;
+
+function _setCooldownWidth(pct) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  // Round to 2 decimal places so tiny float jitter doesn't dirty the style.
+  const rounded = Math.round(clamped * 100) / 100;
+  if (rounded === _cooldownLastPct) return;
+  _cooldownLastPct = rounded;
+  cooldownFill.style.width = rounded + '%';
+}
+
+function _setCooldownLabel(text) {
+  if (text === _cooldownLastLabel) return;
+  _cooldownLastLabel = text;
+  cooldownBarLabel.textContent = text;
+}
+
 function updateCooldownLabel() {
   if (!cooldownBar || !cooldownFill || !cooldownBarLabel) return;
   if (!currentUser) {
     cooldownBar.classList.add('cooldown-bar--guest');
     cooldownBar.classList.remove('cooldown-bar--cooling');
-    cooldownFill.style.width = '100%';
-    cooldownBarLabel.textContent = 'Sign in to place pixels';
+    _setCooldownWidth(100);
+    _setCooldownLabel('Sign in to place pixels');
     if (_cooldownRafId) { cancelAnimationFrame(_cooldownRafId); _cooldownRafId = null; }
     return;
   }
   cooldownBar.classList.remove('cooldown-bar--guest');
   const remaining = Math.max(0, _activeCooldownMs - (Date.now() - lastPlaceAt));
   const recharged = 1 - remaining / _activeCooldownMs;
-  cooldownFill.style.width = `${Math.max(0, Math.min(100, recharged * 100))}%`;
+  _setCooldownWidth(recharged * 100);
   if (remaining > 0) {
     cooldownBar.classList.add('cooldown-bar--cooling');
-    cooldownBarLabel.textContent = `Cooldown · ${Math.ceil(remaining / 1000)}s`;
-    // Drive smooth updates via rAF while cooling
+    _setCooldownLabel(`Cooldown · ${Math.ceil(remaining / 1000)}s`);
+    // Drive smooth width updates via rAF while cooling; text only updates when
+    // the displayed second changes — avoids textContent writes at 60 fps.
     if (!_cooldownRafId) {
       const tick = () => {
         const rem = Math.max(0, _activeCooldownMs - (Date.now() - lastPlaceAt));
         const pct = (1 - rem / _activeCooldownMs) * 100;
-        cooldownFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        _setCooldownWidth(pct);
         if (rem > 0) {
-          cooldownBarLabel.textContent = `Cooldown · ${Math.ceil(rem / 1000)}s`;
+          // Only update the label when the ceil-second actually changes
+          const sec = Math.ceil(rem / 1000);
+          if (sec !== _cooldownLastSec) {
+            _cooldownLastSec = sec;
+            _setCooldownLabel(`Cooldown · ${sec}s`);
+          }
           _cooldownRafId = requestAnimationFrame(tick);
         } else {
-          cooldownFill.style.width = '100%';
+          _setCooldownWidth(100);
           cooldownBar.classList.remove('cooldown-bar--cooling');
-          cooldownBarLabel.textContent = 'Ready to place';
+          _setCooldownLabel('Ready to place');
+          _cooldownLastSec = -1;
           _cooldownRafId = null;
         }
       };
@@ -1168,7 +1203,8 @@ function updateCooldownLabel() {
     }
   } else {
     cooldownBar.classList.remove('cooldown-bar--cooling');
-    cooldownBarLabel.textContent = 'Ready to place';
+    _setCooldownLabel('Ready to place');
+    _cooldownLastSec = -1;
     if (_cooldownRafId) { cancelAnimationFrame(_cooldownRafId); _cooldownRafId = null; }
   }
 }
@@ -1403,6 +1439,11 @@ function _doRender() {
 
   // Redraw grid only when scale/offset changed — grid lives on its own canvas
   drawGridIfDirty();
+
+  // During active panning the cursor position doesn't change — skip the overlay
+  // clear+redraw entirely.  This removes one canvas clear + draw call per frame
+  // while panning, which is the hottest render path.
+  if (isPanning) return;
 
   // Overlay is cursor-only; clear and redraw just the cursor highlight
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2854,6 +2895,8 @@ function handlePanEnd() {
   if (tool === 'hand') {
     viewport.classList.add('tool-hand-active');
   }
+  // Restore the cursor overlay — it was skipped during the pan
+  redrawOverlay();
 }
 
 function resizeViewport() {
