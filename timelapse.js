@@ -341,7 +341,7 @@ async function main() {
   const ffmpegStdin = ffmpeg.stdin;
 
   let ffmpegExitCode = null;
-  const ffmpegClosed = new Promise(resolve => {
+  const ffmpegClosed = new Promise((resolve, reject) => {
     ffmpeg.on('close', code => { ffmpegExitCode = code; resolve(); });
     ffmpeg.on('error', err => {
       if (err.code === 'ENOENT') {
@@ -352,7 +352,7 @@ async function main() {
       }
       console.error('[timelapse] ffmpeg error:', err.message);
       ffmpegExitCode = -1;
-      resolve();
+      reject(err);
     });
   });
 
@@ -424,7 +424,12 @@ async function main() {
   console.log('[timelapse] Encoding -- waiting for ffmpeg to finish...');
 
   ffmpegStdin.end();
-  await ffmpegClosed;
+  try {
+    await ffmpegClosed;
+  } catch (ffmpegErr) {
+    // Error already logged by the 'error' handler above
+    process.exit(1);
+  }
 
   if (ffmpegExitCode !== 0) {
     console.error(`[timelapse] ffmpeg exited with code ${ffmpegExitCode}`);

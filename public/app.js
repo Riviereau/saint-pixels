@@ -1900,11 +1900,9 @@ function applyToolAtCell(x, y) {
   // Read the existing pixel color at (x, y) BEFORE painting over it.
   // This is sent to the server so pixel_history can record what was there before.
   let prevColor = null;
-  if (tool === 'brush') {
-    const prevPixel = bufferCtx.getImageData(x, y, 1, 1).data;
-    if (prevPixel[3] > 0) {
-      prevColor = rgbToHex(prevPixel[0], prevPixel[1], prevPixel[2]);
-    }
+  const prevPixel = bufferCtx.getImageData(x, y, 1, 1).data;
+  if (prevPixel[3] > 0) {
+    prevColor = rgbToHex(prevPixel[0], prevPixel[1], prevPixel[2]);
   }
 
   // 1. Paint immediately to the buffer and flush to screen — zero latency
@@ -1977,6 +1975,16 @@ function appendHistory(event) {
 }
 
 function broadcastEvent(event) {
+  function rollbackPixel() {
+    if (event.prevColor) {
+      // Restore the color that was there before
+      paintPixel(event.x, event.y, event.size || 1, 'brush', event.prevColor);
+    } else {
+      // It was empty before, so erase the optimistic placement
+      paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
+    }
+    redraw();
+  }
   // Write EVENT_KEY synchronously so other tabs get it immediately,
   // but defer the heavier history append to keep the click path instant.
   localStorage.setItem(EVENT_KEY, JSON.stringify(event));

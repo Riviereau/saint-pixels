@@ -112,6 +112,8 @@
             </svg>
             <span>Press Load to fetch pixel history</span>
           </div>
+          <!-- Error banner (visible on load failure) -->
+          <div id="tl-error-banner" class="tl-error-banner" style="display:none" role="alert"></div>
           <!-- Zoom reset hint (visible when zoomed) -->
           <button id="tl-zoom-reset" class="tl-zoom-reset hidden" type="button" title="Reset zoom">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/><path d="M8 11h6M11 8v6"/></svg>
@@ -408,9 +410,22 @@
   const fsExpand      = document.getElementById('tl-fs-expand');
   const fsCollapse    = document.getElementById('tl-fs-collapse');
   const zoomResetBtn  = document.getElementById('tl-zoom-reset');
+  const errorBanner   = document.getElementById('tl-error-banner');
 
-  // Crisp pixel rendering
-  tlCtx.imageSmoothingEnabled = false;
+  // ── Error banner helper ───────────────────────────────────────────────────────
+  function showError(msg) {
+    errorBanner.textContent = msg;
+    errorBanner.style.display = 'flex';
+    // Ensure placeholder is visible (canvas not yet loaded)
+    if (!events.length) {
+      placeholder.style.display = 'flex';
+      tlCanvas.style.display    = 'none';
+    }
+  }
+  function clearError() {
+    errorBanner.style.display = 'none';
+    errorBanner.textContent   = '';
+  }
 
   // ── Player state ──────────────────────────────────────────────────────────────
   let events  = [];
@@ -427,12 +442,15 @@
     speedLabel.textContent = SPEED_NAMES[parseInt(speedSlider.value, 10) - 1] ?? 'Normal';
   });
 
+  // Background colour — matches the server-side CLI default (--bg 2e2e2f)
+  const CANVAS_BG = '#2e2e2f';
+
   // ── Canvas helpers ────────────────────────────────────────────────────────────
   function initCanvas() {
     tlCanvas.width  = BOARD_W;
     tlCanvas.height = BOARD_H;
     tlCtx.imageSmoothingEnabled = false;
-    tlCtx.fillStyle = '#ffffff';
+    tlCtx.fillStyle = CANVAS_BG;
     tlCtx.fillRect(0, 0, BOARD_W, BOARD_H);
     placeholder.style.display = 'none';
     tlCanvas.style.display    = 'block';
@@ -441,7 +459,7 @@
 
   function resetCanvas() {
     tlCtx.imageSmoothingEnabled = false;
-    tlCtx.fillStyle = '#ffffff';
+    tlCtx.fillStyle = CANVAS_BG;
     tlCtx.fillRect(0, 0, BOARD_W, BOARD_H);
   }
 
@@ -464,8 +482,6 @@
     const cW    = tlCanvas.offsetWidth  * tlScale;
     const cH    = tlCanvas.offsetHeight * tlScale;
 
-    const maxX =  (cW - wrapR.width)  / 2 + Math.max(0, (cW - wrapR.width)  / 2);
-    const maxY =  (cH - wrapR.height) / 2 + Math.max(0, (cH - wrapR.height) / 2);
     const limitX = Math.max(0, (cW - wrapR.width)  / 2);
     const limitY = Math.max(0, (cH - wrapR.height) / 2);
 
@@ -653,9 +669,7 @@
   // ── Draw one event ────────────────────────────────────────────────────────────
   function drawEvent(ev) {
     if (ev.color === 'erase' || !ev.color) {
-      // If the server recorded what was there before the erase, show it briefly
-      // then clear it — otherwise just fill white.
-      tlCtx.fillStyle = '#ffffff';
+      tlCtx.fillStyle = CANVAS_BG;
     } else {
       tlCtx.fillStyle = '#' + ev.color.replace(/^#/, '');
     }
@@ -718,6 +732,7 @@
     loadBtn.disabled     = true;
     loadBtn.textContent  = 'Loading…';
     subtitle.textContent = 'Fetching pixel history…';
+    clearError();
 
     try {
       // Include the auth token so the server can verify the request.
@@ -727,11 +742,13 @@
 
       const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`, { headers });
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          subtitle.textContent = 'Please log in to view the timelapse.';
-        } else {
-          throw new Error(`HTTP ${res.status}`);
-        }
+        const errMsg = (res.status === 401 || res.status === 403)
+          ? 'Please log in to view the timelapse.'
+          : `Failed to load (HTTP ${res.status}) — try again later.`;
+        subtitle.textContent = errMsg;
+        showError(errMsg);
+        // Reset downloadBtn if a previous load had enabled it but this reload failed
+        if (!events.length) downloadBtn.disabled = true;
         loadBtn.disabled    = false;
         loadBtn.textContent = 'Load';
         return;
@@ -740,7 +757,10 @@
 
       events = Array.isArray(data.events) ? data.events : [];
       if (!events.length) {
-        subtitle.textContent = 'No pixel history yet — start painting!';
+        const msg = 'No pixel history yet — start painting!';
+        subtitle.textContent = msg;
+        showError(msg);
+        downloadBtn.disabled = true;
         loadBtn.disabled    = false;
         loadBtn.textContent = 'Load';
         return;
@@ -761,7 +781,10 @@
 
     } catch (err) {
       console.error('[timelapse-ui] load error:', err);
-      subtitle.textContent = 'Failed to load — try again later.';
+      const msg = 'Failed to load — try again later.';
+      subtitle.textContent = msg;
+      showError(msg);
+      if (!events.length) downloadBtn.disabled = true;
       loadBtn.disabled     = false;
       loadBtn.textContent  = 'Retry';
     }
