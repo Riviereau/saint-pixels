@@ -1097,8 +1097,6 @@
 #overlay {
   z-index: 3;
   pointer-events: auto;
-  will-change: contents;
-  contain: strict;
 }
 .toggle-btn.active, .tool.active {
   background-color: rgba(56,189,248,0.28) !important;
