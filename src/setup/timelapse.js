@@ -234,10 +234,22 @@ async function runJob(job, db) {
     if (SCALE !== 1) outCtx.drawImage(canvas, 0, 0, OUT_W, OUT_H);
     drawWatermark();
     const buf = outCanvas.toBuffer('raw');
-    // Erase watermark region for next frame
+    // Erase watermark region so it doesn't persist into the next frame's pixels.
+    // When SCALE === 1, outCtx === ctx (same canvas), so we must restore the
+    // pixel data from the source rather than just clearing — otherwise the
+    // watermark strip is wiped from the source canvas too and every subsequent
+    // frame has a blank band at the bottom.
     if (WATERMARK) {
-      outCtx.clearRect(0, OUT_H - FONT_SIZE * 2 - 10, OUT_W, FONT_SIZE * 2 + 10);
-      if (SCALE !== 1) outCtx.drawImage(canvas, 0, 0, OUT_W, OUT_H);
+      const wy = OUT_H - FONT_SIZE * 2 - 10;
+      const wh = FONT_SIZE * 2 + 10;
+      if (SCALE === 1) {
+        // Re-fill with background colour to restore the source canvas state.
+        outCtx.fillStyle = BG_HEX;
+        outCtx.fillRect(0, wy, OUT_W, wh);
+      } else {
+        outCtx.clearRect(0, wy, OUT_W, wh);
+        outCtx.drawImage(canvas, 0, wy, OUT_W, wh, 0, wy, OUT_W, wh);
+      }
     }
     const ok = ffmpegStdin.write(buf);
     job.progress.frames++;

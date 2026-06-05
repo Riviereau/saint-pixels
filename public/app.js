@@ -1258,7 +1258,7 @@ function drawGrid() {
   let lastX = -Infinity;
   for (let col = startCol; col <= endCol; col++) {
     const x = Math.floor(col * scale + offsetX);
-    if (x === lastX || x < clipL || x > clipR) continue;
+    if (x === lastX || x < clipL || x > clipR + 1) continue;
     lastX = x;
     xs.push(x);
   }
@@ -1267,7 +1267,7 @@ function drawGrid() {
   let lastY = -Infinity;
   for (let row = startRow; row <= endRow; row++) {
     const y = Math.floor(row * scale + offsetY);
-    if (y === lastY || y < clipT || y > clipB) continue;
+    if (y === lastY || y < clipT || y > clipB + 1) continue;
     lastY = y;
     ys.push(y);
   }
@@ -2933,11 +2933,11 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', resizeViewport);
   window.visualViewport.addEventListener('scroll', resizeViewport);
 }
-canvas.addEventListener('mousedown', event => {
+overlay.addEventListener('mousedown', event => {
   startAction(event);
 });
 
-canvas.addEventListener('mousemove', event => {
+overlay.addEventListener('mousemove', event => {
   lastPointerClientX = event.clientX;
   lastPointerClientY = event.clientY;
   
@@ -2989,7 +2989,7 @@ canvas.addEventListener('mousemove', event => {
   }
 });
 
-canvas.addEventListener('mouseup', event => {
+overlay.addEventListener('mouseup', event => {
   if (isPanning) {
     handlePanEnd(); 
     return;
@@ -3003,13 +3003,13 @@ document.addEventListener('mousemove', event => {
 document.addEventListener('mouseup', event => {
   if (isPanning) handlePanEnd(); 
 });
-canvas.addEventListener('mouseleave', () => {
+overlay.addEventListener('mouseleave', () => {
   //isMouseDown = false;
   //disarmKeyboardCursor();
   //cursorPosition = null;
   //redraw();
 });
-canvas.addEventListener('wheel', handleWheel, { passive: false });
+overlay.addEventListener('wheel', handleWheel, { passive: false });
 
 zoomInput.addEventListener('input', event => {
   const nextZoom = Number(event.target.value) / 100;
