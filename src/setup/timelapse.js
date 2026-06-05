@@ -67,6 +67,15 @@ const LEGACY_GAP_MS = 3200; // ms between consecutive legacy events
  * @returns {{ username: string, x: number, y: number, color: string, prev_color: string|null, placed_at: number }[]}
  */
 function buildFullEventStream(db, filters = {}) {
+  // ── Guard: check pixel_history exists before querying it ───────────────────
+  // Databases that were set up before the pixel_history migration was added
+  // won't have the table yet.  Querying a non-existent table throws, which
+  // propagates up to the /api/timelapse/history route and causes a 500 that
+  // makes the UI show "Failed to load".  Fall back gracefully to pixels-only.
+  const historyTableExists = !!db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pixel_history'"
+  ).get();
+
   // ── Step 1: real history rows (with optional filters) ──────────────────────
   let WHERE = '1=1';
   const bindings = [];
@@ -83,15 +92,20 @@ function buildFullEventStream(db, filters = {}) {
     WHERE += ' AND username = ?'; bindings.push(filters.user);
   }
 
-  const historyRows = db.prepare(
-    `SELECT username, x, y, color, prev_color, placed_at
-     FROM pixel_history WHERE ${WHERE} ORDER BY placed_at ASC`
-  ).all(...bindings);
+  const historyRows = historyTableExists
+    ? db.prepare(
+        `SELECT username, x, y, color, prev_color, placed_at
+         FROM pixel_history WHERE ${WHERE} ORDER BY placed_at ASC`
+      ).all(...bindings)
+    : [];
 
   // ── Step 2: legacy pixels absent from pixel_history ────────────────────────
-  // If pixel_history is completely empty, every pixel in the board is legacy.
+  // If pixel_history doesn't exist OR is completely empty, every pixel on the
+  // board is legacy — load them all from `pixels`.
+  // If pixel_history exists and has rows, find (x,y) pairs that never appear
+  // in it — those were placed before history logging began.
   let legacyRows;
-  if (historyRows.length === 0) {
+  if (!historyTableExists || historyRows.length === 0) {
     legacyRows = db.prepare(
       'SELECT username, x, y, color, placed_at FROM pixels ORDER BY placed_at ASC'
     ).all();
@@ -112,19 +126,18 @@ function buildFullEventStream(db, filters = {}) {
   let syntheticRows = [];
   if (legacyRows.length > 0) {
     // Anchor just before the first real history event (or now if none).
-    // Unfiltered historyRows are needed here, so fetch the earliest real event.
-    const earliestReal = db.prepare(
-      'SELECT placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT 1'
-    ).get();
+    const earliestReal = historyTableExists
+      ? db.prepare('SELECT placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT 1').get()
+      : null;
     const anchor   = earliestReal ? earliestReal.placed_at : Date.now();
     const startTs  = anchor - legacyRows.length * LEGACY_GAP_MS;
     syntheticRows  = legacyRows.map((r, i) => ({
-      username:  r.username,
-      x:         r.x,
-      y:         r.y,
-      color:     r.color,
+      username:   r.username,
+      x:          r.x,
+      y:          r.y,
+      color:      r.color,
       prev_color: null,
-      placed_at: startTs + i * LEGACY_GAP_MS,
+      placed_at:  startTs + i * LEGACY_GAP_MS,
     }));
   }
 
