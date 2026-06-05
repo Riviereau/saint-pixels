@@ -1054,11 +1054,14 @@
     align-items: flex-start !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    /* Use dynamic viewport height so the overlay never hides behind the mobile
-       browser chrome (address bar + nav bar). dvh falls back to vh on older browsers. */
+    /* dvh = dynamic viewport height — shrinks when keyboard appears,
+       so the overlay stays scrollable and nothing hides behind the keyboard */
     min-height: 100dvh;
     height: 100dvh !important;
     padding: 16px 12px env(safe-area-inset-bottom, 16px);
+    /* When keyboard opens, browsers that support interactive-widget will
+       resize this element. For others, scroll-padding nudges content up. */
+    scroll-padding-bottom: 20px;
   }
   #authOverlay > div {
     margin: auto;

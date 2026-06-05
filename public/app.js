@@ -712,6 +712,14 @@ function connectSSE() {
       } else if (event.type === 'chat') {
         // Forward chat messages to the chat panel (chat.js)
         if (typeof window.__chatIncoming === 'function') window.__chatIncoming(event);
+      } else if (event.type === 'email_verified') {
+        // Server confirmed this username's email was just verified.
+        // If it matches the currently logged-in user, dismiss the banner
+        // instantly without requiring a page refresh.
+        if (event.username && event.username === currentUser) {
+          localStorage.setItem(EMAIL_VERIFIED_KEY, '1');
+          dispatchStateChange({ emailVerified: true });
+        }
       }
     } catch { /* ignore malformed events */ }
   };
@@ -3196,6 +3204,10 @@ function setAuthMode(mode) {
   // Uncheck when switching away from register so it resets cleanly
   if (!isRegister && rulesCheck) rulesCheck.checked = false;
 
+  // Show / hide captcha (register only — no need to solve it for login)
+  const captchaWrapper = document.getElementById('authCaptchaWrapper');
+  if (captchaWrapper) captchaWrapper.style.display = isRegister ? '' : 'none';
+
   // Update submit button label
   if (authSubmit) authSubmit.textContent = isRegister ? 'Create account' : 'Login';
 
@@ -3250,6 +3262,28 @@ function syncPasswordAutocomplete() {
 // Initialise to login mode
 setAuthMode('login');
 syncPasswordAutocomplete();
+
+// ── Mobile keyboard scroll fix ────────────────────────────────────────────────
+// When the virtual keyboard opens on mobile, the auth overlay can push the
+// focused input behind the keyboard. We listen for visualViewport resize events
+// (which fire when the keyboard appears/disappears) and scroll the focused
+// input into view inside the auth overlay.
+(function setupAuthKeyboardScroll() {
+  if (!window.visualViewport) return;
+  const authOverlay = document.getElementById('authOverlay');
+  if (!authOverlay) return;
+
+  function scrollFocusedInputIntoView() {
+    const focused = document.activeElement;
+    if (!focused || !authOverlay.contains(focused)) return;
+    // Small delay lets the browser finish its own layout before we measure
+    requestAnimationFrame(() => {
+      focused.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+
+  window.visualViewport.addEventListener('resize', scrollFocusedInputIntoView);
+})();
 
 // ─── Rules modal ─────────────────────────────────────────────────────────────
 // The rules window is #sp-rules-window (managed by rules.js).

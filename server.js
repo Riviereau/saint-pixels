@@ -663,6 +663,9 @@ app.get('/api/verify-email', verifyEmailLimiter, (req, res) => {
 
     db.prepare('UPDATE accounts SET email_verified = 1 WHERE username = ?').run(row.username);
     db.prepare('UPDATE email_verifications SET used = 1 WHERE token = ?').run(token);
+    // Broadcast to all connected clients so any open tab for this user
+    // updates its banner without needing a manual refresh.
+    broadcastSSE({ type: 'email_verified', username: row.username });
     return res.redirect('/?verified=1');
   } catch (err) {
     console.error('Verify email error:', err);
