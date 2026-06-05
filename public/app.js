@@ -1830,7 +1830,7 @@ function applyToolAtCell(x, y) {
   }
 
   // 2. Full redraw (grid, cursor, overlay) deferred one frame — invisible delay
-  requestAnimationFrame(() => redraw());
+  redraw();
 
   // 3. Defer storage/broadcast off the hot path entirely
   setTimeout(() => {
@@ -2605,6 +2605,40 @@ function rulerRepositionLabels() {
 /** Perceived brightness 0–255; pick label ink for small hex swatches in the top bar. */
 function brightnessRgb(r, g, b) {
   return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+function setColor(newColor, preferredBtn) {
+  const norm = normalizeHexColor(newColor);
+  color = norm;
+  if (colorInput) colorInput.value = norm;
+  dispatchStateChange({ currentColor: norm });
+  applyColorSwatchStyles(norm);
+
+  // Track which paletteColors slot was last activated so the eyedropper
+  // can prefer it over other same-hue slots when resolving ties.
+  const activatedIdx = paletteColors.findIndex(e => normalizeHexColor(e.color) === norm);
+  if (activatedIdx !== -1) lastUsedPaletteIdx = activatedIdx;
+
+  // If a specific button is preferred (e.g. after an eyedropper pick that
+  // updates exactly one slot), mark only that button as selected so two
+  // buttons with the same hex never both light up at once.
+  const allBtns = document.querySelectorAll('#palette button, #fullscreen-palette button');
+  if (preferredBtn) {
+    allBtns.forEach(b => b.classList.remove('selected'));
+    preferredBtn.classList.add('selected');
+  } else {
+    // Normal path: first button whose color matches gets selected; if multiple
+    // share the same hex (e.g. after a variation pick), only the first is marked.
+    let marked = false;
+    allBtns.forEach(b => {
+      const matches = !marked && normalizeHexColor(b.dataset.color) === norm;
+      b.classList.toggle('selected', matches);
+      if (matches) marked = true;
+    });
+  }
+
+  // Redraw immediately so cursor preview color updates without waiting for mousemove
+  redraw();
 }
 
 function applyColorSwatchStyles(hex) {
