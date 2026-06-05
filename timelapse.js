@@ -162,8 +162,14 @@ const CROP_ENABLED = CROP_ARG !== null;
 
 // Output dimensions: scale is applied to the crop region (or full board if no crop).
 // H.264 (libx264) requires both width and height to be even — snap up if needed.
-const OUT_W   = Math.ceil(Math.round(CROP_W / SCALE) / 2) * 2;
-const OUT_H   = Math.ceil(Math.round(CROP_H / SCALE) / 2) * 2;
+// At SCALE=1 we snap the crop size to even (required by libx264) but use
+// getImageData/putImageData to copy, so the 1-px pad never causes interpolation.
+const OUT_W   = SCALE === 1
+  ? Math.ceil(CROP_W / 2) * 2
+  : Math.ceil(Math.round(CROP_W / SCALE) / 2) * 2;
+const OUT_H   = SCALE === 1
+  ? Math.ceil(CROP_H / 2) * 2
+  : Math.ceil(Math.round(CROP_H / SCALE) / 2) * 2;
 
 // Events-per-frame (may be fractional — we accumulate)
 const EVENTS_PER_FRAME = PPS / FPS;
@@ -363,6 +369,11 @@ console.log(`[timelapse] Output: ${OUT_PATH}`);
 const canvas = createCanvas(BOARD_W, BOARD_H);
 const ctx    = canvas.getContext('2d');
 
+// Disable smoothing — keeps every pixel crisp (no bilinear interpolation)
+ctx.imageSmoothingEnabled = false;
+ctx.patternQuality        = 'nearest';
+ctx.quality               = 'nearest';
+
 // Fill background
 ctx.fillStyle = BG_HEX;
 ctx.fillRect(0, 0, BOARD_W, BOARD_H);
@@ -391,6 +402,10 @@ if (SCALE === 1 && !CROP_ENABLED) {
   // OUT_W and OUT_H are already snapped to even, so this is the correct size.
   outCanvas = createCanvas(OUT_W, OUT_H);
   outCtx    = outCanvas.getContext('2d');
+  // Disable smoothing on the output canvas too — critical when scaling/cropping
+  outCtx.imageSmoothingEnabled = false;
+  outCtx.patternQuality        = 'nearest';
+  outCtx.quality               = 'nearest';
 }
 
 // ── ffmpeg setup ──────────────────────────────────────────────────────────────
@@ -414,7 +429,8 @@ const ffmpegArgs = [
   '-s', `${OUT_W}x${OUT_H}`,
   '-r', String(FPS),
   '-i', 'pipe:0',
-  '-vf', 'format=yuv420p',
+  '-sws_flags', 'neighbor',          // nearest-neighbour resampling — keeps pixels sharp
+  '-pix_fmt', 'yuv420p',             // colour format without triggering a filter graph
   '-c:v', 'libx264',
   '-preset', 'fast',
   '-crf', '18',
@@ -476,15 +492,39 @@ function normalizeColor(c) {
 
 // ── Write one frame to ffmpeg ─────────────────────────────────────────────────
 
+// Helper: create a canvas context with all smoothing disabled.
+function crispContext(w, h) {
+  const c   = createCanvas(w, h);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.patternQuality        = 'nearest';
+  ctx.quality               = 'nearest';
+  return { canvas: c, ctx };
+}
+
+// Helper: copy a region of the board canvas into outCtx pixel-exactly.
+// Uses getImageData / putImageData so no interpolation is possible — drawImage
+// can still blur when the source and dest dimensions differ by even 1 px (the
+// even-snap on OUT_W/OUT_H can cause exactly that).
+function blitCrop() {
+  const imageData = ctx.getImageData(CROP_X0, CROP_Y0, CROP_W, CROP_H);
+  outCtx.putImageData(imageData, 0, 0);
+}
+
 function writeFrame() {
   let buf;
   if (SCALE === 1 && !CROP_ENABLED) {
     // Fast path: no transform — use the main canvas buffer directly.
     buf = outCanvas.toBuffer('raw');
+  } else if (SCALE === 1 && CROP_ENABLED) {
+    // Crop only, no scale — copy pixels exactly via getImageData/putImageData.
+    // This avoids any interpolation that drawImage can introduce when OUT_W or
+    // OUT_H has been snapped to even and differs from CROP_W/CROP_H by 1 px.
+    blitCrop();
+    buf = outCanvas.toBuffer('raw');
   } else {
-    // drawImage(src, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
-    // Source rect  = the crop region on the full-res board canvas.
-    // Dest rect    = the full output canvas (handles both crop and scale).
+    // Scale (and optional crop) — drawImage is required for downscaling.
+    // imageSmoothingEnabled=false on outCtx ensures nearest-neighbour sampling.
     outCtx.drawImage(
       canvas,
       CROP_X0, CROP_Y0, CROP_W, CROP_H,  // source: crop window
@@ -498,8 +538,7 @@ function writeFrame() {
       // Fast path: outCtx === ctx (the main board canvas). Drawing on it and
       // then clearing would corrupt board state for subsequent frames.
       // Composite the watermark onto a temporary canvas for this frame only.
-      const tmpCanvas = createCanvas(OUT_W, OUT_H);
-      const tmpCtx    = tmpCanvas.getContext('2d');
+      const { canvas: tmpCanvas, ctx: tmpCtx } = crispContext(OUT_W, OUT_H);
       tmpCtx.drawImage(outCanvas, 0, 0);
       drawWatermark(tmpCtx);
       buf = tmpCanvas.toBuffer('raw');
@@ -507,12 +546,16 @@ function writeFrame() {
       // Separate outCanvas — safe to draw the watermark directly.
       drawWatermark(outCtx);
       buf = outCanvas.toBuffer('raw');
-      // Restore the output canvas for the next frame by redrawing the board region.
-      outCtx.drawImage(
-        canvas,
-        CROP_X0, CROP_Y0, CROP_W, CROP_H,
-        0,       0,       OUT_W,  OUT_H
-      );
+      // Restore the output canvas for the next frame.
+      if (SCALE === 1 && CROP_ENABLED) {
+        blitCrop();
+      } else {
+        outCtx.drawImage(
+          canvas,
+          CROP_X0, CROP_Y0, CROP_W, CROP_H,
+          0,       0,       OUT_W,  OUT_H
+        );
+      }
     }
   }
 

@@ -101,9 +101,9 @@
   color: #cbd5e1;
 }
 .settings-tab.active {
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.08);
-  border-color: rgba(56, 189, 248, 0.25);
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 /* ── Tab panels ───────────────────────────────────────────────────────── */
@@ -162,8 +162,8 @@
 
 /* Unlocked state */
 .settings-achievement-item.unlocked {
-  background: rgba(56, 189, 248, 0.06);
-  border-color: rgba(56, 189, 248, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 /* Ultra unlocked state */
@@ -270,10 +270,10 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #38bdf8;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: #e2e8f0;
+  border: 2px solid rgba(255, 255, 255, 0.3);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 6px rgba(226, 232, 240, 0.35);
   transition: transform 0.1s;
   /* Centre the thumb vertically on the track */
   margin-top: -9.5px;
@@ -290,8 +290,8 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #38bdf8;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: #e2e8f0;
+  border: 2px solid rgba(255, 255, 255, 0.3);
   cursor: pointer;
 }
 

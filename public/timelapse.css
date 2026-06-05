@@ -67,13 +67,13 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(168, 85, 247, 0.13);
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #c084fc;
+  color: #cbd5e1;
 }
 .tl-title {
   font-size: 0.97rem;
@@ -130,9 +130,9 @@
 }
 .tl-tab:hover { color: #cbd5e1; }
 .tl-tab.active {
-  color: #c084fc;
-  background: rgba(168, 85, 247, 0.08);
-  border-color: rgba(168, 85, 247, 0.28);
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 /* ── Tab panels ───────────────────────────────────────────────────────── */
@@ -190,19 +190,19 @@
   line-height: 1.5;
 }
 .tl-chip.purple {
-  background: rgba(168, 85, 247, 0.07);
-  border: 1px solid rgba(168, 85, 247, 0.2);
-  color: #d8b4fe;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
 }
 .tl-chip.sky {
-  background: rgba(56, 189, 248, 0.07);
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  color: #7dd3fc;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
 }
 .tl-chip.amber {
-  background: rgba(250, 204, 21, 0.07);
-  border: 1px solid rgba(250, 204, 21, 0.2);
-  color: #fde68a;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
 }
 .tl-chip-dot {
   flex-shrink: 0;
@@ -211,9 +211,9 @@
   border-radius: 50%;
   margin-top: 0.38em;
 }
-.tl-chip.purple .tl-chip-dot { background: #a855f7; }
-.tl-chip.sky    .tl-chip-dot { background: #38bdf8; }
-.tl-chip.amber  .tl-chip-dot { background: #facc15; }
+.tl-chip.purple .tl-chip-dot { background: #94a3b8; }
+.tl-chip.sky    .tl-chip-dot { background: #94a3b8; }
+.tl-chip.amber  .tl-chip-dot { background: #94a3b8; }
 
 /* ── Command block ────────────────────────────────────────────────────── */
 .tl-cmd-block {
@@ -237,7 +237,7 @@
   padding: 0.5rem 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.78rem;
-  color: #a78bfa;
+  color: #cbd5e1;
   word-break: break-all;
   position: relative;
   cursor: pointer;
@@ -245,14 +245,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 .tl-cmd:hover {
-  border-color: rgba(168, 85, 247, 0.4);
+  border-color: rgba(255, 255, 255, 0.2);
   background: rgba(0, 0, 0, 0.6);
 }
 .tl-cmd .tl-cmd-text { flex: 1; }
 .tl-cmd-copy-btn {
   background: none;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #a78bfa;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
   border-radius: 6px;
   padding: 3px 8px;
   font-size: 0.68rem;
@@ -266,10 +266,10 @@
 }
 .tl-cmd-copy-btn:hover,
 .tl-cmd-copy-btn.copied {
-  background: rgba(168, 85, 247, 0.18);
-  color: #d8b4fe;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
 }
-.tl-cmd-copy-btn.copied { border-color: rgba(168, 85, 247, 0.6); }
+.tl-cmd-copy-btn.copied { border-color: rgba(255, 255, 255, 0.3); }
 
 /* ── Option table ─────────────────────────────────────────────────────── */
 .tl-options-table {
@@ -294,7 +294,7 @@
   padding: 0.42rem 0.7rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.74rem;
-  color: #a78bfa;
+  color: #cbd5e1;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   word-break: break-all;
 }
@@ -342,7 +342,7 @@
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 4px;
   padding: 0px 5px;
-  color: #c084fc;
+  color: #cbd5e1;
 }
 
 /* ── FAQ / accordion items ────────────────────────────────────────────── */
@@ -396,7 +396,7 @@
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 4px;
   padding: 0px 5px;
-  color: #c084fc;
+  color: #cbd5e1;
 }
 .tl-faq-item.open .tl-faq-a { display: block; }
 
@@ -427,7 +427,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.78rem;
   font-weight: 700;
-  color: #a78bfa;
+  color: #cbd5e1;
 }
 .tl-speed-desc {
   font-size: 0.7rem;
