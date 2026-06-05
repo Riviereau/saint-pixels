@@ -2978,8 +2978,13 @@ canvas.addEventListener('mousemove', event => {
     }
   }
 
-  // Drive drag-painting — must come after cursor/redraw logic above.
-  if (isMouseDown && !isPanning) {
+  // Drive drag-painting — only when the gesture is a confirmed drag.
+  // _longPressPanTimer being non-null means mousedown just happened and we
+  // haven't yet moved far enough to commit to a drag; the placement will be
+  // handled by stopAction on mouseup instead.  Calling moveAction here while
+  // the timer is still pending causes a double-placement on every click:
+  // once here and once in stopAction, burning the cooldown twice → 6 s wait.
+  if (isMouseDown && !isPanning && _longPressPanTimer === null) {
     moveAction(event);
   }
 });
