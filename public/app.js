@@ -2047,8 +2047,7 @@ function broadcastEvent(event) {
                 lastPlaceAt = Date.now();
               } else {
                 // Case B — genuinely too early, roll back and lock the gate.
-                paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-                redraw();
+                rollbackPixel();
                 // Position lastPlaceAt so canPlacePixel() stays false for
                 // exactly `remaining` ms from now.
                 lastPlaceAt = Date.now() - (_activeCooldownMs - remaining);
@@ -2059,16 +2058,14 @@ function broadcastEvent(event) {
               // roll back the optimistic paint right away.
               // lastPlaceAt was already stamped at paint time so the cooldown
               // bar counts down normally — no extra gate manipulation needed.
-              paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-              redraw();
+              rollbackPixel();
               updateCooldownLabel();
             }
           }).catch(() => {
             // Could not parse error body — roll back conservatively.
             // Don't touch lastPlaceAt; it was stamped at paint time.
             console.warn('[sp] pixel save failed (unparseable response):', res.status);
-            paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-            redraw();
+            rollbackPixel();
             updateCooldownLabel();
           });
         }
@@ -2091,8 +2088,7 @@ function broadcastEvent(event) {
         console.warn('[sp] pixel save network error (will retry once):', err.message);
 
         // Roll back immediately so the board reflects server truth
-        paintPixel(event.x, event.y, event.size || 1, 'eraser', null);
-        redraw();
+        rollbackPixel();
         // Reset gate so the retry (or the user's next click) isn't blocked
         lastPlaceAt = 0;
         updateCooldownLabel();
@@ -2820,43 +2816,6 @@ function applyColorSwatchStyles(hex) {
   const [r, g, b] = hexToRgba(hex);
   const y = brightnessRgb(r, g, b);
   // currentColor swatch styling is handled by Alpine :style binding
-}
-
-function setColor(newColor, preferredBtn) {
-  const norm = normalizeHexColor(newColor);
-  color = norm;
-  if (colorInput) colorInput.value = norm;
-  dispatchStateChange({ currentColor: norm });
-  applyColorSwatchStyles(norm);
-
-  // Persist selected color to cookie so it survives tab close / refresh
-  saveSelectedColor(norm);
-
-  // Track which paletteColors slot was last activated so the eyedropper
-  // can prefer it over other same-hue slots when resolving ties.
-  const activatedIdx = paletteColors.findIndex(e => normalizeHexColor(e.color) === norm);
-  if (activatedIdx !== -1) lastUsedPaletteIdx = activatedIdx;
-
-  // If a specific button is preferred (e.g. after an eyedropper pick that
-  // updates exactly one slot), mark only that button as selected so two
-  // buttons with the same hex never both light up at once.
-  const allBtns = document.querySelectorAll('#palette button, #fullscreen-palette button');
-  if (preferredBtn) {
-    allBtns.forEach(b => b.classList.remove('selected'));
-    preferredBtn.classList.add('selected');
-  } else {
-    // Normal path: first button whose color matches gets selected; if multiple
-    // share the same hex (e.g. after a variation pick), only the first is marked.
-    let marked = false;
-    allBtns.forEach(b => {
-      const matches = !marked && normalizeHexColor(b.dataset.color) === norm;
-      b.classList.toggle('selected', matches);
-      if (matches) marked = true;
-    });
-  }
-
-  // Redraw immediately so cursor preview color updates without waiting for mousemove
-  redraw();
 }
 
 // cleanup: keep the UI consistent after any color change or palette update
