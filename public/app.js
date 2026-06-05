@@ -1328,7 +1328,11 @@ function drawGrid() {
   for (let col = startCol; col <= endCol; col++) {
     const x  = col * scale + offsetX;
     const xr = Math.round(x);
-    if (xr === lastXr || x < clipL || x > clipR + 1) continue;
+    // Use the rounded pixel position for the edge check, not the raw float.
+    // A raw float like clipR + 0.6 would be wrongly excluded by "x > clipR + 1"
+    // at certain zoom levels (e.g. 709%) causing the last visible column line
+    // to disappear.  Comparing rounded positions is stable at any zoom.
+    if (xr === lastXr || xr < Math.round(clipL) || xr > Math.round(clipR)) continue;
     lastXr = xr;
     xs.push(x);
   }
@@ -1338,7 +1342,7 @@ function drawGrid() {
   for (let row = startRow; row <= endRow; row++) {
     const y  = row * scale + offsetY;
     const yr = Math.round(y);
-    if (yr === lastYr || y < clipT || y > clipB + 1) continue;
+    if (yr === lastYr || yr < Math.round(clipT) || yr > Math.round(clipB)) continue;
     lastYr = yr;
     ys.push(y);
   }

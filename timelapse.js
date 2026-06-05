@@ -1,639 +1,442 @@
 #!/usr/bin/env node
+'use strict';
+
 /**
- * timelapse.js — Saint-Pixels canvas timelapse generator
+ * timelapse.js  — Root-level CLI script
+ * ─────────────────────────────────────
+ * Renders a full-resolution MP4 timelapse of every pixel ever placed on the
+ * board, including pixels that predate the pixel_history table (legacy pixels
+ * stored only in the `pixels` upsert table).
  *
- * Reads the pixel_history table (append-log of every placement ever made)
- * and renders each event onto a 1920×1080 canvas, then pipes the frames
- * through ffmpeg to produce a timelapse MP4.
- *
- * USAGE
- * ─────
+ * Usage:
  *   node timelapse.js [options]
  *
- * OPTIONS
- *   --db <path>         Path to database.sqlite  (default: ./database.sqlite)
- *   --out <path>        Output MP4 file           (default: ./timelapse.mp4)
- *   --fps <n>           Output framerate          (default: 30)
- *   --pps <n>           Pixels per second — how many placement events to
- *                       burn into each output second (default: 200)
- *                       e.g. 200 pps @ 30 fps → a new frame every 200/30 ≈ 7 pixels
- *   --from <ISO date>   Only include events on/after this date  (optional)
- *   --to   <ISO date>   Only include events up to this date     (optional)
- *   --user <username>   Only include placements by this user    (optional)
- *   --scale <n>         Downscale factor for the output video   (default: 1)
- *                       2 = render at 960×540 (half res, much faster)
- *   --bg <hex>          Background fill colour                  (default: 2e2e2f)
- *   --no-watermark      Suppress the "Saint-Pixels" text overlay
- *   --crop <x0,y0,x1,y1>
- *                       Crop the rendered output to the rectangle defined by
- *                       top-left corner (x0,y0) and bottom-right corner (x1,y1).
- *                       Both corners are in full-resolution board pixels.
- *                       e.g. --crop 0,0,1000,1000  renders only the top-left
- *                       1000×1000 region of the board.
- *                       The crop is applied after --scale, so the final video
- *                       dimensions will be ceil(width/scale) × ceil(height/scale).
- *   --help              Print this help and exit
+ * Options:
+ *   --db <path>          SQLite database path  (default: ./database.sqlite)
+ *   --json <path>        Use a JSON history file instead of SQLite
+ *   --out <path>         Output MP4 path       (default: ./timelapse.mp4)
+ *   --fps <n>            Video framerate        (default: 30)
+ *   --pps <n>            Pixel events/second    (default: 200)
+ *   --scale <n>          Downscale factor — 2 = 960×540 (default: 1)
+ *   --bg <hex>           Background colour, no # (default: 2e2e2f)
+ *   --from <date>        Only events on/after this date  (e.g. 2025-01-01)
+ *   --to <date>          Only events up to this date
+ *   --user <name>        Only placements by one user
+ *   --crop x0,y0,x1,y1  Crop to board-pixel rectangle (e.g. 0,0,960,540)
+ *   --no-watermark       Remove the "Saint-Pixels" watermark
  *
- * REQUIREMENTS
- * ────────────
+ * Requirements:
  *   npm install canvas better-sqlite3
- *   ffmpeg must be on PATH  (or set FFMPEG_PATH env var)
+ *   ffmpeg on PATH (or set FFMPEG_PATH env var)
  *
- * DATABASE REQUIREMENT
- * ────────────────────
- *   This script reads from `pixel_history`, NOT the `pixels` table.
- *   `pixels` only stores the current board state (upsert model).
- *   `pixel_history` is an append-log added by the migration in server.js.
- *   See the "Adding pixel_history to your server" section in the README
- *   or follow the instructions printed when this script first runs.
- *
- * HOW IT WORKS
- * ────────────
- *   1. Load all pixel_history rows ordered by placed_at ASC.
- *   2. Group them into "frames" — every (pps / fps) events = 1 frame.
- *   3. For each frame: paint the new pixels onto the canvas, encode the
- *      raw RGBA pixel buffer, and write it to ffmpeg via stdin pipe.
- *   4. ffmpeg assembles the raw frames into a compressed MP4.
- *
- * PERFORMANCE NOTES
- * ─────────────────
- *   A full 1920×1080 canvas is 8 MB of raw RGBA per frame.
- *   At 30 fps, that's 240 MB/s into ffmpeg — fine on localhost, but use
- *   --scale 2 (960×540) to halve that if you're RAM-constrained.
- *   canvas.toBuffer('raw') is the fastest export path (no PNG compression).
+ * Legacy pixel handling:
+ *   Pixels placed before the pixel_history table was added live only in the
+ *   `pixels` table (the upsert table storing current board state).  This
+ *   script detects them, assigns synthetic timestamps spaced 3200 ms apart
+ *   anchored just before the earliest real history event, and merges them
+ *   into the full event stream so the timelapse starts from day one.
  */
-
-'use strict';
 
 const path      = require('path');
 const fs        = require('fs');
 const { spawn } = require('child_process');
 
-// ── Argument parsing ──────────────────────────────────────────────────────────
+// ── Parse CLI args ─────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 
-function getArg(flag, fallback) {
-  const idx = args.indexOf(flag);
-  if (idx !== -1 && args[idx + 1]) return args[idx + 1];
-  return fallback;
+function getArg(flag) {
+  const i = args.indexOf(flag);
+  return i !== -1 && i + 1 < args.length ? args[i + 1] : null;
 }
-
 function hasFlag(flag) {
   return args.includes(flag);
 }
 
-if (hasFlag('--help') || hasFlag('-h')) {
-  console.log(`
-Usage: node timelapse.js [options]
+const DB_PATH   = getArg('--db')    || process.env.DB_PATH    || path.join(process.cwd(), 'database.sqlite');
+const JSON_PATH = getArg('--json')  || process.env.JSON_HISTORY_PATH || null;
+const OUT_PATH  = getArg('--out')   || path.join(process.cwd(), 'timelapse.mp4');
+const FFMPEG    = process.env.FFMPEG_PATH || 'ffmpeg';
 
-  --db <path>        SQLite database file  (default: ./database.sqlite)
-  --json <path>      JSON pixel-history file instead of SQLite
-                     (array of {username,x,y,color,placed_at} objects)
-  --out <path>       Output MP4            (default: ./timelapse.mp4)
-  --fps <n>          Output framerate      (default: 30)
-  --pps <n>          Pixel events per second of output (default: 200)
-  --from <ISO>       Start date filter     (e.g. 2025-01-01)
-  --to   <ISO>       End date filter       (e.g. 2025-12-31)
-  --user <name>      Filter to one user
-  --scale <n>        Downscale factor      (default: 1, use 2 for half-res)
-  --bg <hex>         Background colour     (default: 2e2e2f)
-  --no-watermark     Disable text overlay
-  --crop <x0,y0,x1,y1>
-                     Crop the output to a rectangle defined by two corners:
-                     top-left (x0,y0) → bottom-right (x1,y1).
-                     e.g. --crop 0,0,1000,1000
-  --help             Show this help
-`.trim());
-  process.exit(0);
-}
+const FPS       = Math.max(1, parseInt(getArg('--fps')   || '30',  10));
+const PPS       = Math.max(1, parseInt(getArg('--pps')   || '200', 10));
+const SCALE     = Math.max(1, parseInt(getArg('--scale') || '1',   10));
+const BG_HEX    = '#' + (getArg('--bg') || '2e2e2f').replace(/^#/, '');
+const WATERMARK = !hasFlag('--no-watermark');
 
-const DB_PATH      = getArg('--db',  path.join(process.cwd(), 'database.sqlite'));
-const JSON_PATH    = getArg('--json', null);   // if set, read from JSON instead of SQLite
-const OUT_PATH     = getArg('--out', path.join(process.cwd(), 'timelapse.mp4'));
-const FPS          = Math.max(1, parseInt(getArg('--fps', '30'), 10));
-const PPS          = Math.max(1, parseInt(getArg('--pps', '200'), 10));
-const FROM_DATE    = getArg('--from', null);
-const TO_DATE      = getArg('--to',   null);
-const USER_FILTER  = getArg('--user', null);
-const SCALE        = Math.max(1, parseInt(getArg('--scale', '1'), 10));
-const BG_HEX       = '#' + getArg('--bg', '2e2e2f').replace(/^#/, '');
-const WATERMARK    = !hasFlag('--no-watermark');
-const FFMPEG_BIN   = process.env.FFMPEG_PATH || 'ffmpeg';
+const FROM_DATE = getArg('--from') || null;
+const TO_DATE   = getArg('--to')   || null;
+const USER      = getArg('--user') || null;
 
-// ── Crop option ───────────────────────────────────────────────────────────────
-// --crop x0,y0,x1,y1  — board-pixel coordinates (before scaling).
-// x0,y0 = top-left corner; x1,y1 = bottom-right corner (exclusive).
-// Defaults to the full board.
-
-const CROP_ARG = getArg('--crop', null);
-let CROP_X0 = 0, CROP_Y0 = 0, CROP_X1, CROP_Y1;  // X1/Y1 set after BOARD_W/H are defined
-
-if (CROP_ARG) {
-  const parts = CROP_ARG.split(',').map(Number);
-  if (parts.length !== 4 || parts.some(isNaN)) {
-    console.error('[timelapse] --crop must be four comma-separated integers: x0,y0,x1,y1');
-    process.exit(1);
-  }
-  [CROP_X0, CROP_Y0, CROP_X1, CROP_Y1] = parts;
-  if (CROP_X0 >= CROP_X1 || CROP_Y0 >= CROP_Y1) {
-    console.error('[timelapse] --crop: x0 must be < x1 and y0 must be < y1');
+// --crop x0,y0,x1,y1
+let CROP = null;
+const rawCrop = getArg('--crop');
+if (rawCrop) {
+  const parts = rawCrop.split(',').map(Number);
+  if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+    CROP = { x0: parts[0], y0: parts[1], x1: parts[2], y1: parts[3] };
+  } else {
+    console.error('--crop must be four numbers: x0,y0,x1,y1  e.g. --crop 0,0,960,540');
     process.exit(1);
   }
 }
 
-// Canvas dimensions
+// ── Board dimensions ───────────────────────────────────────────────────────────
+
 const BOARD_W = 1920;
 const BOARD_H = 1080;
 
-// Finalise crop bounds now that board size is known, then clamp to board.
-if (!CROP_ARG) {
-  CROP_X1 = BOARD_W;
-  CROP_Y1 = BOARD_H;
-}
-CROP_X0 = Math.max(0, Math.min(CROP_X0, BOARD_W - 1));
-CROP_Y0 = Math.max(0, Math.min(CROP_Y0, BOARD_H - 1));
-CROP_X1 = Math.max(CROP_X0 + 1, Math.min(CROP_X1, BOARD_W));
-CROP_Y1 = Math.max(CROP_Y0 + 1, Math.min(CROP_Y1, BOARD_H));
+// Render region (full board unless --crop is set)
+const REGION_X0 = CROP ? CROP.x0 : 0;
+const REGION_Y0 = CROP ? CROP.y0 : 0;
+const REGION_X1 = CROP ? CROP.x1 : BOARD_W;
+const REGION_Y1 = CROP ? CROP.y1 : BOARD_H;
+const REGION_W  = REGION_X1 - REGION_X0;
+const REGION_H  = REGION_Y1 - REGION_Y0;
 
-const CROP_W = CROP_X1 - CROP_X0;   // crop width  in board pixels
-const CROP_H = CROP_Y1 - CROP_Y0;   // crop height in board pixels
-const CROP_ENABLED = CROP_ARG !== null;
-
-// Output dimensions: scale is applied to the crop region (or full board if no crop).
-// H.264 (libx264) requires both width and height to be even — snap up if needed.
-// At SCALE=1 we snap the crop size to even (required by libx264) but use
-// getImageData/putImageData to copy, so the 1-px pad never causes interpolation.
-const OUT_W   = SCALE === 1
-  ? Math.ceil(CROP_W / 2) * 2
-  : Math.ceil(Math.round(CROP_W / SCALE) / 2) * 2;
-const OUT_H   = SCALE === 1
-  ? Math.ceil(CROP_H / 2) * 2
-  : Math.ceil(Math.round(CROP_H / SCALE) / 2) * 2;
-
-// Events-per-frame (may be fractional — we accumulate)
-const EVENTS_PER_FRAME = PPS / FPS;
-
-// ── Dependency checks ─────────────────────────────────────────────────────────
-
-let Database, createCanvas;
-
-// better-sqlite3 is only required when reading from SQLite (no --json flag).
-// canvas is always required.
-if (!JSON_PATH) {
-  try {
-    Database = require('better-sqlite3');
-  } catch {
-    console.error(
-      '\n[timelapse] ERROR: better-sqlite3 is not installed.\n' +
-      '  Run:  npm install better-sqlite3\n' +
-      '  (Or use --json <path> to read from a JSON pixel-history file instead.)\n'
-    );
-    process.exit(1);
-  }
-}
-
-try {
-  ({ createCanvas } = require('canvas'));
-} catch {
-  console.error(
-    '\n[timelapse] ERROR: canvas is not installed.\n' +
-    '  Run:  npm install canvas\n' +
-    '  (You may also need system libs: libcairo2-dev, libpango1.0-dev, libpng-dev)\n'
-  );
+if (REGION_W <= 0 || REGION_H <= 0) {
+  console.error('--crop region has zero or negative size.');
   process.exit(1);
 }
 
-// ── Data source: JSON or SQLite ───────────────────────────────────────────────
+// H.264 requires even dimensions — pad up if needed
+const OUT_W = Math.ceil(Math.round(REGION_W / SCALE) / 2) * 2;
+const OUT_H = Math.ceil(Math.round(REGION_H / SCALE) / 2) * 2;
+
+const EVENTS_PER_FRAME = PPS / FPS;
+
+// ── Legacy pixel synthesis ─────────────────────────────────────────────────────
 //
-// Both paths produce the same interface:
-//   total   — total number of pixel events to render
-//   getIter — zero-arg function that returns an iterable of
-//             { username, x, y, color, placed_at } objects, already sorted
-//             by placed_at ASC and filtered by --from / --to / --user.
+// Pixels placed before pixel_history existed live only in the `pixels` table.
+// We find them, give them synthetic timestamps, and prepend them to the stream.
 
-let total;
-let getIter;
+const LEGACY_GAP_MS = 3200;
 
-if (JSON_PATH) {
-  // ── JSON mode ───────────────────────────────────────────────────────────────
-  if (!fs.existsSync(JSON_PATH)) {
-    console.error(`\n[timelapse] ERROR: JSON file not found at: ${JSON_PATH}\n`);
-    process.exit(1);
-  }
-
-  let rawRows;
-  try {
-    const text = fs.readFileSync(JSON_PATH, 'utf8');
-    rawRows = JSON.parse(text);
-  } catch (err) {
-    console.error(`\n[timelapse] ERROR: Could not parse JSON file: ${err.message}\n`);
-    process.exit(1);
-  }
-
-  if (!Array.isArray(rawRows)) {
-    console.error('\n[timelapse] ERROR: JSON file must contain a top-level array of pixel events.\n');
-    process.exit(1);
-  }
-
-  // Apply the same date/user filters that the SQLite path supports.
-  const fromTs = FROM_DATE ? Date.parse(FROM_DATE)              : null;
-  const toTs   = TO_DATE   ? Date.parse(TO_DATE + 'T23:59:59') : null;
-
-  if ((FROM_DATE && isNaN(fromTs)) || (TO_DATE && isNaN(toTs))) {
-    console.error('[timelapse] Invalid --from or --to date.');
-    process.exit(1);
-  }
-
-  let filtered = rawRows.filter(r => {
-    if (fromTs !== null && r.placed_at < fromTs) return false;
-    if (toTs   !== null && r.placed_at > toTs)   return false;
-    if (USER_FILTER && r.username !== USER_FILTER) return false;
-    return true;
-  });
-
-  // Sort ascending by placement time (the dump may already be sorted, but be safe).
-  filtered.sort((a, b) => a.placed_at - b.placed_at);
-
-  total   = filtered.length;
-  getIter = () => filtered; // array is already in memory — just return it
-
-} else {
-  // ── SQLite mode ─────────────────────────────────────────────────────────────
-  if (!fs.existsSync(DB_PATH)) {
-    console.error(`\n[timelapse] ERROR: database not found at: ${DB_PATH}\n`);
-    process.exit(1);
-  }
-
-  const db = new Database(DB_PATH, { readonly: true });
-
-  // Check that pixel_history exists
-  const tables = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='pixel_history'"
-  ).get();
-
-  if (!tables) {
-    console.error(`
-[timelapse] ERROR: The 'pixel_history' table does not exist in this database.
-
-The regular 'pixels' table only stores the CURRENT board state (upsert model).
-To generate a timelapse you need a separate append-log that records every
-placement event.
-
-─────────────────────────────────────────────────────────────────────────────
-HOW TO ADD pixel_history TO YOUR SERVER
-─────────────────────────────────────────────────────────────────────────────
-
-1. In database.js, inside initializeDatabase(), add this table creation:
-
-     CREATE TABLE IF NOT EXISTS pixel_history (
-       id         INTEGER PRIMARY KEY AUTOINCREMENT,
-       username   TEXT    NOT NULL,
-       x          INTEGER NOT NULL,
-       y          INTEGER NOT NULL,
-       color      TEXT    NOT NULL,
-       placed_at  INTEGER NOT NULL
-     );
-     CREATE INDEX IF NOT EXISTS idx_ph_placed_at ON pixel_history(placed_at);
-     CREATE INDEX IF NOT EXISTS idx_ph_username  ON pixel_history(username);
-
-2. In PlacePixel.js, inside PlacePixel.execute(), after the pixels UPSERT, add:
-
-     _db.prepare(\`
-       INSERT INTO pixel_history (username, x, y, color, placed_at)
-       VALUES (?, ?, ?, ?, ?)
-     \`).run(session.username, x, y, safeColor, Date.now());
-
-   Do the same inside PlacePixel.erase():
-
-     _db.prepare(\`
-       INSERT INTO pixel_history (username, x, y, color, placed_at)
-       VALUES (?, ?, ?, 'erase', ?)
-     \`).run(session.username, x, y, Date.now());
-
-3. Restart your server — new placements will be recorded from that point on.
-
-─────────────────────────────────────────────────────────────────────────────
-`);
-    process.exit(1);
-  }
-
-  // ── Build query ─────────────────────────────────────────────────────────────
-  const conditions = [];
-  const bindings   = [];
+/**
+ * Build a full, chronologically sorted event array from a SQLite database.
+ * Merges real pixel_history rows with legacy pixels from the `pixels` table.
+ *
+ * @param {import('better-sqlite3').Database} db
+ * @returns {{ username:string, x:number, y:number, color:string, placed_at:number }[]}
+ */
+function buildFullEventStreamFromDb(db) {
+  // ── Step 1: real history rows (with optional date/user filters) ────────────
+  let WHERE = '1=1';
+  const bindings = [];
 
   if (FROM_DATE) {
     const ts = Date.parse(FROM_DATE);
-    if (isNaN(ts)) { console.error(`[timelapse] Invalid --from date: ${FROM_DATE}`); process.exit(1); }
-    conditions.push('placed_at >= ?');
-    bindings.push(ts);
+    if (!isNaN(ts)) { WHERE += ' AND placed_at >= ?'; bindings.push(ts); }
   }
   if (TO_DATE) {
     const ts = Date.parse(TO_DATE + 'T23:59:59');
-    if (isNaN(ts)) { console.error(`[timelapse] Invalid --to date: ${TO_DATE}`); process.exit(1); }
-    conditions.push('placed_at <= ?');
-    bindings.push(ts);
+    if (!isNaN(ts)) { WHERE += ' AND placed_at <= ?'; bindings.push(ts); }
   }
-  if (USER_FILTER) {
-    conditions.push('username = ?');
-    bindings.push(USER_FILTER);
+  if (USER) {
+    WHERE += ' AND username = ?'; bindings.push(USER);
   }
 
-  const WHERE = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-  const query = `SELECT username, x, y, color, placed_at FROM pixel_history ${WHERE} ORDER BY placed_at ASC`;
+  // Check pixel_history exists before querying it
+  const historyTableExists = db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pixel_history'"
+  ).get();
 
-  console.log('[timelapse] Counting events…');
-  const totalRow = db.prepare(`SELECT COUNT(*) AS n FROM pixel_history ${WHERE}`).get(...bindings);
-  total   = totalRow.n;
-  getIter = () => db.prepare(query).iterate(...bindings);
-}
-
-if (total === 0) {
-  console.error('[timelapse] No pixel events found for the given filters. Nothing to render.');
-  process.exit(1);
-}
-
-const sourceLabel = JSON_PATH ? `JSON file: ${JSON_PATH}` : `SQLite: ${DB_PATH}`;
-console.log(`[timelapse] Source: ${sourceLabel}`);
-console.log(`[timelapse] ${total.toLocaleString()} events | ${FPS} fps | ${PPS} pps | scale 1/${SCALE}`);
-if (CROP_ENABLED) {
-  console.log(`[timelapse] Crop: (${CROP_X0},${CROP_Y0}) → (${CROP_X1},${CROP_Y1})  [${CROP_W}×${CROP_H} board px → ${OUT_W}×${OUT_H} output px]`);
-}
-const estimatedFrames = Math.ceil(total / EVENTS_PER_FRAME);
-const estimatedSecs   = (estimatedFrames / FPS).toFixed(1);
-console.log(`[timelapse] ~${estimatedFrames.toLocaleString()} frames → ~${estimatedSecs}s of video`);
-console.log(`[timelapse] Output: ${OUT_PATH}`);
-
-// ── Canvas setup ──────────────────────────────────────────────────────────────
-
-const canvas = createCanvas(BOARD_W, BOARD_H);
-const ctx    = canvas.getContext('2d');
-
-// Disable smoothing — keeps every pixel crisp (no bilinear interpolation)
-ctx.imageSmoothingEnabled = false;
-ctx.patternQuality        = 'nearest';
-ctx.quality               = 'nearest';
-
-// Fill background
-ctx.fillStyle = BG_HEX;
-ctx.fillRect(0, 0, BOARD_W, BOARD_H);
-
-// Watermark setup (drawn once, on top of every frame)
-const FONT_SIZE = Math.max(14, Math.round(22 / SCALE));
-
-function drawWatermark(frameCtx) {
-  if (!WATERMARK) return;
-  frameCtx.save();
-  frameCtx.font      = `bold ${FONT_SIZE}px sans-serif`;
-  frameCtx.fillStyle = 'rgba(255,255,255,0.18)';
-  frameCtx.textAlign = 'right';
-  frameCtx.fillText('Saint-Pixels', OUT_W - 10, OUT_H - 10);
-  frameCtx.restore();
-}
-
-// Output canvas (may be scaled down and/or cropped)
-let outCanvas, outCtx;
-if (SCALE === 1 && !CROP_ENABLED) {
-  // Fast path: no transformation needed — write the main canvas directly.
-  outCanvas = canvas;
-  outCtx    = ctx;
-} else {
-  // A separate output canvas is needed for scaling and/or cropping.
-  // OUT_W and OUT_H are already snapped to even, so this is the correct size.
-  outCanvas = createCanvas(OUT_W, OUT_H);
-  outCtx    = outCanvas.getContext('2d');
-  // Disable smoothing on the output canvas too — critical when scaling/cropping
-  outCtx.imageSmoothingEnabled = false;
-  outCtx.patternQuality        = 'nearest';
-  outCtx.quality               = 'nearest';
-}
-
-// ── ffmpeg setup ──────────────────────────────────────────────────────────────
-
-// Pipe raw RGBA frames into ffmpeg
-// -f rawvideo: we supply uncompressed pixels
-// -pix_fmt bgra: matches canvas.toBuffer('raw') which outputs BGRA, not RGBA
-// -s WxH: frame dimensions
-// -r FPS: interpret incoming frames at this rate
-// -i pipe:0: read from stdin
-// -c:v libx264: H.264 compression
-// -pix_fmt yuv420p: widest player compatibility
-// -preset fast: good quality/speed tradeoff
-// -crf 18: near-lossless for colour accuracy
-// -movflags +faststart: puts metadata at front for web streaming
-
-const ffmpegArgs = [
-  '-y',                              // overwrite output without asking
-  '-f', 'rawvideo',
-  '-pix_fmt', 'bgra',
-  '-s', `${OUT_W}x${OUT_H}`,
-  '-r', String(FPS),
-  '-i', 'pipe:0',
-  '-sws_flags', 'neighbor',          // nearest-neighbour resampling — keeps pixels sharp
-  '-pix_fmt', 'yuv420p',             // colour format without triggering a filter graph
-  '-c:v', 'libx264',
-  '-preset', 'fast',
-  '-crf', '18',
-  '-movflags', '+faststart',
-  OUT_PATH,
-];
-
-console.log(`\n[timelapse] Launching ffmpeg…`);
-const ffmpeg = spawn(FFMPEG_BIN, ffmpegArgs, { stdio: ['pipe', 'inherit', 'inherit'] });
-
-ffmpeg.on('error', (err) => {
-  if (err.code === 'ENOENT') {
-    console.error(
-      `\n[timelapse] ERROR: ffmpeg not found (tried: ${FFMPEG_BIN})\n` +
-      '  Install ffmpeg and ensure it is on your PATH,\n' +
-      '  or set the FFMPEG_PATH environment variable.\n'
-    );
-  } else {
-    console.error('[timelapse] ffmpeg error:', err);
+  let historyRows = [];
+  if (historyTableExists) {
+    historyRows = db.prepare(
+      `SELECT username, x, y, color, placed_at
+       FROM pixel_history WHERE ${WHERE} ORDER BY placed_at ASC`
+    ).all(...bindings);
   }
-  process.exit(1);
-});
 
-ffmpeg.on('close', (code) => {
-  if (code !== 0) {
-    console.error(`\n[timelapse] ffmpeg exited with code ${code}`);
-    process.exit(code);
+  // ── Step 2: legacy pixels absent from pixel_history ────────────────────────
+  let legacyRows = [];
+  if (!historyTableExists || historyRows.length === 0) {
+    // No history at all — every pixel on the board is considered legacy.
+    // Apply user filter if set; date filter can't be applied reliably.
+    const userClause = USER ? ' WHERE username = ?' : '';
+    legacyRows = db.prepare(
+      `SELECT username, x, y, color, placed_at FROM pixels${userClause} ORDER BY placed_at ASC`
+    ).all(...(USER ? [USER] : []));
+  } else if (historyTableExists) {
+    // Pixels whose (x,y) never appears in pixel_history — they predate it.
+    const userClause = USER ? ' AND p.username = ?' : '';
+    legacyRows = db.prepare(`
+      SELECT p.username, p.x, p.y, p.color, p.placed_at
+      FROM pixels p
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pixel_history ph WHERE ph.x = p.x AND ph.y = p.y
+      )${userClause}
+      ORDER BY p.placed_at ASC
+    `).all(...(USER ? [USER] : []));
   }
-  console.log(`\n[timelapse] ✓ Done! Saved to: ${OUT_PATH}`);
-});
 
-const ffmpegStdin = ffmpeg.stdin;
+  // ── Step 3: assign synthetic timestamps to legacy pixels ───────────────────
+  let syntheticRows = [];
+  if (legacyRows.length > 0) {
+    const earliestReal = historyTableExists
+      ? db.prepare('SELECT placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT 1').get()
+      : null;
+    const anchor  = earliestReal ? earliestReal.placed_at : Date.now();
+    const startTs = anchor - legacyRows.length * LEGACY_GAP_MS;
+    syntheticRows = legacyRows.map((r, i) => ({
+      username:  r.username,
+      x:         r.x,
+      y:         r.y,
+      color:     r.color,
+      placed_at: startTs + i * LEGACY_GAP_MS,
+    }));
 
-// ── Progress tracking ─────────────────────────────────────────────────────────
+    console.log(`[timelapse] Found ${legacyRows.length} legacy pixel(s) (pre-history) — prepending with synthetic timestamps.`);
+  }
 
-let frameCount    = 0;
-let eventCount    = 0;
-let frameAccum    = 0;          // fractional events-towards-next-frame accumulator
-let lastLogTime   = Date.now();
-
-function logProgress() {
-  const pct     = ((eventCount / total) * 100).toFixed(1);
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  process.stdout.write(
-    `\r[timelapse] ${pct}% — ${eventCount.toLocaleString()}/${total.toLocaleString()} events | ` +
-    `${frameCount.toLocaleString()} frames | ${elapsed}s elapsed   `
-  );
+  // ── Step 4: merge and sort ─────────────────────────────────────────────────
+  const all = [...syntheticRows, ...historyRows];
+  all.sort((a, b) => a.placed_at - b.placed_at);
+  return all;
 }
 
-// ── Pixel colour helper ───────────────────────────────────────────────────────
+/**
+ * Load events from a JSON history file (written by PlacePixel.appendToJsonHistory).
+ * Applies --from / --to / --user filters and sorts by placed_at.
+ *
+ * @param {string} jsonPath
+ * @returns {{ username:string, x:number, y:number, color:string, placed_at:number }[]}
+ */
+function loadEventsFromJson(jsonPath) {
+  console.log(`[timelapse] Reading JSON history: ${jsonPath}`);
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  } catch (err) {
+    console.error(`Failed to read JSON history file: ${err.message}`);
+    process.exit(1);
+  }
+
+  if (!Array.isArray(raw)) {
+    console.error('JSON history file must contain a top-level array.');
+    process.exit(1);
+  }
+
+  let events = raw;
+
+  if (FROM_DATE) {
+    const ts = Date.parse(FROM_DATE);
+    if (!isNaN(ts)) events = events.filter(e => e.placed_at >= ts);
+  }
+  if (TO_DATE) {
+    const ts = Date.parse(TO_DATE + 'T23:59:59');
+    if (!isNaN(ts)) events = events.filter(e => e.placed_at <= ts);
+  }
+  if (USER) {
+    events = events.filter(e => e.username === USER);
+  }
+
+  events.sort((a, b) => a.placed_at - b.placed_at);
+  return events;
+}
+
+// ── Color normaliser ───────────────────────────────────────────────────────────
 
 function normalizeColor(c) {
-  if (!c || c === 'erase') return null; // null = erase
-  const h = c.replace(/^#/, '');
+  if (!c || c === 'erase') return null;
+  const h = String(c).replace(/^#/, '');
   if (/^[0-9a-fA-F]{6}$/.test(h)) return '#' + h;
   if (/^[0-9a-fA-F]{3}$/.test(h)) return '#' + h.split('').map(x => x + x).join('');
   return null;
 }
 
-// ── Write one frame to ffmpeg ─────────────────────────────────────────────────
+// ── Main ───────────────────────────────────────────────────────────────────────
 
-// Helper: create a canvas context with all smoothing disabled.
-function crispContext(w, h) {
-  const c   = createCanvas(w, h);
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  ctx.patternQuality        = 'nearest';
-  ctx.quality               = 'nearest';
-  return { canvas: c, ctx };
-}
-
-// Helper: copy a region of the board canvas into outCtx pixel-exactly.
-// Uses getImageData / putImageData so no interpolation is possible — drawImage
-// can still blur when the source and dest dimensions differ by even 1 px (the
-// even-snap on OUT_W/OUT_H can cause exactly that).
-function blitCrop() {
-  const imageData = ctx.getImageData(CROP_X0, CROP_Y0, CROP_W, CROP_H);
-  outCtx.putImageData(imageData, 0, 0);
-}
-
-function writeFrame() {
-  let buf;
-  if (SCALE === 1 && !CROP_ENABLED) {
-    // Fast path: no transform — use the main canvas buffer directly.
-    buf = outCanvas.toBuffer('raw');
-  } else if (SCALE === 1 && CROP_ENABLED) {
-    // Crop only, no scale — copy pixels exactly via getImageData/putImageData.
-    // This avoids any interpolation that drawImage can introduce when OUT_W or
-    // OUT_H has been snapped to even and differs from CROP_W/CROP_H by 1 px.
-    blitCrop();
-    buf = outCanvas.toBuffer('raw');
-  } else {
-    // Scale (and optional crop) — drawImage is required for downscaling.
-    // imageSmoothingEnabled=false on outCtx ensures nearest-neighbour sampling.
-    outCtx.drawImage(
-      canvas,
-      CROP_X0, CROP_Y0, CROP_W, CROP_H,  // source: crop window
-      0,       0,       OUT_W,  OUT_H      // dest:   scaled output
+async function main() {
+  // ── Load canvas ─────────────────────────────────────────────────────────────
+  let createCanvas;
+  try {
+    ({ createCanvas } = require('canvas'));
+  } catch {
+    console.error(
+      'Error: the "canvas" npm package is not installed.\n' +
+      'Run: npm install canvas\n' +
+      '(You may also need system libs: libcairo2-dev libpango1.0-dev libpng-dev)'
     );
-    buf = outCanvas.toBuffer('raw');
+    process.exit(1);
   }
 
-  if (WATERMARK) {
-    if (SCALE === 1 && !CROP_ENABLED) {
-      // Fast path: outCtx === ctx (the main board canvas). Drawing on it and
-      // then clearing would corrupt board state for subsequent frames.
-      // Composite the watermark onto a temporary canvas for this frame only.
-      const { canvas: tmpCanvas, ctx: tmpCtx } = crispContext(OUT_W, OUT_H);
-      tmpCtx.drawImage(outCanvas, 0, 0);
-      drawWatermark(tmpCtx);
-      buf = tmpCanvas.toBuffer('raw');
-    } else {
-      // Separate outCanvas — safe to draw the watermark directly.
-      drawWatermark(outCtx);
-      buf = outCanvas.toBuffer('raw');
-      // Restore the output canvas for the next frame.
-      if (SCALE === 1 && CROP_ENABLED) {
-        blitCrop();
-      } else {
-        outCtx.drawImage(
-          canvas,
-          CROP_X0, CROP_Y0, CROP_W, CROP_H,
-          0,       0,       OUT_W,  OUT_H
-        );
-      }
+  // ── Load events ─────────────────────────────────────────────────────────────
+  let events;
+
+  if (JSON_PATH) {
+    // JSON mode — no DB needed
+    events = loadEventsFromJson(JSON_PATH);
+  } else {
+    // SQLite mode — requires better-sqlite3
+    let Database;
+    try {
+      Database = require('better-sqlite3');
+    } catch {
+      console.error(
+        'Error: the "better-sqlite3" npm package is not installed.\n' +
+        'Run: npm install better-sqlite3'
+      );
+      process.exit(1);
     }
+
+    if (!fs.existsSync(DB_PATH)) {
+      console.error(`Database not found: ${DB_PATH}\nUse --db <path> to specify a different location.`);
+      process.exit(1);
+    }
+
+    console.log(`[timelapse] Opening database: ${DB_PATH}`);
+    const db = new Database(DB_PATH, { readonly: true });
+    events = buildFullEventStreamFromDb(db);
+    db.close();
   }
 
-  const ok = ffmpegStdin.write(buf);
-  frameCount++;
-  return ok; // false = pipe buffer full (need to drain)
-}
+  if (events.length === 0) {
+    console.error('No pixel events found for the given filters. Nothing to render.');
+    process.exit(1);
+  }
 
-// ── Main render loop ──────────────────────────────────────────────────────────
+  console.log(`[timelapse] ${events.length.toLocaleString()} events to render`);
+  console.log(`[timelapse] Output: ${OUT_PATH}  (${OUT_W}x${OUT_H} @ ${FPS} fps, ${PPS} px/s)`);
+  if (CROP) console.log(`[timelapse] Crop: (${REGION_X0},${REGION_Y0}) -> (${REGION_X1},${REGION_Y1})`);
 
-const startTime = Date.now();
+  // ── Canvas setup ─────────────────────────────────────────────────────────────
+  // Source canvas is always full board size so crop coords map correctly.
+  const srcCanvas = createCanvas(BOARD_W, BOARD_H);
+  const srcCtx    = srcCanvas.getContext('2d');
+  srcCtx.fillStyle = BG_HEX;
+  srcCtx.fillRect(0, 0, BOARD_W, BOARD_H);
 
-async function render() {
-  // Stream rows from the data source — avoids loading all rows into memory at once
-  // for SQLite; for JSON the array is already in memory (inevitable for JSON files).
-  const iter = getIter();
+  // Output canvas is the cropped + scaled region
+  const outCanvas = createCanvas(OUT_W, OUT_H);
+  const outCtx    = outCanvas.getContext('2d');
 
-  // Drain-aware write loop using async/await + stream backpressure
-  const REPORT_INTERVAL_MS = 500;
+  const FONT_SIZE = Math.max(14, Math.round(22 / SCALE));
 
-  for (const row of iter) {
+  function drawWatermark() {
+    if (!WATERMARK) return;
+    outCtx.save();
+    outCtx.font      = `bold ${FONT_SIZE}px sans-serif`;
+    outCtx.fillStyle = 'rgba(255,255,255,0.18)';
+    outCtx.textAlign = 'right';
+    outCtx.fillText('Saint-Pixels', OUT_W - 10, OUT_H - 10);
+    outCtx.restore();
+  }
+
+  // ── ffmpeg ───────────────────────────────────────────────────────────────────
+  const ffmpegArgs = [
+    '-y',
+    '-f', 'rawvideo', '-pix_fmt', 'rgba',
+    '-s', `${OUT_W}x${OUT_H}`,
+    '-r', String(FPS),
+    '-i', 'pipe:0',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    '-preset', 'fast', '-crf', '18',
+    '-movflags', '+faststart',
+    OUT_PATH,
+  ];
+
+  const ffmpeg      = spawn(FFMPEG, ffmpegArgs, { stdio: ['pipe', 'inherit', 'inherit'] });
+  const ffmpegStdin = ffmpeg.stdin;
+
+  let ffmpegExitCode = null;
+  const ffmpegClosed = new Promise(resolve => {
+    ffmpeg.on('close', code => { ffmpegExitCode = code; resolve(); });
+    ffmpeg.on('error', err => {
+      if (err.code === 'ENOENT') {
+        err.message =
+          `ffmpeg not found (tried: "${FFMPEG}").\n` +
+          'Install it:  sudo apt-get install ffmpeg  /  brew install ffmpeg\n' +
+          'Or set the FFMPEG_PATH environment variable to the full path of the ffmpeg binary.';
+      }
+      console.error('[timelapse] ffmpeg error:', err.message);
+      ffmpegExitCode = -1;
+      resolve();
+    });
+  });
+
+  // ── Render loop ──────────────────────────────────────────────────────────────
+
+  function writeFrame() {
+    // Draw the crop region from the source canvas, scaled to OUT_W x OUT_H.
+    outCtx.drawImage(
+      srcCanvas,
+      REGION_X0, REGION_Y0, REGION_W, REGION_H,
+      0, 0, OUT_W, OUT_H
+    );
+    drawWatermark();
+    const buf = outCanvas.toBuffer('raw');
+
+    // Erase watermark so it doesn't bleed onto subsequent frames.
+    if (WATERMARK) {
+      const wy = OUT_H - FONT_SIZE * 2 - 10;
+      const wh = FONT_SIZE * 2 + 10;
+      outCtx.clearRect(0, wy, OUT_W, wh);
+      outCtx.drawImage(
+        srcCanvas,
+        REGION_X0, REGION_Y0 + Math.round(wy * SCALE), REGION_W, Math.round(wh * SCALE),
+        0, wy, OUT_W, wh
+      );
+    }
+
+    return ffmpegStdin.write(buf);
+  }
+
+  let frameAccum  = 0;
+  let eventsDone  = 0;
+  let lastLogTime = Date.now();
+  const LOG_INTERVAL_MS = 2000;
+
+  for (const row of events) {
     const { x, y, color } = row;
 
-    // Paint pixel onto the full-resolution canvas
     if (color === 'erase') {
-      ctx.clearRect(x, y, 1, 1);
-      ctx.fillStyle = BG_HEX;
-      ctx.fillRect(x, y, 1, 1);
+      srcCtx.fillStyle = BG_HEX;
+      srcCtx.fillRect(x, y, 1, 1);
     } else {
       const c = normalizeColor(color);
-      if (c) {
-        ctx.fillStyle = c;
-        ctx.fillRect(x, y, 1, 1);
-      }
+      if (c) { srcCtx.fillStyle = c; srcCtx.fillRect(x, y, 1, 1); }
     }
 
-    eventCount++;
+    eventsDone++;
     frameAccum += 1;
 
-    // Emit a frame whenever we've accumulated enough events
     if (frameAccum >= EVENTS_PER_FRAME) {
       frameAccum -= EVENTS_PER_FRAME;
-
       const ok = writeFrame();
-
       if (!ok) {
-        // ffmpeg's stdin buffer is full — wait for it to drain before continuing
         await new Promise(resolve => ffmpegStdin.once('drain', resolve));
       }
     }
 
-    // Throttled progress logging
-    if (Date.now() - lastLogTime > REPORT_INTERVAL_MS) {
-      logProgress();
+    if (Date.now() - lastLogTime > LOG_INTERVAL_MS) {
+      const pct = ((eventsDone / events.length) * 100).toFixed(1);
+      process.stdout.write(`\r[timelapse] ${eventsDone.toLocaleString()} / ${events.length.toLocaleString()} events  (${pct}%)`);
       lastLogTime = Date.now();
     }
   }
 
-  // Flush the final partial frame (the last few pixels that didn't fill a frame)
-  if (frameAccum > 0) {
-    writeFrame();
+  // Flush final partial frame
+  if (frameAccum > 0) writeFrame();
+
+  process.stdout.write('\n');
+  console.log('[timelapse] Encoding -- waiting for ffmpeg to finish...');
+
+  ffmpegStdin.end();
+  await ffmpegClosed;
+
+  if (ffmpegExitCode !== 0) {
+    console.error(`[timelapse] ffmpeg exited with code ${ffmpegExitCode}`);
+    process.exit(1);
   }
 
-  logProgress();
-  process.stdout.write('\n');
-
-  const totalSecs = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(
-    `[timelapse] Render complete — ${frameCount.toLocaleString()} frames in ${totalSecs}s ` +
-    `(${(frameCount / totalSecs).toFixed(1)} fps throughput)`
-  );
-
-  // Close stdin — tells ffmpeg we're done sending frames
-  ffmpegStdin.end();
+  const stat = fs.statSync(OUT_PATH);
+  const mb   = (stat.size / 1024 / 1024).toFixed(1);
+  console.log(`[timelapse] Done! -> ${OUT_PATH}  (${mb} MB)`);
 }
 
-render().catch(err => {
-  console.error('\n[timelapse] Unexpected error:', err);
-  ffmpegStdin.destroy();
+main().catch(err => {
+  console.error('[timelapse] Fatal error:', err.message || err);
   process.exit(1);
 });

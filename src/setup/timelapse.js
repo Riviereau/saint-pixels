@@ -40,6 +40,100 @@ const OUT_DIR           = process.env.TIMELAPSE_OUT_DIR
 const BOARD_W = 1920;
 const BOARD_H = 1080;
 
+// ── Legacy pixel synthesis ────────────────────────────────────────────────────
+//
+// Pixels placed before pixel_history existed live only in the `pixels` table
+// (the upsert table storing current board state).  We detect them by finding
+// (x,y) pairs that never appear in pixel_history, assign them synthetic
+// timestamps spaced LEGACY_GAP_MS apart anchored just before the earliest real
+// history event, and merge them into the full event stream.
+//
+// This mirrors the same logic in actions.js /api/admin/pixel-history so both
+// the HTTP dump and the timelapse renderer include every pixel ever placed.
+
+const LEGACY_GAP_MS = 3200; // ms between consecutive legacy events
+
+/**
+ * Build a merged, time-sorted array of all pixel events:
+ *   1. Real rows from pixel_history.
+ *   2. Synthetic rows for pixels in `pixels` that predate pixel_history.
+ *
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ from?: string|null, to?: string|null, user?: string|null }} filters
+ *   Only `from`/`to`/`user` are applied to pixel_history rows.
+ *   Legacy pixels are always included (they have no reliable timestamp to
+ *   filter against, so we include all of them and let their synthetic
+ *   timestamps fall outside the range naturally — callers can re-filter).
+ * @returns {{ username: string, x: number, y: number, color: string, prev_color: string|null, placed_at: number }[]}
+ */
+function buildFullEventStream(db, filters = {}) {
+  // ── Step 1: real history rows (with optional filters) ──────────────────────
+  let WHERE = '1=1';
+  const bindings = [];
+
+  if (filters.from) {
+    const ts = Date.parse(filters.from);
+    if (!isNaN(ts)) { WHERE += ' AND placed_at >= ?'; bindings.push(ts); }
+  }
+  if (filters.to) {
+    const ts = Date.parse(filters.to + 'T23:59:59');
+    if (!isNaN(ts)) { WHERE += ' AND placed_at <= ?'; bindings.push(ts); }
+  }
+  if (filters.user) {
+    WHERE += ' AND username = ?'; bindings.push(filters.user);
+  }
+
+  const historyRows = db.prepare(
+    `SELECT username, x, y, color, prev_color, placed_at
+     FROM pixel_history WHERE ${WHERE} ORDER BY placed_at ASC`
+  ).all(...bindings);
+
+  // ── Step 2: legacy pixels absent from pixel_history ────────────────────────
+  // If pixel_history is completely empty, every pixel in the board is legacy.
+  let legacyRows;
+  if (historyRows.length === 0) {
+    legacyRows = db.prepare(
+      'SELECT username, x, y, color, placed_at FROM pixels ORDER BY placed_at ASC'
+    ).all();
+  } else {
+    // Pixels whose (x,y) never appears in pixel_history at all (regardless of
+    // the current WHERE filters — legacy pixels have no timestamp to filter on).
+    legacyRows = db.prepare(`
+      SELECT p.username, p.x, p.y, p.color, p.placed_at
+      FROM pixels p
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pixel_history ph WHERE ph.x = p.x AND ph.y = p.y
+      )
+      ORDER BY p.placed_at ASC
+    `).all();
+  }
+
+  // ── Step 3: assign synthetic timestamps to legacy pixels ───────────────────
+  let syntheticRows = [];
+  if (legacyRows.length > 0) {
+    // Anchor just before the first real history event (or now if none).
+    // Unfiltered historyRows are needed here, so fetch the earliest real event.
+    const earliestReal = db.prepare(
+      'SELECT placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT 1'
+    ).get();
+    const anchor   = earliestReal ? earliestReal.placed_at : Date.now();
+    const startTs  = anchor - legacyRows.length * LEGACY_GAP_MS;
+    syntheticRows  = legacyRows.map((r, i) => ({
+      username:  r.username,
+      x:         r.x,
+      y:         r.y,
+      color:     r.color,
+      prev_color: null,
+      placed_at: startTs + i * LEGACY_GAP_MS,
+    }));
+  }
+
+  // ── Step 4: merge and sort chronologically ─────────────────────────────────
+  const all = [...syntheticRows, ...historyRows];
+  all.sort((a, b) => a.placed_at - b.placed_at);
+  return all;
+}
+
 // ── Job store ─────────────────────────────────────────────────────────────────
 
 /**
@@ -133,25 +227,18 @@ async function runJob(job, db) {
   const OUT_H = Math.round(BOARD_H / SCALE);
   const EVENTS_PER_FRAME = PPS / FPS;
 
-  // ── Query pixel_history ────────────────────────────────────────────────────
+  // ── Build full event stream (pixel_history + legacy pixels) ──────────────
+  // buildFullEventStream merges real pixel_history rows with legacy pixels
+  // (pixels placed before pixel_history existed, found only in `pixels`).
+  // This ensures the timelapse starts from the very first pixel ever placed,
+  // not just the first pixel that was logged in the history table.
 
-  let WHERE = '1=1';
-  const bindings = [];
-
-  if (opts.from) {
-    const fromTs = Date.parse(opts.from);
-    if (!isNaN(fromTs)) { WHERE += ' AND placed_at >= ?'; bindings.push(fromTs); }
-  }
-  if (opts.to) {
-    const toTs = Date.parse(opts.to + 'T23:59:59');
-    if (!isNaN(toTs)) { WHERE += ' AND placed_at <= ?'; bindings.push(toTs); }
-  }
-  if (opts.user) {
-    WHERE += ' AND username = ?'; bindings.push(opts.user);
-  }
-
-  const countRow = db.prepare(`SELECT COUNT(*) AS n FROM pixel_history WHERE ${WHERE}`).get(...bindings);
-  const total    = countRow.n;
+  const allEvents = buildFullEventStream(db, {
+    from: opts.from || null,
+    to:   opts.to   || null,
+    user: opts.user || null,
+  });
+  const total = allEvents.length;
 
   if (total === 0) {
     throw new Error('No pixel events found for the given filters.');
@@ -257,13 +344,13 @@ async function runJob(job, db) {
   }
 
   // ── Render loop ────────────────────────────────────────────────────────────
+  // Iterate over allEvents (legacy + real history, already sorted by placed_at).
 
-  const iter       = db.prepare(`SELECT x, y, color FROM pixel_history WHERE ${WHERE} ORDER BY placed_at ASC`).iterate(...bindings);
   let frameAccum   = 0;
   let lastBroadcast = Date.now();
   const BROADCAST_INTERVAL_MS = 500;
 
-  for (const row of iter) {
+  for (const row of allEvents) {
     // Abort if job was cancelled
     if (job.status === 'cancelled') {
       ffmpegStdin.destroy();
@@ -449,22 +536,15 @@ function initializeTimelapse(app, db, limiter) {
     }
 
     // ── Query ────────────────────────────────────────────────────────────────
+    // buildFullEventStream includes legacy pixels (placed before pixel_history
+    // existed) as synthetic events anchored before the first real history row.
     try {
       const MAX_HISTORY_LIMIT = 1_000_000;
-      const requestedLimit = Math.min(
-        parseInt(req.query.limit, 10) || MAX_HISTORY_LIMIT,
-        MAX_HISTORY_LIMIT
-      );
-      // Include prev_color so the in-browser player can show what was
-      // overwritten at each cell before the new pixel was placed.
-      const rows = _db.prepare(
-        'SELECT username, x, y, color, prev_color, placed_at FROM pixel_history ORDER BY placed_at ASC LIMIT ?'
-      ).all(requestedLimit);
-      const capped = rows.length === requestedLimit;
-      const total = capped
-        ? _db.prepare('SELECT COUNT(*) AS n FROM pixel_history').get().n
-        : rows.length;
-      return res.json({ events: rows, capped, total });
+      const allEvents = buildFullEventStream(_db, {});
+      const total     = allEvents.length;
+      const capped    = total > MAX_HISTORY_LIMIT;
+      const events    = capped ? allEvents.slice(0, MAX_HISTORY_LIMIT) : allEvents;
+      return res.json({ events, capped, total });
     } catch (err) {
       console.error('[timelapse/history]', err);
       return res.status(500).json({ error: 'Could not load timelapse data.' });
