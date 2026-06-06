@@ -223,41 +223,15 @@ function drawGrid() {
   if (!isTouchDevice) {
     // PC: line grid (fast and clean)
     
-    // 1. Force line width to exactly 1 physical pixel, even on high-DPR screens
-    gridCtx.lineWidth = 1 / dpr;
+    for (const x of xs) {
+      const px = Math.round(x * dpr) / dpr;
+      gridCtx.fillRect(px, clipT, 1 / dpr, clipB - clipT);
+    }
 
-    // 2. Helper to snap coordinates perfectly to the center of a physical pixel
-    const snap = (val) => (Math.floor(val * dpr) + 0.5) / dpr;
-
-    gridCtx.strokeStyle = 'rgba(255,255,255,0.12)';
-    gridCtx.beginPath();
-    for (const x of xs) { 
-      const px = snap(x); 
-      gridCtx.moveTo(px, clipT); 
-      gridCtx.lineTo(px, clipB); 
+    for (const y of ys) {
+      const py = Math.round(y * dpr) / dpr;
+      gridCtx.fillRect(clipL, py, clipR - clipL, 1 / dpr);
     }
-    for (const y of ys) { 
-      const py = snap(y); 
-      gridCtx.moveTo(clipL, py); 
-      gridCtx.lineTo(clipR, py); 
-    }
-    gridCtx.stroke();
-
-    gridCtx.strokeStyle = 'rgba(0,0,0,0.18)';
-    gridCtx.beginPath();
-    // 3. Shift the black line by exactly 1 physical pixel right/down
-    // This creates a crisp, 2-tone contrast effect without lines blending into mush
-    for (const x of xs) { 
-      const px = snap(x) + (1 / dpr); 
-      gridCtx.moveTo(px, clipT); 
-      gridCtx.lineTo(px, clipB); 
-    }
-    for (const y of ys) { 
-      const py = snap(y) + (1 / dpr); 
-      gridCtx.moveTo(clipL, py); 
-      gridCtx.lineTo(clipR, py); 
-    }
-    gridCtx.stroke();
   } else {
     // Mobile: cross markers at every corner
     const armBase = Math.min(scale * 0.25, 6);
