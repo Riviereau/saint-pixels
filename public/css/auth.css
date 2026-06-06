@@ -40,20 +40,24 @@
 }
 
 /* ── hCaptcha compact widget sizing ─────────────────────────────────────── */
-/* hCaptcha's compact variant renders a 164×55 px iframe.
-   Without explicit height the parent div expands to a full square. */
+/* hCaptcha */
 #authCaptchaWrapper {
-  overflow: hidden;
-  min-height: 0;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  overflow: visible;
 }
-#authCaptchaWrapper .h-captcha,
-#authCaptchaWrapper .h-captcha > iframe {
-  display: block;
-  width: 164px !important;
-  height: 55px !important;
-  max-height: 55px;
-  overflow: hidden;
-  border-radius: 8px;
+
+#authCaptchaWrapper .h-captcha {
+  display: flex;
+  justify-content: center;
+  min-height: 55px;
+  width: 100%;
+}
+
+/* Let hCaptcha manage its own internal iframe sizing */
+#authCaptchaWrapper iframe {
+  max-width: 100%;
 }
 
 /* ── Password reset overlay ──────────────────────────────────────────────── */
