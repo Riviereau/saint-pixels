@@ -4,20 +4,20 @@
  * Drop  <script src="/chat.js"></script>  after app.js in index.html.
  *
  * Requires app.js to expose after login / session restore:
- *   window.__username   — logged-in username string
- *   window.__token      — session Bearer token string
+ * window.__username   — logged-in username string
+ * window.__token      — session Bearer token string
  *
  * Requires app.js SSE handler to forward chat events:
- *   if (data.type === 'chat') window.__chatIncoming?.(data);
+ * if (data.type === 'chat') window.__chatIncoming?.(data);
  *
  * Optional profile click-through (if the app has a profile viewer):
- *   window.__openProfile = (username) => { ... };
+ * window.__openProfile = (username) => { ... };
  *
  * Security notes:
- *  - All user content is rendered via textContent / dataset, never innerHTML,
- *    so XSS through chat messages or usernames is structurally impossible.
- *  - The esc() helper is kept only for the data-u attribute fallback; it now
- *    also escapes single-quotes to prevent attribute-context breakout.
+ * - All user content is rendered via textContent / dataset, never innerHTML,
+ * so XSS through chat messages or usernames is structurally impossible.
+ * - The esc() helper is kept only for the data-u attribute fallback; it now
+ * also escapes single-quotes to prevent attribute-context breakout.
  */
 
 (function () {
@@ -43,6 +43,9 @@
   let isOpen       = false;
   let unreadCount  = 0;
   let sendCooldown = false;
+  
+  // Track IDs to deduplicate optimistic sends vs. SSE echoes
+  const seenMsgIds = new Set();
 
   // ── Utilities ────────────────────────────────────────────────────────────────
 
@@ -151,7 +154,11 @@
       const data = await res.json();
       if (!Array.isArray(data?.messages)) return;
       msgList.innerHTML = '';
-      for (const msg of data.messages) appendMessage(msg, false);
+      seenMsgIds.clear(); // Reset dedupe cache on load
+      for (const msg of data.messages) {
+        if (msg.id) seenMsgIds.add(msg.id);
+        appendMessage(msg, false);
+      }
       scrollToBottom(true);
     } catch (err) {
       console.warn('[chat] Could not load history:', err);
@@ -163,6 +170,19 @@
   window.__chatIncoming = function (data) {
     // Reject malformed SSE payloads
     if (!data || typeof data !== 'object') return;
+    
+    // Deduplicate optimistic UI updates vs SSE round-trip
+    if (data.id) {
+      if (seenMsgIds.has(data.id)) return;
+      seenMsgIds.add(data.id);
+      
+      // Prune memory
+      if (seenMsgIds.size > MAX_DISPLAY * 2) {
+        const first = seenMsgIds.values().next().value;
+        seenMsgIds.delete(first);
+      }
+    }
+
     const wasAtBottom = isAtBottom();
     appendMessage(data, wasAtBottom || isOpen);
 
@@ -209,8 +229,12 @@
       if (!res.ok) {
         appendSystem(data?.error || 'Failed to send message.');
         input.value = text; // restore on failure
+      } else {
+        // Optimistic local echo for instant feedback
+        if (typeof window.__chatIncoming === 'function') {
+          window.__chatIncoming(data);
+        }
       }
-      // On success the server SSE broadcast delivers the message to everyone
     } catch (err) {
       console.error('[chat] send error:', err);
       appendSystem('Network error — could not send.');

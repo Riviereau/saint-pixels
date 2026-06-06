@@ -144,10 +144,8 @@ function handleRemoteEvent(event) {
 }
 
 function replayHistory() {
-  const history = safeParse(localStorage.getItem(PIXEL_HISTORY_KEY), []);
-  history.forEach(event => {
-    if (event.type === 'pixel') applyRemotePixel(event);
-  });
+  // No-op: Pixel history is now stored entirely server-side.
+  // The SSE 'init' event provides the necessary canvas state on boot.
 }
 
 // ── Broadcast (send to server + other tabs) ──────────────────────────
@@ -252,12 +250,8 @@ function broadcastEvent(event) {
           });
         }, 1500);
 
-        // Cancel retry if another pixel placement fires first
         window.addEventListener('sp-pixel-placed', () => { clearTimeout(retryTimeout); }, { once: true });
       });
     }
-  }
-  if (event.type === 'clear') {
-    setTimeout(() => localStorage.setItem(PIXEL_HISTORY_KEY, JSON.stringify([])), 0);
   }
 }
