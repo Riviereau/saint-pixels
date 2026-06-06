@@ -176,8 +176,11 @@ function drawGrid() {
   // with canvas. Resizing on every drawGrid call is extremely expensive.
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+  
+  const alpha = Math.min(1, (scale - 2) / 2);
+  if (alpha <= 0 || !gridEnabled) return;
 
-  if (!gridEnabled || scale < 4) return;
+  gridCtx.strokeStyle = `rgba(0,0,0,${0.18 * alpha})`;
 
   const vpW = canvas.width  / dpr;
   const vpH = canvas.height / dpr;
@@ -198,6 +201,25 @@ function drawGrid() {
   const endCol   = Math.min(BOARD_WIDTH,  Math.ceil((clipR - offsetX) / scale));
   const endRow   = Math.min(BOARD_HEIGHT, Math.ceil((clipB - offsetY) / scale));
 
+  const xs = [];
+  let lastXr = -Infinity;
+  for (let col = startCol; col <= endCol; col++) {
+    const x  = col * scale + offsetX;
+    const xr = Math.round(x);
+    if (xr === lastXr || xr < Math.round(clipL) || xr > Math.round(clipR)) continue;
+    lastXr = xr;
+    xs.push(x);
+  }
+
+  const ys = [];
+  let lastYr = -Infinity;
+  for (let row = startRow; row <= endRow; row++) {
+    const y  = row * scale + offsetY;
+    const yr = Math.round(y);
+    if (yr === lastYr || yr < Math.round(clipT) || yr > Math.round(clipB)) continue;
+    lastYr = yr;
+    ys.push(y);
+  }
 
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
 
@@ -209,14 +231,16 @@ function drawGrid() {
 
     gridCtx.beginPath();
 
+    const snap = (v) => Math.round(v * dpr) / dpr;
+
     for (const x of xs) {
-      const px = Math.round(x * dpr + 0.5) / dpr;
+      const px = snap(x);
       gridCtx.moveTo(px, clipT);
       gridCtx.lineTo(px, clipB);
     }
 
     for (const y of ys) {
-      const py = Math.round(y * dpr) / dpr;
+      const py = snap(y);
       gridCtx.moveTo(clipL, py);
       gridCtx.lineTo(clipR, py);
     }
