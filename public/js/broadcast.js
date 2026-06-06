@@ -162,8 +162,6 @@ function broadcastEvent(event) {
   localStorage.setItem(EVENT_KEY, JSON.stringify(event));
 
   if (event.type === 'pixel') {
-    setTimeout(() => appendHistory(event), 0);
-
     const token = getStoredToken();
     if (token) {
       const endpoint = event.tool === 'eraser' ? '/api/erase' : '/api/pixel';
