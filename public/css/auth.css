@@ -34,6 +34,7 @@
     justify-content: center; /* Centers the captcha nicely on mobile */
     min-height: 80px; /* Reserves space so the container doesn't collapse to 0 height */
     width: 100%;
+    overflow: visible;
     /* Note: overflow: hidden was removed here to prevent clipping the async iframe */
   }
 }
