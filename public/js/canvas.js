@@ -225,22 +225,18 @@ function drawGrid() {
     
     gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
 
+    gridCtx.lineWidth = 1 / dpr;
+
     for (const x of xs) {
-      const px = Math.round(x * dpr) / dpr + (1 / dpr);
-      gridCtx.fillRect(px, clipT, 1 / dpr, clipB - clipT);
+      const px = Math.round(x * dpr) / dpr;
+      gridCtx.moveTo(px, clipT);
+      gridCtx.lineTo(px, clipB);
     }
 
     for (const y of ys) {
-      const py = Math.round(y * dpr) / dpr + (1 / dpr);
-      gridCtx.fillRect(clipL, py, clipR - clipL, 1 / dpr);
-    }
-    for (let i = 1; i < ys.length; i++) {
-      const a = Math.round(ys[i - 1] * dpr);
-      const b = Math.round(ys[i] * dpr);
-
-      if (a === b) {
-        console.log('COLLISION', i, a);
-      }
+      const py = Math.round(y * dpr) / dpr;
+      gridCtx.moveTo(clipL, py);
+      gridCtx.lineTo(clipR, py);
     }
   } else {
     // Mobile: cross markers at every corner
