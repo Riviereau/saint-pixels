@@ -322,7 +322,7 @@ function setAuthMode(mode) {
   if (!isRegister && rulesCheck) rulesCheck.checked = false;
 
   const captchaWrapper = document.getElementById('authCaptchaWrapper');
-  if (captchaWrapper) captchaWrapper.style.display = isRegister ? '' : 'none';
+  if (captchaWrapper) captchaWrapper.style.display = '';
 
   if (authSubmit) authSubmit.textContent = isRegister ? 'Create account' : 'Login';
 
