@@ -223,22 +223,23 @@ function drawGrid() {
   if (!isTouchDevice) {
     // PC: line grid (fast and clean)
     
+    gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
+
     for (const x of xs) {
-      const px = Math.round(x * dpr) / dpr;
+      const px = Math.round(x * dpr) / dpr + (1 / dpr);
       gridCtx.fillRect(px, clipT, 1 / dpr, clipB - clipT);
-      gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
     }
 
     for (const y of ys) {
-      const py = Math.round(y * dpr) / dpr;
+      const py = Math.round(y * dpr) / dpr + (1 / dpr);
       gridCtx.fillRect(clipL, py, clipR - clipL, 1 / dpr);
-      gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
     }
     for (let i = 1; i < ys.length; i++) {
-      const diff = ys[i] - ys[i - 1];
+      const a = Math.round(ys[i - 1] * dpr);
+      const b = Math.round(ys[i] * dpr);
 
-      if (Math.abs(diff - pixelSize) > 0.01) {
-        console.log('Gap detected', i, diff);
+      if (a === b) {
+        console.log('COLLISION', i, a);
       }
     }
   } else {

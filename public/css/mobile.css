@@ -718,7 +718,7 @@
     flex-shrink: 0 !important;
   }
   .lb-panel {
-    top: var(--mob-top-total, 96px);
+    top: var(--mob-top-total, 72px);
     bottom: calc(var(--mob-bottom-total, 88px) + env(safe-area-inset-bottom, 0px));
     transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1), top 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -772,7 +772,7 @@
 /* ── Leaderboard: mobile overrides ──────────────────────────────────────── */
 @media (max-width: 720px) {
   .lb-panel {
-    top: var(--mob-top-total, 88px);
+    top: var(--mob-top-total, 100px);
     bottom: calc(var(--mob-bottom-total, 106px) + env(safe-area-inset-bottom, 0px));
     --lb-width: 220px;
     --lb-toggle-w: 24px;
