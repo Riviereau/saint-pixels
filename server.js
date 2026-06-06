@@ -981,6 +981,11 @@ function buildLeaderboardFilter(period) {
   if (period === 'today') {
     return { clause: 'AND day = ?', params: [today] };
   }
+  if (period === 'yesterday') {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return { clause: 'AND day = ?', params: [d.toISOString().slice(0, 10)] };
+  }
   if (period === 'week') {
     const d = new Date(now);
     d.setUTCDate(d.getUTCDate() - 6);
@@ -996,12 +1001,16 @@ function buildLeaderboardFilter(period) {
     const decadeStart = String(Math.floor(parseInt(today.slice(0, 4), 10) / 10) * 10) + '-01-01';
     return { clause: 'AND day >= ?', params: [decadeStart] };
   }
+  if (period === 'century') {
+    const centuryStart = String(Math.floor(parseInt(today.slice(0, 4), 10) / 100) * 100) + '-01-01';
+    return { clause: 'AND day >= ?', params: [centuryStart] };
+  }
   // alltime — no filter
   return { clause: '', params: [] };
 }
 
 app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
-  const period = ['today','week','month','year','decade','alltime'].includes(req.query.period)
+  const period = ['today','yesterday','week','month','year','decade','century','alltime'].includes(req.query.period)
     ? req.query.period : 'today';
   const { clause, params } = buildLeaderboardFilter(period);
   try {
@@ -1019,6 +1028,50 @@ app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
 
 // NOTE: /api/timelapse/history is registered inside initializeTimelapse() in
 // timelapse.js — it must come before the /:id wildcard route to avoid the 401.
+
+
+// ── Database backup — streams the SQLite file to the browser as a download ──
+// Protect with ADMIN_SECRET. Use this to take manual snapshots of the canvas.
+// In your browser: https://www.saint-pixels.org/api/admin/backup?secret=YOUR_SECRET
+// Then save the downloaded file locally as a .sqlite backup.
+//
+// IMPORTANT: this uses the SQLite backup API (db.backup()) which creates a
+// safe consistent snapshot even while the DB is being written to (WAL mode).
+// Never copy the raw .sqlite file directly — WAL pages may not be flushed yet.
+app.get('/api/admin/backup', async (req, res) => {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret || req.query.secret !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const os   = require('os');
+  const path = require('path');
+  const fs   = require('fs');
+  const tmpFile = path.join(os.tmpdir(), `sp-backup-${Date.now()}.sqlite`);
+  try {
+    // db.backup() is better-sqlite3's safe online backup — works correctly
+    // under concurrent reads/writes without locking out other connections.
+    await db.backup(tmpFile);
+    const stat = fs.statSync(tmpFile);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename=saint-pixels-${stamp}.sqlite`);
+    res.setHeader('Content-Length', stat.size);
+    const stream = fs.createReadStream(tmpFile);
+    stream.pipe(res);
+    stream.on('close', () => {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup error */ }
+    });
+    stream.on('error', (err) => {
+      console.error('[backup] Stream error:', err);
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+      if (!res.headersSent) res.status(500).json({ error: 'Stream failed.' });
+    });
+  } catch (err) {
+    console.error('[backup] Backup failed:', err);
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    return res.status(500).json({ error: 'Backup failed.', detail: err.message });
+  }
+});
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => res.status(404).send('Not found'));
