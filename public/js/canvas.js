@@ -223,12 +223,13 @@ function drawGrid() {
   if (!isTouchDevice) {
     // PC: line grid (fast and clean)
     
-    gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
-
+    gridCtx.strokeStyle = 'rgba(0,0,0,0.18)';
     gridCtx.lineWidth = 1 / dpr;
 
+    gridCtx.beginPath();
+
     for (const x of xs) {
-      const px = Math.round(x * dpr) / dpr;
+      const px = Math.round(x * dpr + 0.5) / dpr;
       gridCtx.moveTo(px, clipT);
       gridCtx.lineTo(px, clipB);
     }
@@ -238,6 +239,8 @@ function drawGrid() {
       gridCtx.moveTo(clipL, py);
       gridCtx.lineTo(clipR, py);
     }
+
+    gridCtx.stroke();
   } else {
     // Mobile: cross markers at every corner
     const armBase = Math.min(scale * 0.25, 6);
