@@ -5,6 +5,7 @@
  *
  * Requires app.js to expose after login / session restore:
  *   window.__username   — logged-in username string
+ *   window.__token      — session Bearer token string
  *
  * Requires app.js SSE handler to forward chat events:
  *   if (data.type === 'chat') window.__chatIncoming?.(data);
@@ -197,6 +198,9 @@
         credentials: 'same-origin',
         headers: {
           'Content-Type':  'application/json',
+          // Include the session token so the server can authenticate the request.
+          // window.__token is set by app.js after login / session restore.
+          'Authorization': `Bearer ${window.__token || ''}`,
         },
         body: JSON.stringify({ message: text }),
       });

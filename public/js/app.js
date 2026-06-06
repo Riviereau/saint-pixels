@@ -7,6 +7,7 @@
 //   input.js    — mouse / touch / keyboard / wheel / pan / zoom
 //   palette.js  — color palette state, variation picker, color helpers
 //   auth.js     — login, register, logout, ban screen, password reset
+//                  (calls setAuthToken(token) on every login / restore / logout)
 //   cooldown.js — cooldown bar UI + canPlacePixel gate
 //   broadcast.js — SSE real-time sync + pixel broadcast
 //   events.js   — cooldown event system + streak / stats
@@ -35,6 +36,33 @@ let currentUser  = null;
 let lastPlaceAt  = 0;
 let color        = '#000000';
 let cursorPosition = null; // set to board-center on first load in canvas.js
+
+// ── Session token — shared across modules ─────────────────────────────
+// window.__token is the live session Bearer token.  It is set by auth.js
+// (via setAuthToken below) after every successful login / session restore,
+// and cleared on logout.
+//
+// Two consumers need it:
+//   • public/chat.js — sends Authorization: Bearer <token> on POST /api/chat
+//   • timelapse-ui.js — reads localStorage('sp_token') for /api/timelapse/history
+//
+// Both are kept in sync by setAuthToken so they always see the same value.
+window.__token = null;
+
+/**
+ * Called by auth.js after every login / session restore and on logout.
+ * @param {string|null} token  — the Bearer token, or null to clear
+ */
+function setAuthToken(token) {
+  window.__token = token || null;
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  } catch { /* storage may be unavailable in private mode */ }
+}
 
 // ── Utility helpers ──────────────────────────────────────────────────
 
@@ -77,9 +105,16 @@ function isLocalDev() {
 }
 
 // ── Storage keys ─────────────────────────────────────────────────────
-// Declared here so auth.js, broadcast.js, and input.js can all share them.
-const EVENT_KEY         = 'sp_last_event';
-const PIXEL_HISTORY_KEY = 'sp_pixel_history';
+// Declared here so auth.js, broadcast.js, timelapse-ui.js, and chat.js
+// can all share the same key names without risk of drift.
+const EVENT_KEY = 'sp_last_event';
+const TOKEN_KEY = 'sp_token'; // session Bearer token — read by timelapse-ui.js
+
+// One-time migration: remove the old sp_pixel_history key written by a
+// previous version of this file.  It can be several MB and was the root
+// cause of the QuotaExceededError.  Pixel history is now stored server-side
+// only (SQLite pixel_history table + JSON file written by PlacePixel.js).
+try { localStorage.removeItem('sp_pixel_history'); } catch { /* ignore */ }
 
 // ── Recent-local-cell guard ───────────────────────────────────────────
 // Tracks cells the current user painted optimistically in the last 15 s.
@@ -98,15 +133,6 @@ function _markLocalCell(x, y) {
   for (const [k, t] of _recentLocalCells) {
     if (t < cutoff) _recentLocalCells.delete(k);
   }
-}
-
-// ── Pixel history helpers ─────────────────────────────────────────────
-
-function appendHistory(event) {
-  const history = safeParse(localStorage.getItem(PIXEL_HISTORY_KEY), []);
-  history.push(event);
-  if (history.length > 500) history.shift();
-  localStorage.setItem(PIXEL_HISTORY_KEY, JSON.stringify(history));
 }
 
 // ── Canvas clear helpers ──────────────────────────────────────────────
