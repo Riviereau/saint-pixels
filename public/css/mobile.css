@@ -320,12 +320,12 @@
     top: auto !important;
     transform: none !important;
     height: auto !important;
-    width: 54px !important;
+    width: 64px !important;
     z-index: 286 !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 6px !important;
-    padding: 8px 6px !important;
+    gap: 8px !important;
+    padding: 8px !important;
     background: rgba(58, 58, 59, 1) !important;
     backdrop-filter: none !important;
     border: none !important;
@@ -339,11 +339,11 @@
   }
   .tool--secondary {
     padding: 0 !important;
-    width: 38px !important;
-    height: 38px !important;
+    width: 48px !important;
+    height: 48px !important;
     min-height: unset !important;
     font-size: 0 !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     background: transparent !important;
     border: 1px solid rgba(255,255,255,0.08) !important;
     display: flex !important;
@@ -352,6 +352,7 @@
     flex-shrink: 0 !important;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
+    touch-action: manipulation;
   }
   .tool--secondary[data-tool="brush"]::after {
     content: "";
@@ -717,7 +718,7 @@
     flex-shrink: 0 !important;
   }
   .lb-panel {
-    top: var(--mob-top-total, 72px);
+    top: 16px !important;
     bottom: calc(var(--mob-bottom-total, 88px) + env(safe-area-inset-bottom, 0px));
     transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1), top 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
