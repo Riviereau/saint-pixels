@@ -47,6 +47,7 @@ app.use((req, res, next) => {
         // /rules.js so these hashes are belt-and-suspenders for cached deployments.
         "'sha256-cTc7j0QRPd2lahucuGoesYnoiY20ld2VoJH/dI1jo1Q='",
         "'sha256-VRHni0ghwcE6k2ag6cOlYFcp2gCLPlFMjucv3rvRtEo='",
+        "'sha256-5hcVLnyeg7ovvPCWy9TY4zmi3k8SnAhE/oa2/McvSwk='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
