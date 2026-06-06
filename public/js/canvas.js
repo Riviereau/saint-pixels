@@ -209,16 +209,14 @@ function drawGrid() {
 
     gridCtx.beginPath();
 
-    const snap = (v) => Math.round(v * dpr) / dpr;
-
     for (const x of xs) {
-      const px = snap(x);
+      const px = Math.round(x * dpr + 0.5) / dpr;
       gridCtx.moveTo(px, clipT);
       gridCtx.lineTo(px, clipB);
     }
 
     for (const y of ys) {
-      const py = snap(y);
+      const py = Math.round(y * dpr) / dpr;
       gridCtx.moveTo(clipL, py);
       gridCtx.lineTo(clipR, py);
     }
