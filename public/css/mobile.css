@@ -718,12 +718,12 @@
     flex-shrink: 0 !important;
   }
   .lb-panel {
-    top: 16px !important;
+    top: 48px !important;
     bottom: calc(var(--mob-bottom-total, 88px) + env(safe-area-inset-bottom, 0px));
     transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1), top 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .lb-panel.lb-open {
-    top: 0;
+    top: 48px !important;
     bottom: 0;
     z-index: 510;
   }
