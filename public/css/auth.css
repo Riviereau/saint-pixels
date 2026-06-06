@@ -31,8 +31,10 @@
   /* hCaptcha compact widget: allow centering on narrow screens */
   .h-captcha {
     display: flex;
-    justify-content: flex-start;
-    overflow: hidden;
+    justify-content: center; /* Centers the captcha nicely on mobile */
+    min-height: 80px; /* Reserves space so the container doesn't collapse to 0 height */
+    width: 100%;
+    /* Note: overflow: hidden was removed here to prevent clipping the async iframe */
   }
 }
 
