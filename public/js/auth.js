@@ -16,7 +16,7 @@ const authEmailLabel    = document.getElementById('authEmailLabel');
 const authMessage       = document.getElementById('authMessage');
 
 // ── Storage keys ────────────────────────────────────────────────────
-const TOKEN_KEY          = 'sp_token';
+// TOKEN_KEY ('sp_token') is declared in app.js — do NOT redeclare it here.
 const EMAIL_VERIFIED_KEY = 'sp_email_verified';
 
 // ── Token helpers ────────────────────────────────────────────────────
@@ -24,10 +24,13 @@ function getStoredToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 function saveToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
+  // Keep localStorage in sync AND update window.__token via setAuthToken
+  // (defined in app.js) so chat.js and timelapse-ui.js always see the
+  // current token without each having to read localStorage themselves.
+  setAuthToken(token);
 }
 function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  setAuthToken(null);
   localStorage.removeItem(EMAIL_VERIFIED_KEY);
 }
 
@@ -169,8 +172,8 @@ async function updateAuthState(retryCount = 0) {
     const emailVerified = !!data.emailVerified || locallyVerified;
     if (data.emailVerified) localStorage.setItem(EMAIL_VERIFIED_KEY, '1');
 
-    window.__username  = data.username;
-    window.__authToken = token;
+    window.__username = data.username;
+    setAuthToken(token);
     dispatchStateChange({ currentUser: data.username, emailVerified });
     document.body.classList.remove('auth-open');
     authMessage.textContent = '';
@@ -181,8 +184,8 @@ async function updateAuthState(retryCount = 0) {
       return;
     }
     currentUser = null;
-    window.__username  = null;
-    window.__authToken = null;
+    window.__username = null;
+    setAuthToken(null);
     dispatchStateChange({ currentUser: null, emailVerified: false });
     document.body.classList.add('auth-open');
     authUsername.focus();
@@ -198,8 +201,8 @@ function setCurrentUser(username, emailVerified = false, cooldown = 0, cooldownM
   } else {
     lastPlaceAt = 0;
   }
-  window.__username  = username;
-  window.__authToken = getStoredToken();
+  window.__username = username;
+  setAuthToken(getStoredToken());
   dispatchStateChange({ currentUser: username, emailVerified: !!emailVerified });
   document.body.classList.remove('auth-open');
   showAuthMessage('');
@@ -227,8 +230,8 @@ async function handleLogout() {
   }
   clearToken();
   currentUser = null;
-  window.__username  = null;
-  window.__authToken = null;
+  window.__username = null;
+  setAuthToken(null);
   lastPlaceAt = 0;
   dispatchStateChange({ currentUser: null });
   showAuthMessage('Logged out', false);
@@ -295,7 +298,6 @@ async function handleRegister(event) {
     }
     resetCaptcha();
     saveToken(data.token);
-    window.__authToken = data.token;
     setCurrentUser(data.username, data.emailVerified, data.cooldown, data.cooldownMs);
     if (data.message) setTimeout(() => showAuthMessage(data.message, false), 100);
   } catch { resetCaptcha(); showAuthMessage('Unable to reach server.'); }
