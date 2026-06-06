@@ -1,0 +1,90 @@
+/* ── Palette ─────────────────────────────────────────────────────────────── */
+
+.palette button {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.palette button.selected {
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.9), 0 0 0 5px rgba(56,189,248,0.25);
+  transform: translateY(-2px);
+  outline: 2px solid rgba(56,189,248,0.6);
+  z-index: 1;
+}
+
+/* ── Fullscreen palette (shown in :fullscreen only) ─────────────────────── */
+.fullscreen-palette {
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  z-index: 9999;
+  background: rgba(55,55,56,0.85);
+  backdrop-filter: blur(12px);
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  display: none;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+#viewport:fullscreen .fullscreen-palette {
+  display: grid;
+}
+.fullscreen-palette button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.fullscreen-palette button.selected {
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.9), 0 0 0 5px rgba(56,189,248,0.25);
+  transform: scale(1.15);
+  z-index: 2;
+}
+
+/* ── Variation picker ────────────────────────────────────────────────────── */
+.variation-picker {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(58, 58, 59, 0.98);
+  color: #f8fafc;
+}
+.variation-picker > div {
+  pointer-events: none;
+}
+.variation-swatch {
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.variation-swatch:hover {
+  transform: scale(1.12);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  z-index: 1;
+}
+
+/* ── Palette hint: desktop vs mobile visibility ──────────────────────────── */
+.palette-hint-desktop { display: none; }
+.palette-hint-mobile  { display: block; }
+
+@media (hover: hover) and (pointer: fine) {
+  .palette-hint-desktop { display: block; }
+  .palette-hint-mobile  { display: none; }
+}
+
+/* ── Mobile variation-hint (hidden by default) ───────────────────────────── */
+.mob-variation-hint {
+  display: none !important;
+}
+
+/* ── Spacer between palette and toolbox (mobile only) ───────────────────── */
+.palette-toolbox-spacer {
+  display: none !important;
+}

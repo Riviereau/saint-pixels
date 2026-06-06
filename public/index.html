@@ -20,12 +20,19 @@
   <!-- <meta name="twitter:image" content="https://www.saint-pixels.org/images/social-preview.png"> -->
   <script nonce="__CSP_NONCE__" defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script nonce="__CSP_NONCE__" src="https://js.hcaptcha.com/1/api.js" async defer></script>
-  <script nonce="__CSP_NONCE__" defer src="/app.js"></script>
-  <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/chat.css">
-  <link rel="stylesheet" href="/settings.css">
-  <link rel="stylesheet" href="/ios.css">
-  <link rel="stylesheet" href="/timelapse.css">
+  <!-- ── Styles (split from styles.css) ── -->
+  <link rel="stylesheet" href="/css/base.css">       <!-- Tailwind theme/base/utilities + @property -->
+  <link rel="stylesheet" href="/css/canvas.css">     <!-- Canvas, viewport, grid, cursor -->
+  <link rel="stylesheet" href="/css/palette.css">    <!-- Palette, color picker, variation picker -->
+  <link rel="stylesheet" href="/css/toolbar.css">    <!-- Toolbar, tools, cooldown bar -->
+  <link rel="stylesheet" href="/css/auth.css">       <!-- Auth overlay, captcha, password reset -->
+  <link rel="stylesheet" href="/css/leaderboard.css"> <!-- Leaderboard panel, profile modal -->
+  <link rel="stylesheet" href="/css/components.css"> <!-- Achievements, events, attack warning, ruler, animations -->
+  <link rel="stylesheet" href="/css/mobile.css">     <!-- All mobile media queries -->
+  <link rel="stylesheet" href="/css/chat.css">
+  <link rel="stylesheet" href="/css/settings.css">
+  <link rel="stylesheet" href="/css/ios.css">
+  <link rel="stylesheet" href="/css/timelapse.css">
 </head>
 <body
   class="h-screen overflow-hidden text-slate-100 font-sans flex items-stretch" style="background:#2e2e2f;"
@@ -710,8 +717,22 @@
     </div>
   </div>
 
-  <script nonce="__CSP_NONCE__" src="/chat.js"></script>
-  <script nonce="__CSP_NONCE__" src="/settings.js"></script>
+  <!-- ── JS modules (split from app.js) ── -->
+  <script nonce="__CSP_NONCE__" src="/js/sfx.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/app.js"></script>        <!-- global state + dispatchStateChange -->
+  <script nonce="__CSP_NONCE__" src="/js/canvas.js"></script>     <!-- bufferCtx, BOARD_WIDTH, redraw, color helpers -->
+  <script nonce="__CSP_NONCE__" src="/js/ruler.js"></script>      <!-- depends on canvas globals -->
+  <script nonce="__CSP_NONCE__" src="/js/palette.js"></script>    <!-- depends on canvas helpers, dispatchStateChange -->
+  <script nonce="__CSP_NONCE__" src="/js/events.js"></script>     <!-- declares _activeCooldownMs (must precede cooldown + auth) -->
+  <script nonce="__CSP_NONCE__" src="/js/cooldown.js"></script>   <!-- depends on _activeCooldownMs (events.js) -->
+  <script nonce="__CSP_NONCE__" src="/js/achievements.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/particles.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/broadcast.js"></script>  <!-- depends on canvas, cooldown, events -->
+  <script nonce="__CSP_NONCE__" src="/js/auth.js"></script>       <!-- depends on cooldown, events, broadcast (must precede input) -->
+  <script nonce="__CSP_NONCE__" src="/js/input.js"></script>      <!-- depends on all of the above -->
+  <script nonce="__CSP_NONCE__" src="/js/leaderboard.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/chat.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/settings.js"></script>
 
   <!-- ── Community Rules window (standalone — no connection to auth/tools) ── -->
   <div id="sp-rules-window" style="
@@ -825,9 +846,9 @@
   </div>
 
   
-  <script nonce="__CSP_NONCE__" src="/rules.js"></script>
-  <script nonce="__CSP_NONCE__" src="/ios.js"></script>
-  <script nonce="__CSP_NONCE__" src="/timelapse-ui.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/rules.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/ios.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/timelapse-ui.js"></script>
   <!-- ── Achievement Popups ── -->
   <div id="achievement-container" class="achievement-container"></div>
 

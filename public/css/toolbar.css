@@ -1,0 +1,148 @@
+/* ── Toolbar: toggle & tool buttons ─────────────────────────────────────── */
+
+.toggle-btn.active, .tool.active {
+  background-color: rgba(56,189,248,0.28) !important;
+  border-color: rgba(56,189,248,0.8) !important;
+  color: #fff !important;
+}
+.toggle-btn:hover, .tool:hover {
+  transform: translateY(-1px);
+}
+.tool-list {
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+}
+.tool-list .tool {
+  font-family: inherit;
+}
+
+@media (pointer: fine) {
+  .toggle-btn, .tool {
+    cursor: pointer;
+  }
+}
+
+/* ── Tool icon SVG backgrounds ───────────────────────────────────────────── */
+.tool-list .tool[data-tool] {
+  font-size: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 18px 18px;
+  min-width: 36px;
+  min-height: 36px;
+}
+.tool-list .tool[data-tool="brush"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08'/%3E%3Cpath d='M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1 1 2.48 1.94 4 2.02 2.2.05 4-.97 4-3.02a3.002 3.002 0 0 0-3-3.04z'/%3E%3C/svg%3E");
+}
+.tool-list .tool[data-tool="eraser"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21'/%3E%3Cpath d='M22 21H7'/%3E%3Cpath d='m5 11 9 9'/%3E%3C/svg%3E");
+}
+.tool-list .tool[data-tool="none"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m4.9 4.9 14.2 14.2'/%3E%3C/svg%3E");
+}
+.tool-list .tool[data-tool="eyedropper"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2 22 1-1h3l9-9'/%3E%3Cpath d='M3 21v-3l9-9'/%3E%3Cpath d='m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8-2.2 2.2-1.4-1.4z'/%3E%3C/svg%3E");
+}
+.tool-list .tool[data-tool="hand"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2'/%3E%3Cpath d='M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2'/%3E%3Cpath d='M10 10.5a2 2 0 0 0-2-2a2 2 0 0 0-2 2V17a6 6 0 0 0 6 6h2a6 6 0 0 0 6-6v-5a2 2 0 0 0-2-2a2 2 0 0 0-2 2'/%3E%3C/svg%3E");
+}
+.tool-list .tool[data-tool="ruler"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0z'/%3E%3Cpath d='m14.5 12.5 2-2'/%3E%3Cpath d='m11.5 9.5 2-2'/%3E%3Cpath d='m8.5 6.5 2-2'/%3E%3Cpath d='m17.5 15.5 2-2'/%3E%3C/svg%3E");
+}
+
+/* ── Cooldown bar ────────────────────────────────────────────────────────── */
+.cooldown-bar__label {
+  font-family: 'Courier New', 'Roboto Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(248,250,252,0.92);
+  text-align: center;
+}
+.cooldown-bar--cooling .cooldown-bar__fill {
+  background: linear-gradient(90deg, rgba(251,191,36,0.95), rgba(56,189,248,0.95));
+}
+.cooldown-bar--guest .cooldown-bar__fill {
+  background: rgba(255,255,255,0.22);
+}
+
+/* ── Timelapse button: large desktop / small mobile ─────────────────────── */
+#timelapse-topbar-btn { display: inline-flex; }
+#mob-timelapse-btn    { display: none; }
+
+/* ── Desktop: compact left panel (no scrollbar) ─────────────────────────── */
+.help-toggle-btn { display: none; }
+
+@media (hover: hover) and (pointer: fine) {
+  .help-toggle-btn { display: inline-flex; align-items: center; }
+
+  aside section:has(.help-list) .help-list {
+    display: none !important;
+  }
+  aside section.help-section-open .help-list {
+    display: grid !important;
+  }
+  aside section:has(.help-list) {
+    display: block;
+  }
+  aside.flex {
+    gap: 0.5rem !important;
+    padding: 0.625rem !important;
+  }
+  aside section.mb-0 {
+    margin-bottom: 0 !important;
+  }
+  aside section h2 {
+    margin-bottom: 0.25rem !important;
+  }
+  aside .tool-list {
+    gap: 0.25rem !important;
+  }
+  aside .tool-list .tool {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    min-height: 1.9rem !important;
+  }
+  aside .palette-hint-desktop,
+  aside .palette-hint-mobile {
+    margin-top: 0.375rem !important;
+  }
+  aside #add-color {
+    padding-top: 0.375rem !important;
+    padding-bottom: 0.375rem !important;
+  }
+  aside {
+    overflow-y: hidden !important;
+  }
+}
+
+/* ── Desktop: larger LB + chat toggle tabs ──────────────────────────────── */
+@media (hover: hover) and (pointer: fine) {
+  :root { --lb-toggle-w: 36px; }
+
+  .lb-toggle {
+    width: var(--lb-toggle-w);
+    height: 80px;
+    border-radius: 0 14px 14px 0;
+  }
+
+  .chat-toggle-btn {
+    width: 36px;
+    height: 80px;
+    border-radius: 14px 0 0 14px;
+    font-size: 1.15rem;
+  }
+}
+
+/* ── Mobile-hidden UI elements (shown via mobile.css) ───────────────────── */
+.mob-coords-chip {
+  display: none !important;
+}
+.mob-contribute-btn, .mob-donate-btn, .mob-discord-btn, .mob-reddit-btn, .mob-live-count {
+  display: none !important;
+}
+
+/* ── Cursor helper ───────────────────────────────────────────────────────── */
+.cursor-pointer, #export-png {
+  cursor: pointer;
+}

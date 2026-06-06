@@ -1,0 +1,58 @@
+/* ── Auth overlay ────────────────────────────────────────────────────────── */
+
+/* Must sit above every other element including fullscreen button (z ~2147483647) */
+#authOverlay {
+  z-index: 2147483647 !important;
+}
+
+[x-cloak] {
+  display: none !important;
+}
+
+/* ── Mobile: overlay becomes scrollable when keyboard appears ────────────── */
+@media (max-width: 720px) {
+  #authOverlay {
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    /* dvh = dynamic viewport height — shrinks when keyboard appears */
+    min-height: 100dvh;
+    height: 100dvh !important;
+    padding: 16px 12px env(safe-area-inset-bottom, 16px);
+    scroll-padding-bottom: 20px;
+  }
+  #authOverlay > div {
+    margin: auto;
+    margin-top: 12px;
+    margin-bottom: max(20px, env(safe-area-inset-bottom));
+    width: min(420px, 100%);
+    padding: 1.25rem !important;
+  }
+  /* hCaptcha compact widget: allow centering on narrow screens */
+  .h-captcha {
+    display: flex;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+}
+
+/* ── hCaptcha compact widget sizing ─────────────────────────────────────── */
+/* hCaptcha's compact variant renders a 164×55 px iframe.
+   Without explicit height the parent div expands to a full square. */
+#authCaptchaWrapper {
+  overflow: hidden;
+  min-height: 0;
+}
+#authCaptchaWrapper .h-captcha,
+#authCaptchaWrapper .h-captcha > iframe {
+  display: block;
+  width: 164px !important;
+  height: 55px !important;
+  max-height: 55px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+/* ── Password reset overlay ──────────────────────────────────────────────── */
+/* Uses Tailwind classes for layout; no extra custom CSS needed beyond
+   the shared overlay z-index ordering documented in leaderboard.css */

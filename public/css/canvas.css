@@ -1,0 +1,109 @@
+/* ── Canvas / Viewport / Grid / Cursor ───────────────────────────────────── */
+
+.viewport canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  display: block;
+  user-select: none;
+  touch-action: none;
+  cursor: crosshair;
+}
+#canvas {
+  z-index: 1;
+}
+#grid {
+  z-index: 2;
+  pointer-events: none;
+}
+#overlay {
+  z-index: 3;
+  pointer-events: auto;
+}
+
+/* ── Cursor overrides for hand / pan tools ───────────────────────────────── */
+.tool-hand-active, .tool-hand-active canvas {
+  cursor: grab !important;
+}
+.tool-hand-dragging, .tool-hand-dragging canvas {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+canvas.shift-pan {
+  cursor: grab !important;
+}
+
+/* ── Fullscreen viewport ─────────────────────────────────────────────────── */
+#viewport:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  background: radial-gradient(#fff) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ── Topbar drag handle (desktop: hidden; mobile media query enables it) ─── */
+.topbar-drag-handle {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: ew-resize;
+  padding: 4px 10px;
+  border-radius: 8px;
+  opacity: 0.38;
+  transition: opacity 0.15s, background 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+  touch-action: none;
+  align-self: center;
+}
+.topbar-drag-handle:hover {
+  opacity: 0.88;
+  background: rgba(255,255,255,0.07);
+}
+header.flex {
+  will-change: transform;
+}
+
+/* ── Desktop: suppress header scrollbar ─────────────────────────────────── */
+@media (min-width: 721px) {
+  header.flex {
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+  }
+}
+
+/* ── Mid-range desktop: narrower aside column ───────────────────────────── */
+@media (min-width: 721px) and (max-width: 1100px) {
+  main[style] {
+    grid-template-columns: 240px minmax(0, 1fr) !important;
+  }
+}
+
+/* ── Spawn input — hide native number spin buttons ──────────────────────── */
+.spawn-container input[type="number"]::-webkit-inner-spin-button {
+  display: none;
+}
+
+/* ── Auth body: hide canvas UI while overlay is open ────────────────────── */
+body.auth-open aside, body.auth-open .tool-list, body.auth-open .canvas-toolbar, body.auth-open .footer-panel {
+  visibility: hidden;
+  pointer-events: none !important;
+}
+body.auth-open .tool-list, body.auth-open .color-picker, body.auth-open .fullscreen-palette, body.auth-open .cooldown-bar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+body.auth-open #lb-panel {
+  display: none !important;
+}
