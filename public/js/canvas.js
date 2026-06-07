@@ -167,11 +167,19 @@ function fillArea(x, y) {
 function drawGrid() {
   const dpr = window.devicePixelRatio || 1;
 
+  // Skip redraw when nothing affecting the grid has changed.
+  // This eliminates the clearRect→repaint flicker that was visible during
+  // panning on desktop (1× DPR) because the browser composites the clear
+  // and the subsequent stroke in separate frames.
+  const _key = `${scale}|${offsetX}|${offsetY}|${gridEnabled}|${gridCanvas.width}|${gridCanvas.height}`;
+  if (drawGrid._lastKey === _key) return;
+  drawGrid._lastKey = _key;
+
   // Do NOT resize gridCanvas here — resizeViewport() already keeps it in sync
   // with canvas. Resizing on every drawGrid call is extremely expensive.
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-  
+
   // Cross markers (zoomed out, < 800%) fade in from scale=4 to scale=6.
   // Line grid (zoomed in, >= 800%) fades in from scale=8 to scale=10.
   // Both are drawn on every device — no isTouchDevice split.
@@ -219,12 +227,16 @@ function drawGrid() {
   }
 
   if (crossAlpha > 0) {
-    // Cross markers — good at lower zoom levels
-    // armBase: minimum 3px so interior markers are always physically visible,
-    // even at the fade-in threshold where scale*0.25 would only be ~1px.
-    const armBase = Math.max(3, Math.min(scale * 0.25, 6));
-    // thick: minimum 1.5px so the crosshair stroke is never sub-pixel.
-    const thick   = Math.max(1.5, Math.min(scale * 0.15, 2));
+    // Cross markers — good at lower zoom levels.
+    // Arms must stay within the current pixel cell so they don't bleed into
+    // adjacent cells. Cap at (floor(scale/2) - 1) so there is always at least
+    // a 1px gap to the next pixel boundary.  Minimum 2px so markers are
+    // physically visible when they first fade in.
+    const maxArm  = Math.max(1, Math.floor(scale / 2) - 1);
+    const armBase = Math.min(maxArm, Math.max(2, Math.round(scale * 0.22)));
+    // thick must be an integer so lines stay crisp on 1× DPR desktop screens
+    // (non-integer sizes trigger anti-aliased blurring and look fat/blurry).
+    const thick   = Math.max(1, Math.floor(scale * 0.12));
 
     // Draw each cross marker twice: black pass first then white pass on top.
     // White is drawn last so it wins visually on bright/white backgrounds,
