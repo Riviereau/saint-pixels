@@ -180,10 +180,11 @@ function drawGrid() {
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
 
-  // Cross markers (zoomed out, < 800%) fade in from scale=4 to scale=6.
-  // Line grid (zoomed in, >= 800%) fades in from scale=8 to scale=10.
-  // Both are drawn on every device — no isTouchDevice split.
-  const crossAlpha = scale < 8 ? Math.min(1, (scale - 4) / 2) : 0;
+  // Cross markers (zoomed out, < 800%) — touch/mobile only.
+  // They look blurry and lag on 1× DPR desktop; the line grid is sufficient there.
+  // Line grid (zoomed in, >= 800%) — all devices.
+  const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const crossAlpha = isTouchDevice && scale < 8 ? Math.min(1, (scale - 4) / 2) : 0;
   const lineAlpha  = scale >= 8 ? Math.min(1, (scale - 8) / 2) : 0;
   if ((crossAlpha <= 0 && lineAlpha <= 0) || !gridEnabled) return;
 
