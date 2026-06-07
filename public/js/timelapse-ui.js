@@ -23,6 +23,44 @@
 (function () {
   'use strict';
 
+  // ── Load-bar styles (injected once) ──────────────────────────────────────────
+  const _tlStyle = document.createElement('style');
+  _tlStyle.textContent = `
+    .tl-load-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 2px 2px;
+    }
+    .tl-load-bar-track {
+      flex: 1;
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .tl-load-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      transition: width 0.15s ease;
+    }
+    @keyframes tl-load-pulse {
+      0%   { opacity: 0.3; transform: scaleX(0.3) translateX(-100%); }
+      50%  { opacity: 1;   transform: scaleX(0.6) translateX(30%); }
+      100% { opacity: 0.3; transform: scaleX(0.3) translateX(200%); }
+    }
+    .tl-load-bar-label {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      white-space: nowrap;
+      min-width: 140px;
+      text-align: right;
+    }
+  `;
+  document.head.appendChild(_tlStyle);
+
   const BOARD_W = 1920;
   const BOARD_H = 1080;
 
@@ -130,6 +168,14 @@
               <line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>
             </svg>
           </button>
+        </div>
+
+        <!-- Load progress bar (visible only while fetching) -->
+        <div id="tl-load-bar-wrap" class="tl-load-bar-wrap" style="display:none">
+          <div class="tl-load-bar-track">
+            <div id="tl-load-bar-fill" class="tl-load-bar-fill"></div>
+          </div>
+          <span id="tl-load-bar-label" class="tl-load-bar-label">Downloading…</span>
         </div>
 
         <!-- Progress bar -->
@@ -411,6 +457,9 @@
   const fsCollapse    = document.getElementById('tl-fs-collapse');
   const zoomResetBtn  = document.getElementById('tl-zoom-reset');
   const errorBanner   = document.getElementById('tl-error-banner');
+  const loadBarWrap   = document.getElementById('tl-load-bar-wrap');
+  const loadBarFill   = document.getElementById('tl-load-bar-fill');
+  const loadBarLabel  = document.getElementById('tl-load-bar-label');
 
   // ── Error banner helper ───────────────────────────────────────────────────────
   function showError(msg) {
@@ -751,33 +800,50 @@
         return;
       }
 
-      // Stream the response body so the UI stays responsive on large payloads.
-      // We read chunks, accumulate them, and update the subtitle with a live
-      // byte count so the user can see progress rather than a frozen tab.
+      // Stream the response so the UI stays responsive on large payloads.
+      // Drive the load bar: determinate (%) when Content-Length is known,
+      // animated pulse otherwise.
       const contentLength = parseInt(res.headers.get('Content-Length') || '0', 10);
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
-      let   raw     = '';
+      let   raw      = '';
       let   received = 0;
+
+      // Show the load bar, hide the playback progress bar while loading
+      loadBarWrap.style.display  = '';
+      progressWrap.style.display = 'none';
+      if (contentLength > 0) {
+        loadBarFill.style.animation = 'none';
+        loadBarFill.style.width     = '0%';
+      } else {
+        // No Content-Length — use a CSS pulse animation to show activity
+        loadBarFill.style.animation = 'tl-load-pulse 1.4s ease-in-out infinite';
+        loadBarFill.style.width     = '100%';
+      }
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         received += value.byteLength;
         raw      += decoder.decode(value, { stream: true });
-        // Live progress: show MB received (and % if Content-Length is known)
         const mb = (received / 1048576).toFixed(1);
         if (contentLength > 0) {
           const pct = Math.min(99, Math.round(received / contentLength * 100));
-          subtitle.textContent = `Downloading… ${mb} MB (${pct}%)`;
+          loadBarFill.style.width  = pct + '%';
+          loadBarLabel.textContent = `Downloading… ${mb} MB (${pct}%)`;
+          subtitle.textContent     = `Downloading… ${mb} MB (${pct}%)`;
         } else {
-          subtitle.textContent = `Downloading… ${mb} MB`;
+          loadBarLabel.textContent = `Downloading… ${mb} MB`;
+          subtitle.textContent     = `Downloading… ${mb} MB`;
         }
       }
 
-      subtitle.textContent = 'Parsing…';
-      // Yield to the browser for one frame before the JSON parse so the
-      // "Parsing…" label actually renders before the main thread is busy.
+      // Fill to 100% briefly before switching to parse state
+      loadBarFill.style.animation = 'none';
+      loadBarFill.style.width     = '100%';
+      loadBarLabel.textContent    = 'Parsing…';
+      subtitle.textContent        = 'Parsing…';
+      // Yield so the browser paints the 100% bar before the blocking JSON parse
       await new Promise(r => setTimeout(r, 0));
 
       let data;
@@ -803,6 +869,10 @@
         return;
       }
 
+      // Hide load bar, restore playback progress bar
+      loadBarWrap.style.display  = 'none';
+      progressWrap.style.display = '';
+
       initCanvas();
       cursor = 0;
       updateProgress();
@@ -818,6 +888,8 @@
 
     } catch (err) {
       console.error('[timelapse-ui] load error:', err);
+      loadBarWrap.style.display  = 'none';
+      progressWrap.style.display = '';
       const msg = 'Failed to load — try again later.';
       subtitle.textContent = msg;
       showError(msg);
