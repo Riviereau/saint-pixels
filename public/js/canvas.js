@@ -172,10 +172,12 @@ function drawGrid() {
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
   
-  const alpha = Math.min(1, (scale - 8) / 2);
-  if (alpha <= 0 || !gridEnabled) return;
-
-  gridCtx.strokeStyle = `rgba(0,0,0,${0.18 * alpha})`;
+  // Cross markers (zoomed out, < 800%) fade in from scale=4 to scale=6.
+  // Line grid (zoomed in, >= 800%) fades in from scale=8 to scale=10.
+  // Both are drawn on every device — no isTouchDevice split.
+  const crossAlpha = scale < 8 ? Math.min(1, (scale - 4) / 2) : 0;
+  const lineAlpha  = scale >= 8 ? Math.min(1, (scale - 8) / 2) : 0;
+  if ((crossAlpha <= 0 && lineAlpha <= 0) || !gridEnabled) return;
 
   const vpW = canvas.width  / dpr;
   const vpH = canvas.height / dpr;
@@ -216,39 +218,8 @@ function drawGrid() {
     ys.push(y);
   }
 
-  const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
-
-  if (!isTouchDevice) {
-    // PC: double-stroke grid — draw the path twice (white pass then black pass,
-    // both at low opacity) so lines are always visible regardless of the colour
-    // beneath. This is the same technique used by Photoshop / Aseprite and avoids
-    // the majority-vote problem where a single chosen colour vanishes against
-    // pixels of the opposite brightness.
-    gridCtx.lineWidth = 1 / dpr;
-
-    const snap = (v) => Math.round(v * dpr) / dpr;
-
-    gridCtx.beginPath();
-    for (const x of xs) {
-      const px = snap(x);
-      gridCtx.moveTo(px, clipT);
-      gridCtx.lineTo(px, clipB);
-    }
-    for (const y of ys) {
-      const py = snap(y);
-      gridCtx.moveTo(clipL, py);
-      gridCtx.lineTo(clipR, py);
-    }
-
-    // White pass — visible on dark pixels
-    gridCtx.strokeStyle = `rgba(255,255,255,${0.30 * alpha})`;
-    gridCtx.stroke();
-
-    // Black pass — visible on bright pixels
-    gridCtx.strokeStyle = `rgba(0,0,0,${0.20 * alpha})`;
-    gridCtx.stroke();
-  } else {
-    // Mobile: cross markers at every corner
+  if (crossAlpha > 0) {
+    // Cross markers — good at lower zoom levels
     const armBase = Math.min(scale * 0.25, 6);
     const thick   = Math.min(Math.max(scale * 0.15, 1), 2);
 
@@ -277,8 +248,10 @@ function drawGrid() {
       isDarkBg = darkCount > 2;
     } catch (_) {}
 
-    // Glow pass: dark bg → black glow behind white core; light bg → white glow behind dark core
-    gridCtx.fillStyle = isDarkBg ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+    // Glow pass
+    gridCtx.fillStyle = isDarkBg
+      ? `rgba(0,0,0,${0.12 * crossAlpha})`
+      : `rgba(255,255,255,${0.12 * crossAlpha})`;
     for (const y of ys) {
       const ry = Math.round(y);
       for (const x of xs) {
@@ -292,8 +265,10 @@ function drawGrid() {
       }
     }
 
-    // Core pass: dark bg → light/white core; light bg → dark core
-    gridCtx.fillStyle = isDarkBg ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.35)';
+    // Core pass
+    gridCtx.fillStyle = isDarkBg
+      ? `rgba(255,255,255,${0.55 * crossAlpha})`
+      : `rgba(0,0,0,${0.35 * crossAlpha})`;
     for (const y of ys) {
       const ry = Math.round(y);
       for (const x of xs) {
@@ -306,6 +281,60 @@ function drawGrid() {
         gridCtx.fillRect(rx - thick/2, ry - up, thick, up + down);
       }
     }
+  }
+
+  if (lineAlpha > 0) {
+    // Line grid — sharp and precise at high zoom
+    gridCtx.lineWidth = 1 / dpr;
+    const snap = (v) => Math.round(v * dpr) / dpr;
+
+    // Per-line colour: sample both sides; dark line on bright/dark boundaries,
+    // double-stroke everywhere else.
+    function sampleLuma(bx, by) {
+      const cx = Math.max(0, Math.min(BOARD_WIDTH  - 1, bx));
+      const cy = Math.max(0, Math.min(BOARD_HEIGHT - 1, by));
+      const d  = bufferCtx.getImageData(cx, cy, 1, 1).data;
+      const r  = d[3] === 0 ? 255 : d[0];
+      const g  = d[3] === 0 ? 255 : d[1];
+      const b  = d[3] === 0 ? 255 : d[2];
+      return brightnessRgb(r, g, b);
+    }
+
+    const whitePath = new Path2D();
+    const blackPath = new Path2D();
+    const midBoardRow = Math.round((clipT + clipB) / 2 - offsetY) / scale | 0;
+    const midBoardCol = Math.round((clipL + clipR) / 2 - offsetX) / scale | 0;
+
+    for (const x of xs) {
+      const col   = Math.round((x - offsetX) / scale);
+      const px    = snap(x);
+      const lumaL = sampleLuma(col - 1, midBoardRow);
+      const lumaR = sampleLuma(col,     midBoardRow);
+      if (Math.max(lumaL, lumaR) > 180 && Math.min(lumaL, lumaR) < 80) {
+        blackPath.moveTo(px, clipT); blackPath.lineTo(px, clipB);
+      } else {
+        whitePath.moveTo(px, clipT); whitePath.lineTo(px, clipB);
+        blackPath.moveTo(px, clipT); blackPath.lineTo(px, clipB);
+      }
+    }
+
+    for (const y of ys) {
+      const row   = Math.round((y - offsetY) / scale);
+      const py    = snap(y);
+      const lumaA = sampleLuma(midBoardCol, row - 1);
+      const lumaB = sampleLuma(midBoardCol, row);
+      if (Math.max(lumaA, lumaB) > 180 && Math.min(lumaA, lumaB) < 80) {
+        blackPath.moveTo(clipL, py); blackPath.lineTo(clipR, py);
+      } else {
+        whitePath.moveTo(clipL, py); whitePath.lineTo(clipR, py);
+        blackPath.moveTo(clipL, py); blackPath.lineTo(clipR, py);
+      }
+    }
+
+    gridCtx.strokeStyle = `rgba(255,255,255,${0.30 * lineAlpha})`;
+    gridCtx.stroke(whitePath);
+    gridCtx.strokeStyle = `rgba(0,0,0,${0.22 * lineAlpha})`;
+    gridCtx.stroke(blackPath);
   }
 
   // Board border
