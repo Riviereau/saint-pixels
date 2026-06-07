@@ -38,18 +38,19 @@ function initializeActions(app, db, pixelLimiter, broadcastSSE, getEffectiveCool
   app.get('/api/profile/:username',   Leaderboard.profile);
 
   // ── Admin: pixel history dump ─────────────────────────────────────────────
-  // GET /api/admin/pixel-history?secret=<ADMIN_SECRET>
+  // POST /api/admin/pixel-history  (body: secret=<ADMIN_SECRET>)
   //
   // Streams the full pixel_history table as a JSON array.
   // Protect with the ADMIN_SECRET environment variable — set this in Railway.
   // Download locally with:
-  //   curl "https://www.saint-pixels.org/api/admin/pixel-history?secret=YOUR_SECRET" \
+  //   curl -X POST "https://www.saint-pixels.org/api/admin/pixel-history" \
+  //        -d "secret=YOUR_SECRET" \
   //        -o pixel-history.json
   //
   // Falls back to the current pixels table if pixel_history doesn't exist yet.
-  app.get('/api/admin/pixel-history', (req, res) => {
+  app.post('/api/admin/pixel-history', (req, res) => {
     const secret = process.env.ADMIN_SECRET;
-    if (!secret || req.query.secret !== secret) {
+    if (!secret || req.body.secret !== secret) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
