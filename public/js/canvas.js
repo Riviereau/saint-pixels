@@ -219,54 +219,33 @@ function drawGrid() {
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
 
   if (!isTouchDevice) {
-    // PC: line grid (fast and clean)
-    // Sample a pixel near the centre of the visible board to decide grid colour.
-    // If the underlying canvas content is dark, use a light grid line; otherwise dark.
-    // Sample a 5-point spread across the visible board area to decide
-    // grid colour — majority brightness vote avoids single-pixel outliers.
-    let gridColor = 'rgba(0,0,0,0.18)';
-    try {
-      const boardVisL = Math.round(clamp(clipL - offsetX, 0, BOARD_WIDTH  - 1));
-      const boardVisT = Math.round(clamp(clipT - offsetY, 0, BOARD_HEIGHT - 1));
-      const boardVisR = Math.round(clamp(clipR - offsetX, 0, BOARD_WIDTH  - 1));
-      const boardVisB = Math.round(clamp(clipB - offsetY, 0, BOARD_HEIGHT - 1));
-      const midX = Math.round((boardVisL + boardVisR) / 2);
-      const midY = Math.round((boardVisT + boardVisB) / 2);
-      const q1X  = Math.round((boardVisL + midX) / 2);
-      const q3X  = Math.round((midX + boardVisR) / 2);
-      const q1Y  = Math.round((boardVisT + midY) / 2);
-      const q3Y  = Math.round((midY + boardVisB) / 2);
-      const samplePoints = [[midX, midY], [q1X, q1Y], [q3X, q1Y], [q1X, q3Y], [q3X, q3Y]];
-      let darkCount = 0;
-      for (const [sx, sy] of samplePoints) {
-        const px4 = bufferCtx.getImageData(sx, sy, 1, 1).data;
-        const r = px4[3] === 0 ? 255 : px4[0];
-        const g = px4[3] === 0 ? 255 : px4[1];
-        const b = px4[3] === 0 ? 255 : px4[2];
-        if (brightnessRgb(r, g, b) < 128) darkCount++;
-      }
-      if (darkCount > 2) gridColor = 'rgba(255,255,255,0.25)';
-    } catch (_) { /* cross-origin safety — keep default */ }
-
-    gridCtx.strokeStyle = gridColor;
+    // PC: double-stroke grid — draw the path twice (white pass then black pass,
+    // both at low opacity) so lines are always visible regardless of the colour
+    // beneath. This is the same technique used by Photoshop / Aseprite and avoids
+    // the majority-vote problem where a single chosen colour vanishes against
+    // pixels of the opposite brightness.
     gridCtx.lineWidth = 1 / dpr;
-
-    gridCtx.beginPath();
 
     const snap = (v) => Math.round(v * dpr) / dpr;
 
+    gridCtx.beginPath();
     for (const x of xs) {
       const px = snap(x);
       gridCtx.moveTo(px, clipT);
       gridCtx.lineTo(px, clipB);
     }
-
     for (const y of ys) {
       const py = snap(y);
       gridCtx.moveTo(clipL, py);
       gridCtx.lineTo(clipR, py);
     }
 
+    // White pass — visible on dark pixels
+    gridCtx.strokeStyle = `rgba(255,255,255,${0.30 * alpha})`;
+    gridCtx.stroke();
+
+    // Black pass — visible on bright pixels
+    gridCtx.strokeStyle = `rgba(0,0,0,${0.20 * alpha})`;
     gridCtx.stroke();
   } else {
     // Mobile: cross markers at every corner
@@ -298,7 +277,7 @@ function drawGrid() {
       isDarkBg = darkCount > 2;
     } catch (_) {}
 
-    // Glow pass: dark-on-light → white glow; light-on-dark → black glow
+    // Glow pass: dark bg → black glow behind white core; light bg → white glow behind dark core
     gridCtx.fillStyle = isDarkBg ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
     for (const y of ys) {
       const ry = Math.round(y);
@@ -313,8 +292,8 @@ function drawGrid() {
       }
     }
 
-    // Core pass: dark-on-light → dark core; light-on-dark → light core
-    gridCtx.fillStyle = isDarkBg ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
+    // Core pass: dark bg → light/white core; light bg → dark core
+    gridCtx.fillStyle = isDarkBg ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.35)';
     for (const y of ys) {
       const ry = Math.round(y);
       for (const x of xs) {
@@ -464,6 +443,14 @@ function _doRender() {
     ctx.drawImage(bufferCanvas, srcX, srcY, srcW, srcH, visL, visT, visR - visL, visB - visT);
   }
 
+  // Dispatch zoom level for Alpine UI — only when scale actually changed
+  const _curZoom = Math.round(scale * 100);
+  if (_doRender._lastZoom !== _curZoom) {
+    _doRender._lastZoom = _curZoom;
+    dispatchStateChange({ zoomLevel: _curZoom });
+  }
+  drawGrid();
+
   if (isPanning) {
     overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
@@ -472,14 +459,6 @@ function _doRender() {
     }
     return;
   }
-
-  // Dispatch zoom level for Alpine UI — only when scale actually changed
-  const _curZoom = Math.round(scale * 100);
-  if (_doRender._lastZoom !== _curZoom) {
-    _doRender._lastZoom = _curZoom;
-    dispatchStateChange({ zoomLevel: _curZoom });
-  }
-  drawGrid();
 
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
