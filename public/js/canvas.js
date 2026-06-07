@@ -177,7 +177,7 @@ function drawGrid() {
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
   
-  const alpha = Math.min(1, (scale - 2) / 2);
+  const alpha = Math.min(1, (scale - 5) / 2);
   if (alpha <= 0 || !gridEnabled) return;
 
   gridCtx.strokeStyle = `rgba(0,0,0,${0.18 * alpha})`;
