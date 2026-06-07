@@ -177,7 +177,7 @@ function drawGrid() {
   gridCtx.setTransform(1, 0, 0, 1, 0, 0);
   gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
   
-  const alpha = Math.min(1, (scale - 5) / 2);
+  const alpha = Math.min(1, (scale - 8) / 2);
   if (alpha <= 0 || !gridEnabled) return;
 
   gridCtx.strokeStyle = `rgba(0,0,0,${0.18 * alpha})`;
@@ -225,8 +225,23 @@ function drawGrid() {
 
   if (!isTouchDevice) {
     // PC: line grid (fast and clean)
-    
-    gridCtx.strokeStyle = 'rgba(0,0,0,0.18)';
+    // Sample a pixel near the centre of the visible board to decide grid colour.
+    // If the underlying canvas content is dark, use a light grid line; otherwise dark.
+    let gridColor = 'rgba(0,0,0,0.18)';
+    try {
+      const sampleX = Math.round(clamp((clipL + clipR) / 2 - offsetX, 0, BOARD_WIDTH  - 1));
+      const sampleY = Math.round(clamp((clipT + clipB) / 2 - offsetY, 0, BOARD_HEIGHT - 1));
+      const px4 = bufferCtx.getImageData(sampleX, sampleY, 1, 1).data;
+      // Treat fully-transparent pixels as white (canvas background)
+      const r = px4[3] === 0 ? 255 : px4[0];
+      const g = px4[3] === 0 ? 255 : px4[1];
+      const b = px4[3] === 0 ? 255 : px4[2];
+      if (brightnessRgb(r, g, b) < 100) {
+        gridColor = 'rgba(255,255,255,0.25)';
+      }
+    } catch (_) { /* cross-origin safety — keep default */ }
+
+    gridCtx.strokeStyle = gridColor;
     gridCtx.lineWidth = 1 / dpr;
 
     gridCtx.beginPath();
@@ -251,7 +266,20 @@ function drawGrid() {
     const armBase = Math.min(scale * 0.25, 6);
     const thick   = Math.min(Math.max(scale * 0.15, 1), 2);
 
-    gridCtx.fillStyle = 'rgba(255,255,255,0.12)';
+    // Sample centre pixel to pick light vs dark cross colour
+    let isDarkBg = false;
+    try {
+      const sampleX = Math.round(clamp((clipL + clipR) / 2 - offsetX, 0, BOARD_WIDTH  - 1));
+      const sampleY = Math.round(clamp((clipT + clipB) / 2 - offsetY, 0, BOARD_HEIGHT - 1));
+      const px4 = bufferCtx.getImageData(sampleX, sampleY, 1, 1).data;
+      const r = px4[3] === 0 ? 255 : px4[0];
+      const g = px4[3] === 0 ? 255 : px4[1];
+      const b = px4[3] === 0 ? 255 : px4[2];
+      isDarkBg = brightnessRgb(r, g, b) < 100;
+    } catch (_) {}
+
+    // Glow pass: dark-on-light → white glow; light-on-dark → black glow
+    gridCtx.fillStyle = isDarkBg ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
     for (const y of ys) {
       const ry = Math.round(y);
       for (const x of xs) {
@@ -265,7 +293,8 @@ function drawGrid() {
       }
     }
 
-    gridCtx.fillStyle = 'rgba(0,0,0,0.18)';
+    // Core pass: dark-on-light → dark core; light-on-dark → light core
+    gridCtx.fillStyle = isDarkBg ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
     for (const y of ys) {
       const ry = Math.round(y);
       for (const x of xs) {
@@ -290,6 +319,10 @@ function drawGridIfDirty() {
   const scaleChanged  = scale   !== lastGridScale;
   const offsetChanged = offsetX !== lastGridOffsetX || offsetY !== lastGridOffsetY;
   if (!scaleChanged && !offsetChanged) return;
+  if (scaleChanged) {
+    // Keep Alpine's zoomLevel display in sync with the real canvas scale
+    dispatchStateChange({ zoomLevel: Math.round(scale * 100) });
+  }
   lastGridScale   = scale;
   lastGridOffsetX = offsetX;
   lastGridOffsetY = offsetY;

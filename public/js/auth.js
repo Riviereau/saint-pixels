@@ -15,6 +15,14 @@ const authEmail         = document.getElementById('authEmail');
 const authEmailLabel    = document.getElementById('authEmailLabel');
 const authMessage       = document.getElementById('authMessage');
 
+// ── Environment helpers ──────────────────────────────────────────────
+/** Returns true when running on localhost / 127.0.0.1 (dev mode). */
+function isLocalDev() {
+  return window.location.hostname === 'localhost' ||
+         window.location.hostname === '127.0.0.1' ||
+         window.location.hostname === '::1';
+}
+
 // ── Storage keys ────────────────────────────────────────────────────
 // TOKEN_KEY ('sp_token') is declared in app.js — do NOT redeclare it here.
 const EMAIL_VERIFIED_KEY = 'sp_email_verified';
