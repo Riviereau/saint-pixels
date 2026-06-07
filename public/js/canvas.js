@@ -282,14 +282,14 @@ function drawGrid() {
       gridCtx.lineTo(clipR, py);
     }
 
-    // Black pass first — visible on bright pixels (reduced opacity so it
-    // doesn't dominate at high-contrast dark/white pixel boundaries).
-    gridCtx.strokeStyle = `rgba(0,0,0,${0.12 * lineAlpha})`;
+    // Two-pass stroke so the grid is readable on both dark and bright pixels:
+    //   • White pass (40%): visible on dark/coloured pixels like the blue side.
+    //   • Black pass (28%): visible on bright/white pixels.
+    // White is drawn first so black sits on top and wins at the boundary —
+    // preventing a one-sided invisible line on the white side.
+    gridCtx.strokeStyle = `rgba(255,255,255,${0.40 * lineAlpha})`;
     gridCtx.stroke();
-    // White pass on top — visible on dark pixels. Drawing white last means
-    // it wins compositionally on bright backgrounds, preventing the phantom
-    // dark line that appeared when black was the final pass over white pixels.
-    gridCtx.strokeStyle = `rgba(255,255,255,${0.35 * lineAlpha})`;
+    gridCtx.strokeStyle = `rgba(0,0,0,${0.28 * lineAlpha})`;
     gridCtx.stroke();
   }
 
