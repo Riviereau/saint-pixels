@@ -1039,9 +1039,9 @@ app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
 // IMPORTANT: this uses the SQLite backup API (db.backup()) which creates a
 // safe consistent snapshot even while the DB is being written to (WAL mode).
 // Never copy the raw .sqlite file directly — WAL pages may not be flushed yet.
-app.get('/api/admin/backup', async (req, res) => {
+app.post('/api/admin/backup', async (req, res) => {
   const secret = process.env.ADMIN_SECRET;
-  if (!secret || req.query.secret !== secret) {
+  if (!secret || req.body.secret !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const os   = require('os');
