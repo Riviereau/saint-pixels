@@ -26,11 +26,6 @@ const bufferCtx = bufferCanvas.getContext('2d');
 let scale   = 1;
 let offsetX = 0;
 let offsetY = 0;
-// Track the last values used to draw the grid so we only redraw it when
-// the viewport actually changes (prevents the flash on every cursor move)
-let lastGridScale   = null;
-let lastGridOffsetX = null;
-let lastGridOffsetY = null;
 // isPanning is declared and owned by input.js (shared global)
 let gridEnabled = true;
 
@@ -227,18 +222,30 @@ function drawGrid() {
     // PC: line grid (fast and clean)
     // Sample a pixel near the centre of the visible board to decide grid colour.
     // If the underlying canvas content is dark, use a light grid line; otherwise dark.
+    // Sample a 5-point spread across the visible board area to decide
+    // grid colour — majority brightness vote avoids single-pixel outliers.
     let gridColor = 'rgba(0,0,0,0.18)';
     try {
-      const sampleX = Math.round(clamp((clipL + clipR) / 2 - offsetX, 0, BOARD_WIDTH  - 1));
-      const sampleY = Math.round(clamp((clipT + clipB) / 2 - offsetY, 0, BOARD_HEIGHT - 1));
-      const px4 = bufferCtx.getImageData(sampleX, sampleY, 1, 1).data;
-      // Treat fully-transparent pixels as white (canvas background)
-      const r = px4[3] === 0 ? 255 : px4[0];
-      const g = px4[3] === 0 ? 255 : px4[1];
-      const b = px4[3] === 0 ? 255 : px4[2];
-      if (brightnessRgb(r, g, b) < 100) {
-        gridColor = 'rgba(255,255,255,0.25)';
+      const boardVisL = Math.round(clamp(clipL - offsetX, 0, BOARD_WIDTH  - 1));
+      const boardVisT = Math.round(clamp(clipT - offsetY, 0, BOARD_HEIGHT - 1));
+      const boardVisR = Math.round(clamp(clipR - offsetX, 0, BOARD_WIDTH  - 1));
+      const boardVisB = Math.round(clamp(clipB - offsetY, 0, BOARD_HEIGHT - 1));
+      const midX = Math.round((boardVisL + boardVisR) / 2);
+      const midY = Math.round((boardVisT + boardVisB) / 2);
+      const q1X  = Math.round((boardVisL + midX) / 2);
+      const q3X  = Math.round((midX + boardVisR) / 2);
+      const q1Y  = Math.round((boardVisT + midY) / 2);
+      const q3Y  = Math.round((midY + boardVisB) / 2);
+      const samplePoints = [[midX, midY], [q1X, q1Y], [q3X, q1Y], [q1X, q3Y], [q3X, q3Y]];
+      let darkCount = 0;
+      for (const [sx, sy] of samplePoints) {
+        const px4 = bufferCtx.getImageData(sx, sy, 1, 1).data;
+        const r = px4[3] === 0 ? 255 : px4[0];
+        const g = px4[3] === 0 ? 255 : px4[1];
+        const b = px4[3] === 0 ? 255 : px4[2];
+        if (brightnessRgb(r, g, b) < 128) darkCount++;
       }
+      if (darkCount > 2) gridColor = 'rgba(255,255,255,0.25)';
     } catch (_) { /* cross-origin safety — keep default */ }
 
     gridCtx.strokeStyle = gridColor;
@@ -266,16 +273,29 @@ function drawGrid() {
     const armBase = Math.min(scale * 0.25, 6);
     const thick   = Math.min(Math.max(scale * 0.15, 1), 2);
 
-    // Sample centre pixel to pick light vs dark cross colour
+    // Sample 5-point spread — majority vote for dark vs light background
     let isDarkBg = false;
     try {
-      const sampleX = Math.round(clamp((clipL + clipR) / 2 - offsetX, 0, BOARD_WIDTH  - 1));
-      const sampleY = Math.round(clamp((clipT + clipB) / 2 - offsetY, 0, BOARD_HEIGHT - 1));
-      const px4 = bufferCtx.getImageData(sampleX, sampleY, 1, 1).data;
-      const r = px4[3] === 0 ? 255 : px4[0];
-      const g = px4[3] === 0 ? 255 : px4[1];
-      const b = px4[3] === 0 ? 255 : px4[2];
-      isDarkBg = brightnessRgb(r, g, b) < 100;
+      const boardVisL = Math.round(clamp(clipL - offsetX, 0, BOARD_WIDTH  - 1));
+      const boardVisT = Math.round(clamp(clipT - offsetY, 0, BOARD_HEIGHT - 1));
+      const boardVisR = Math.round(clamp(clipR - offsetX, 0, BOARD_WIDTH  - 1));
+      const boardVisB = Math.round(clamp(clipB - offsetY, 0, BOARD_HEIGHT - 1));
+      const midX = Math.round((boardVisL + boardVisR) / 2);
+      const midY = Math.round((boardVisT + boardVisB) / 2);
+      const q1X  = Math.round((boardVisL + midX) / 2);
+      const q3X  = Math.round((midX + boardVisR) / 2);
+      const q1Y  = Math.round((boardVisT + midY) / 2);
+      const q3Y  = Math.round((midY + boardVisB) / 2);
+      const samplePoints = [[midX, midY], [q1X, q1Y], [q3X, q1Y], [q1X, q3Y], [q3X, q3Y]];
+      let darkCount = 0;
+      for (const [sx, sy] of samplePoints) {
+        const px4 = bufferCtx.getImageData(sx, sy, 1, 1).data;
+        const r = px4[3] === 0 ? 255 : px4[0];
+        const g = px4[3] === 0 ? 255 : px4[1];
+        const b = px4[3] === 0 ? 255 : px4[2];
+        if (brightnessRgb(r, g, b) < 128) darkCount++;
+      }
+      isDarkBg = darkCount > 2;
     } catch (_) {}
 
     // Glow pass: dark-on-light → white glow; light-on-dark → black glow
@@ -315,25 +335,15 @@ function drawGrid() {
   gridCtx.strokeRect(offsetX + 0.5, offsetY + 0.5, Math.round(BOARD_WIDTH * scale), Math.round(BOARD_HEIGHT * scale));
 }
 
-function drawGridIfDirty() {
-  const scaleChanged  = scale   !== lastGridScale;
-  const offsetChanged = offsetX !== lastGridOffsetX || offsetY !== lastGridOffsetY;
-  if (!scaleChanged && !offsetChanged) return;
-  if (scaleChanged) {
-    // Keep Alpine's zoomLevel display in sync with the real canvas scale
-    dispatchStateChange({ zoomLevel: Math.round(scale * 100) });
-  }
-  lastGridScale   = scale;
-  lastGridOffsetX = offsetX;
-  lastGridOffsetY = offsetY;
-  drawGrid();
-}
+// drawGridIfDirty removed — drawGrid() is called every frame in _doRender
+// (it is fast: it operates on its own canvas layer and returns early when
+//  the grid is invisible). The dirty-check was causing the grid to lag
+//  behind the viewport during panning with the hand tool.
 
 function toggleGrid() {
   gridEnabled = !gridEnabled;
   const toggleGridBtn = document.getElementById('toggle-grid');
   if (toggleGridBtn) toggleGridBtn.classList.toggle('active', gridEnabled);
-  lastGridScale = null;
   redraw();
 }
 
@@ -463,7 +473,13 @@ function _doRender() {
     return;
   }
 
-  drawGridIfDirty();
+  // Dispatch zoom level for Alpine UI — only when scale actually changed
+  const _curZoom = Math.round(scale * 100);
+  if (_doRender._lastZoom !== _curZoom) {
+    _doRender._lastZoom = _curZoom;
+    dispatchStateChange({ zoomLevel: _curZoom });
+  }
+  drawGrid();
 
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
@@ -511,7 +527,6 @@ function resizeViewport() {
   overlay.width      = w * dpr;
   overlay.height     = h * dpr;
 
-  lastGridScale = null;
   clampOffsets();
   redraw();
 }
