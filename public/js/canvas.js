@@ -282,14 +282,17 @@ function drawGrid() {
       gridCtx.lineTo(clipR, py);
     }
 
-    // Two-pass stroke so the grid is readable on both dark and bright pixels:
-    //   • White pass (40%): visible on dark/coloured pixels like the blue side.
-    //   • Black pass (28%): visible on bright/white pixels.
-    // White is drawn first so black sits on top and wins at the boundary —
-    // preventing a one-sided invisible line on the white side.
+    // Three-pass stroke for the boundary problem:
+    //   1. White (40%) — shows on dark/coloured pixels (blue side)
+    //   2. Black (28%) — shows on bright/white pixels (white side)
+    //   3. Mid-gray (22%) — always visible at BOTH sides of a colour boundary
+    //      where neither white nor black alone has enough contrast.
+    // The gray pass is drawn last so it sits on top at boundaries.
     gridCtx.strokeStyle = `rgba(255,255,255,${0.40 * lineAlpha})`;
     gridCtx.stroke();
     gridCtx.strokeStyle = `rgba(0,0,0,${0.28 * lineAlpha})`;
+    gridCtx.stroke();
+    gridCtx.strokeStyle = `rgba(128,128,128,${0.22 * lineAlpha})`;
     gridCtx.stroke();
   }
 
