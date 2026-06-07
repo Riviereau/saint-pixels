@@ -75,8 +75,12 @@ function connectSSE() {
   };
 
   _sseSource.onerror = () => {
-    const thisSource = _sseSource;
-    if (thisSource) thisSource.close();
+    // Guard: only the source that triggered the error should reconnect.
+    // Without this, switching tabs or a brief network blip can spawn
+    // multiple concurrent retry timers all calling connectSSE().
+    const failedSource = _sseSource;
+    if (!failedSource || failedSource.readyState === EventSource.CLOSED) return;
+    failedSource.close();
     _sseSource = null;
     const delay = _sseRetryDelay;
     _sseRetryDelay = Math.min(_sseRetryDelay * 2, SSE_RETRY_MAX);

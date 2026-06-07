@@ -740,7 +740,7 @@
       const token = (() => { try { return localStorage.getItem('sp_token') || ''; } catch { return ''; } })();
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`, { headers });
+      const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`, { headers, credentials: 'same-origin' });
       if (!res.ok) {
         const errMsg = (res.status === 401 || res.status === 403)
           ? 'Please log in to view the timelapse.'

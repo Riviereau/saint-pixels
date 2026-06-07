@@ -454,8 +454,6 @@ function _doRender() {
     ctx.drawImage(bufferCanvas, srcX, srcY, srcW, srcH, visL, visT, visR - visL, visB - visT);
   }
 
-  drawGridIfDirty();
-
   if (isPanning) {
     overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
@@ -464,6 +462,8 @@ function _doRender() {
     }
     return;
   }
+
+  drawGridIfDirty();
 
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
