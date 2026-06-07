@@ -220,121 +220,64 @@ function drawGrid() {
 
   if (crossAlpha > 0) {
     // Cross markers — good at lower zoom levels
-    const armBase = Math.min(scale * 0.25, 6);
-    const thick   = Math.min(Math.max(scale * 0.15, 1), 2);
+    // armBase: minimum 3px so interior markers are always physically visible,
+    // even at the fade-in threshold where scale*0.25 would only be ~1px.
+    const armBase = Math.max(3, Math.min(scale * 0.25, 6));
+    // thick: minimum 1.5px so the crosshair stroke is never sub-pixel.
+    const thick   = Math.max(1.5, Math.min(scale * 0.15, 2));
 
-    // Sample 5-point spread — majority vote for dark vs light background
-    let isDarkBg = false;
-    try {
-      const boardVisL = Math.round(clamp(clipL - offsetX, 0, BOARD_WIDTH  - 1));
-      const boardVisT = Math.round(clamp(clipT - offsetY, 0, BOARD_HEIGHT - 1));
-      const boardVisR = Math.round(clamp(clipR - offsetX, 0, BOARD_WIDTH  - 1));
-      const boardVisB = Math.round(clamp(clipB - offsetY, 0, BOARD_HEIGHT - 1));
-      const midX = Math.round((boardVisL + boardVisR) / 2);
-      const midY = Math.round((boardVisT + boardVisB) / 2);
-      const q1X  = Math.round((boardVisL + midX) / 2);
-      const q3X  = Math.round((midX + boardVisR) / 2);
-      const q1Y  = Math.round((boardVisT + midY) / 2);
-      const q3Y  = Math.round((midY + boardVisB) / 2);
-      const samplePoints = [[midX, midY], [q1X, q1Y], [q3X, q1Y], [q1X, q3Y], [q3X, q3Y]];
-      let darkCount = 0;
-      for (const [sx, sy] of samplePoints) {
-        const px4 = bufferCtx.getImageData(sx, sy, 1, 1).data;
-        const r = px4[3] === 0 ? 255 : px4[0];
-        const g = px4[3] === 0 ? 255 : px4[1];
-        const b = px4[3] === 0 ? 255 : px4[2];
-        if (brightnessRgb(r, g, b) < 128) darkCount++;
-      }
-      isDarkBg = darkCount > 2;
-    } catch (_) {}
-
-    // Glow pass
-    gridCtx.fillStyle = isDarkBg
-      ? `rgba(0,0,0,${0.12 * crossAlpha})`
-      : `rgba(255,255,255,${0.12 * crossAlpha})`;
-    for (const y of ys) {
-      const ry = Math.round(y);
-      for (const x of xs) {
-        const rx    = Math.round(x);
-        const left  = Math.min(armBase, rx - offsetX);
-        const right = Math.min(armBase, boardScreenR - rx);
-        const up    = Math.min(armBase, ry - offsetY);
-        const down  = Math.min(armBase, boardScreenB - ry);
-        gridCtx.fillRect(rx - left, ry - thick/2, left + right, thick);
-        gridCtx.fillRect(rx - thick/2, ry - up, thick, up + down);
-      }
-    }
-
-    // Core pass
-    gridCtx.fillStyle = isDarkBg
-      ? `rgba(255,255,255,${0.55 * crossAlpha})`
-      : `rgba(0,0,0,${0.35 * crossAlpha})`;
-    for (const y of ys) {
-      const ry = Math.round(y);
-      for (const x of xs) {
-        const rx    = Math.round(x);
-        const left  = Math.min(armBase, rx - offsetX);
-        const right = Math.min(armBase, boardScreenR - rx);
-        const up    = Math.min(armBase, ry - offsetY);
-        const down  = Math.min(armBase, boardScreenB - ry);
-        gridCtx.fillRect(rx - left, ry - thick/2, left + right, thick);
-        gridCtx.fillRect(rx - thick/2, ry - up, thick, up + down);
+    // Draw each cross marker twice: black pass first then white pass on top.
+    // White is drawn last so it wins visually on bright/white backgrounds,
+    // preventing the black pass from dominating at high-contrast edges.
+    for (const pass of ['black', 'white']) {
+      gridCtx.fillStyle = pass === 'white'
+        ? `rgba(255,255,255,${0.45 * crossAlpha})`
+        : `rgba(0,0,0,${0.30 * crossAlpha})`;
+      for (const y of ys) {
+        const ry = Math.round(y);
+        for (const x of xs) {
+          const rx    = Math.round(x);
+          const left  = Math.min(armBase, rx - offsetX);
+          const right = Math.min(armBase, boardScreenR - rx);
+          const up    = Math.min(armBase, ry - offsetY);
+          const down  = Math.min(armBase, boardScreenB - ry);
+          gridCtx.fillRect(rx - left, ry - thick/2, left + right, thick);
+          gridCtx.fillRect(rx - thick/2, ry - up, thick, up + down);
+        }
       }
     }
   }
 
   if (lineAlpha > 0) {
-    // Line grid — sharp and precise at high zoom
+    // Line grid — sharp and precise at high zoom.
+    // Always double-stroke: white pass first (shows on dark pixels),
+    // black pass second (shows on bright pixels). No per-line sampling —
+    // sampling a single midpoint to classify an entire line caused phantom
+    // dark lines at colour boundaries and wrong colours on mixed rows/cols.
     gridCtx.lineWidth = 1 / dpr;
     const snap = (v) => Math.round(v * dpr) / dpr;
 
-    // Per-line colour: sample both sides; dark line on bright/dark boundaries,
-    // double-stroke everywhere else.
-    function sampleLuma(bx, by) {
-      const cx = Math.max(0, Math.min(BOARD_WIDTH  - 1, bx));
-      const cy = Math.max(0, Math.min(BOARD_HEIGHT - 1, by));
-      const d  = bufferCtx.getImageData(cx, cy, 1, 1).data;
-      const r  = d[3] === 0 ? 255 : d[0];
-      const g  = d[3] === 0 ? 255 : d[1];
-      const b  = d[3] === 0 ? 255 : d[2];
-      return brightnessRgb(r, g, b);
-    }
-
-    const whitePath = new Path2D();
-    const blackPath = new Path2D();
-    const midBoardRow = Math.round((clipT + clipB) / 2 - offsetY) / scale | 0;
-    const midBoardCol = Math.round((clipL + clipR) / 2 - offsetX) / scale | 0;
-
+    gridCtx.beginPath();
     for (const x of xs) {
-      const col   = Math.round((x - offsetX) / scale);
-      const px    = snap(x);
-      const lumaL = sampleLuma(col - 1, midBoardRow);
-      const lumaR = sampleLuma(col,     midBoardRow);
-      if (Math.max(lumaL, lumaR) > 180 && Math.min(lumaL, lumaR) < 80) {
-        blackPath.moveTo(px, clipT); blackPath.lineTo(px, clipB);
-      } else {
-        whitePath.moveTo(px, clipT); whitePath.lineTo(px, clipB);
-        blackPath.moveTo(px, clipT); blackPath.lineTo(px, clipB);
-      }
+      const px = snap(x);
+      gridCtx.moveTo(px, clipT);
+      gridCtx.lineTo(px, clipB);
     }
-
     for (const y of ys) {
-      const row   = Math.round((y - offsetY) / scale);
-      const py    = snap(y);
-      const lumaA = sampleLuma(midBoardCol, row - 1);
-      const lumaB = sampleLuma(midBoardCol, row);
-      if (Math.max(lumaA, lumaB) > 180 && Math.min(lumaA, lumaB) < 80) {
-        blackPath.moveTo(clipL, py); blackPath.lineTo(clipR, py);
-      } else {
-        whitePath.moveTo(clipL, py); whitePath.lineTo(clipR, py);
-        blackPath.moveTo(clipL, py); blackPath.lineTo(clipR, py);
-      }
+      const py = snap(y);
+      gridCtx.moveTo(clipL, py);
+      gridCtx.lineTo(clipR, py);
     }
 
-    gridCtx.strokeStyle = `rgba(255,255,255,${0.30 * lineAlpha})`;
-    gridCtx.stroke(whitePath);
-    gridCtx.strokeStyle = `rgba(0,0,0,${0.22 * lineAlpha})`;
-    gridCtx.stroke(blackPath);
+    // Black pass first — visible on bright pixels (reduced opacity so it
+    // doesn't dominate at high-contrast dark/white pixel boundaries).
+    gridCtx.strokeStyle = `rgba(0,0,0,${0.12 * lineAlpha})`;
+    gridCtx.stroke();
+    // White pass on top — visible on dark pixels. Drawing white last means
+    // it wins compositionally on bright backgrounds, preventing the phantom
+    // dark line that appeared when black was the final pass over white pixels.
+    gridCtx.strokeStyle = `rgba(255,255,255,${0.35 * lineAlpha})`;
+    gridCtx.stroke();
   }
 
   // Board border
