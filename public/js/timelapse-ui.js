@@ -442,8 +442,8 @@
     speedLabel.textContent = SPEED_NAMES[parseInt(speedSlider.value, 10) - 1] ?? 'Normal';
   });
 
-  // Background colour — matches the server-side CLI default (--bg 2e2e2f)
-  const CANVAS_BG = '#2e2e2f';
+  // Background colour — white, matching the live canvas board background.
+  const CANVAS_BG = '#fff';
 
   // ── Canvas helpers ────────────────────────────────────────────────────────────
   function initCanvas() {
@@ -735,25 +735,62 @@
     clearError();
 
     try {
-      // Include the auth token so the server can verify the request.
-      // The token is stored in localStorage under 'sp_token' by app.js.
       const token = (() => { try { return localStorage.getItem('sp_token') || ''; } catch { return ''; } })();
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const res  = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`, { headers, credentials: 'same-origin' });
+      const res = await fetch(`/api/timelapse/history?limit=${HISTORY_FETCH_LIMIT}`, { headers, credentials: 'same-origin' });
       if (!res.ok) {
         const errMsg = (res.status === 401 || res.status === 403)
           ? 'Please log in to view the timelapse.'
           : `Failed to load (HTTP ${res.status}) — try again later.`;
         subtitle.textContent = errMsg;
         showError(errMsg);
-        // Reset downloadBtn if a previous load had enabled it but this reload failed
         if (!events.length) downloadBtn.disabled = true;
         loadBtn.disabled    = false;
         loadBtn.textContent = 'Load';
         return;
       }
-      const data = await res.json();
+
+      // Stream the response body so the UI stays responsive on large payloads.
+      // We read chunks, accumulate them, and update the subtitle with a live
+      // byte count so the user can see progress rather than a frozen tab.
+      const contentLength = parseInt(res.headers.get('Content-Length') || '0', 10);
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let   raw     = '';
+      let   received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        raw      += decoder.decode(value, { stream: true });
+        // Live progress: show MB received (and % if Content-Length is known)
+        const mb = (received / 1048576).toFixed(1);
+        if (contentLength > 0) {
+          const pct = Math.min(99, Math.round(received / contentLength * 100));
+          subtitle.textContent = `Downloading… ${mb} MB (${pct}%)`;
+        } else {
+          subtitle.textContent = `Downloading… ${mb} MB`;
+        }
+      }
+
+      subtitle.textContent = 'Parsing…';
+      // Yield to the browser for one frame before the JSON parse so the
+      // "Parsing…" label actually renders before the main thread is busy.
+      await new Promise(r => setTimeout(r, 0));
+
+      let data;
+      try { data = JSON.parse(raw); }
+      catch {
+        const msg = 'Failed to parse response — try again later.';
+        subtitle.textContent = msg;
+        showError(msg);
+        if (!events.length) downloadBtn.disabled = true;
+        loadBtn.disabled    = false;
+        loadBtn.textContent = 'Retry';
+        return;
+      }
 
       events = Array.isArray(data.events) ? data.events : [];
       if (!events.length) {
@@ -770,7 +807,7 @@
       cursor = 0;
       updateProgress();
 
-      const cappedNote     = data.capped
+      const cappedNote = data.capped
         ? ` (first ${events.length.toLocaleString()} of ${(data.total || '?').toLocaleString()} shown)`
         : '';
       subtitle.textContent = `${events.length.toLocaleString()} events loaded${cappedNote}`;
