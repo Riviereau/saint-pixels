@@ -132,22 +132,26 @@
               <line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>
             </svg>
           </button>
-        </div>
 
-        <!-- Load progress bar (visible only while fetching) -->
-        <div id="tl-load-bar-wrap" class="tl-load-bar-wrap" style="display:none">
-          <div class="tl-load-bar-track">
-            <div id="tl-load-bar-fill" class="tl-load-bar-fill"></div>
+          <!-- Load progress bar — overlay centered on the canvas wrap -->
+          <div id="tl-load-bar-wrap" class="tl-load-bar-wrap" style="display:none">
+            <div class="tl-load-bar-inner">
+              <div class="tl-load-bar-track">
+                <div id="tl-load-bar-fill" class="tl-load-bar-fill"></div>
+              </div>
+              <span id="tl-load-bar-label" class="tl-load-bar-label">Downloading…</span>
+            </div>
           </div>
-          <span id="tl-load-bar-label" class="tl-load-bar-label">Downloading…</span>
-        </div>
 
-        <!-- Playback ETA bar (visible only while playing) -->
-        <div id="tl-eta-bar-wrap" class="tl-load-bar-wrap tl-eta-bar-wrap" style="display:none">
-          <div class="tl-load-bar-track">
-            <div id="tl-eta-bar-fill" class="tl-load-bar-fill tl-eta-bar-fill"></div>
+          <!-- Playback ETA bar — overlay centered on the canvas wrap -->
+          <div id="tl-eta-bar-wrap" class="tl-load-bar-wrap tl-eta-bar-wrap" style="display:none">
+            <div class="tl-load-bar-inner">
+              <div class="tl-load-bar-track">
+                <div id="tl-eta-bar-fill" class="tl-load-bar-fill tl-eta-bar-fill"></div>
+              </div>
+              <span id="tl-eta-bar-label" class="tl-load-bar-label">Rendering…</span>
+            </div>
           </div>
-          <span id="tl-eta-bar-label" class="tl-load-bar-label">Rendering…</span>
         </div>
 
         <!-- Progress bar -->
@@ -438,6 +442,7 @@
 
   // ── Error banner helper ───────────────────────────────────────────────────────
   function showError(msg) {
+    console.error('[timelapse-ui] showError:', msg);
     errorBanner.textContent = msg;
     errorBanner.style.display = 'flex';
     // Ensure placeholder is visible (canvas not yet loaded)
@@ -813,6 +818,7 @@
         const errMsg = (res.status === 401 || res.status === 403)
           ? 'Please log in to view the timelapse.'
           : `Failed to load (HTTP ${res.status}) — try again later.`;
+        console.error('[timelapse-ui] fetch failed — HTTP', res.status, res.statusText);
         subtitle.textContent = errMsg;
         showError(errMsg);
         if (!events.length) downloadBtn.disabled = true;
@@ -834,6 +840,7 @@
       // Show the load bar, hide the playback progress bar while loading
       loadBarWrap.style.display  = '';
       progressWrap.style.display = 'none';
+      console.log('[timelapse-ui] load bar shown — Content-Length:', contentLength, 'loadBarWrap:', loadBarWrap);
       if (contentLength > 0) {
         loadBarFill.style.animation = 'none';
         loadBarFill.style.width     = '0%';
@@ -875,7 +882,8 @@
 
       let data;
       try { data = JSON.parse(raw); }
-      catch {
+      catch (parseErr) {
+        console.error('[timelapse-ui] JSON parse error:', parseErr, '— raw (first 200 chars):', raw.slice(0, 200));
         const msg = 'Failed to parse response — try again later.';
         subtitle.textContent = msg;
         showError(msg);
@@ -887,6 +895,7 @@
 
       events = Array.isArray(data.events) ? data.events : [];
       if (!events.length) {
+        console.error('[timelapse-ui] no events returned — data keys:', Object.keys(data));
         const msg = 'No pixel history yet — start painting!';
         subtitle.textContent = msg;
         showError(msg);

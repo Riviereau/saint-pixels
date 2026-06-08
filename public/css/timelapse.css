@@ -600,16 +600,31 @@
 }
 .tl-zoom-reset.hidden { display: none; }
 
-/* ── Download / playback progress bars ──────────────────────────────────── */
-/* These sit between the canvas and the seek bar inside #tl-panel-player.    */
-/* The injected <style> block in timelapse-ui.js defines the base layout;    */
-/* these rules ensure correct padding, visibility, and theming.              */
+/* ── Download / playback progress bars — overlaid on the canvas wrap ────── */
+/* Both bars live INSIDE .tl-canvas-wrap as absolute overlays.               */
+/* This is immune to the panel's overflow:hidden / flex squash problem.      */
 .tl-load-bar-wrap {
+  position: absolute;
+  /* Sit in the bottom third of the canvas wrap — clearly visible, not covering the centre */
+  bottom: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, 88%);
+  z-index: 20;
+  pointer-events: none; /* don't block canvas interaction */
+}
+/* Inner pill — gives the frosted-glass card look */
+.tl-load-bar-inner {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 1.2rem 4px;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(10, 10, 14, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  padding: 10px 14px 9px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
 }
 .tl-load-bar-track {
   flex: 1;
@@ -634,17 +649,12 @@
   font-size: 0.72rem;
   color: #94a3b8;
   white-space: nowrap;
-  min-width: 160px;
-  text-align: right;
+  text-align: center;
 }
 
-/* ETA bar — amber→green, shown during playback */
+/* ETA bar — amber→green gradient, sits higher than the load bar */
 .tl-eta-bar-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 1.2rem 4px;
-  flex-shrink: 0;
+  bottom: 30%;
 }
 .tl-eta-bar-fill {
   height: 100%;
