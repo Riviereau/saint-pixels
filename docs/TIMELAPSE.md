@@ -87,6 +87,7 @@ node timelapse.js
 | `--scale <n>` | `1` | Downscale factor — `2` renders at 960×540 (faster, less RAM) |
 | `--bg <hex>` | `2e2e2f` | Background fill colour (no `#` needed) |
 | `--no-watermark` | — | Remove the "Saint-Pixels" text overlay |
+| `--social <platform>` | — | Optimise for sharing on **`discord`** or **`reddit`**. Upscales each board pixel with nearest-neighbour so hard edges stay crisp after platform re-encoding, raises quality (`-crf 16`), and uses `-tune animation` (ideal for flat colours + sharp boundaries). See [Social Export](#social-export-discord--reddit) below. |
 | `--crop <x0,y0,x1,y1>` | — | Crop to a board-pixel rectangle, e.g. `0,0,1000,1000` |
 | `--help` | — | Print usage and exit |
 
@@ -122,6 +123,71 @@ node timelapse.js --json /var/data/pixel-history.json --out timelapse.mp4
 ```
 
 > **Odd crop dimensions:** H.264 requires even width/height. If your `--crop` region results in an odd dimension after `--scale`, the script pads to the next even size and trims back inside ffmpeg automatically.
+
+---
+
+## Social Export (Discord / Reddit)
+
+Platform-specific encoding for sharing pixel art timelapses that stay crisp after re-encoding.
+
+### Why platforms blur pixel art
+
+Both Discord and Reddit re-encode every video you upload. H.264's default settings optimise for photographic content — they blur sharp colour boundaries to save bits. Pixel art is the opposite: it relies entirely on hard edges between solid colours, so default encoding destroys it.
+
+`--social` fixes this with three things working together:
+
+| Technique | What it does |
+|-----------|-------------|
+| **Nearest-neighbour upscale** | Each board pixel becomes a block of identical pixels (2×–4× depending on crop size, capped so output stays ≤ 1920×1080). The codec sees many identical adjacent pixels and encodes them losslessly rather than blurring the boundary. |
+| **`-tune animation`** | Tells the H.264 encoder the content has large flat-colour regions and hard edges. It adjusts quantisation and inter-frame prediction accordingly — no more gradient wash-out on pixel boundaries. |
+| **`-crf 16` + `-preset slow`** | Near-lossless quality gives the platform's own re-encoder the best possible source to start from. The slower preset finds more efficient inter-frame patterns, reducing artefacts at the same file size. |
+
+### Discord
+
+```bash
+# Full canvas, Discord-optimised
+node timelapse.js --social discord --out timelapse-discord.mp4
+
+# Cropped region gets a bigger per-pixel upscale (e.g. 2× or 4×)
+node timelapse.js --social discord --crop 0,0,480,270 --out timelapse-discord-cropped.mp4
+
+# Discord free tier is 10 MB — shorten with --pps or use --scale to shrink
+node timelapse.js --social discord --scale 2 --out timelapse-discord.mp4
+```
+
+**Tips for Discord:**
+- Free accounts: 10 MB upload limit. Use `--scale 2` + higher `--pps` to stay under it.
+- Nitro Basic: 50 MB. Full 1920×1080 with `--social discord` fits fine for most timelapses.
+- Nitro: 500 MB. No compromises needed.
+- Discord re-encodes to 720p (free) or 1080p (Nitro) — `--social discord` gives it the sharpest possible 1080p source.
+- If Discord shows the video as a download link instead of inline player, it's over the upload limit.
+
+### Reddit
+
+```bash
+# Full canvas, Reddit-optimised
+node timelapse.js --social reddit --out timelapse-reddit.mp4
+
+# Date-filtered highlight for a Reddit post
+node timelapse.js --social reddit --from 2025-04-01 --to 2025-04-30 --out april-reddit.mp4
+```
+
+**Tips for Reddit:**
+- Reddit re-encodes all uploads. Starting from `--social reddit` output means crisp pixels survive the pass.
+- Reddit supports up to 1 GB and 15 minutes. Full-history timelapses fit easily.
+- For r/place-style posts, a cropped region often tells a better story and gets a larger upscale factor.
+- Reddit displays video at ~720p in feeds, full resolution on click. `--social` ensures both look sharp.
+
+### File size vs quality trade-offs
+
+| Goal | Flags |
+|------|-------|
+| Best quality, any size | `--social discord` or `--social reddit` |
+| Under Discord free 10 MB | `--social discord --scale 2 --pps 500` |
+| Cropped highlight, maximally crisp | `--social discord --crop x0,y0,x1,y1` |
+| No watermark for posting | `--social discord --no-watermark` |
+
+---
 
 ### Understanding `--fps` and `--pps`
 

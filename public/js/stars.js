@@ -39,10 +39,7 @@
   const DRIFT_MIN = -60;
   const DRIFT_MAX = 60;
 
-  // ─── 16×16 Big Star pixel art patterns (1 = filled, 0 = empty) ───────────
-  // Each row is 16 bits; we store as arrays of 16 numbers (0/1).
-  // Multiple designs; one is picked randomly per-spawn (client-side random).
-
+  // ─── 16×16 Big Star pixel art patterns ───────────────────────────────────
   const BIG_STAR_PATTERNS = [
     // Classic 8-point star
     [
@@ -170,7 +167,7 @@
     ],
   ];
 
-  // ─── Star color palettes (gold/silver/rainbow sparkle variants) ───────────
+  // ─── Star color palettes ──────────────────────────────────────────────────
   const BIG_PALETTES = [
     { fill: '#FFD700', shine: '#FFF8A0', outline: '#B8860B' }, // gold
     { fill: '#E8C840', shine: '#FFFACD', outline: '#C8A000' }, // warm gold
@@ -183,7 +180,7 @@
     { fill: '#DDA0DD', shine: '#F8E0F8', outline: '#9060A0' }, // plum
   ];
 
-  // ─── Seeded PRNG (mulberry32) — determines spawn schedule ─────────────────
+  // ─── Seeded PRNG (mulberry32) ─────────────────────────────────────────────
   function mulberry32(seed) {
     return function () {
       seed |= 0; seed = seed + 0x6D2B79F5 | 0;
@@ -193,23 +190,20 @@
     };
   }
 
-  // Build a seed from the current UTC day (resets daily so star counts restart)
   function daySeed() {
     const now = new Date();
     return (now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate());
   }
 
-  // Pre-generate the full day's spawn schedule:
-  // Array of { minuteOffset, isBig } sorted by minuteOffset (0..1439)
   function buildDaySchedule() {
     const rng  = mulberry32(daySeed());
     const schedule = [];
     for (let m = 0; m < 1440; m++) {
       const count = STARS_PER_MINUTE_MIN + Math.floor(rng() * (STARS_PER_MINUTE_MAX - STARS_PER_MINUTE_MIN + 1));
       for (let i = 0; i < count; i++) {
-        const offsetSec = rng() * 60; // spread within the minute
+        const offsetSec = rng() * 60;
         schedule.push({
-          spawnAt: m * 60 + offsetSec, // seconds since midnight UTC
+          spawnAt: m * 60 + offsetSec,
           isBig: rng() < BIG_FRACTION,
         });
       }
@@ -229,18 +223,15 @@
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (!pattern[r][c]) continue;
-        // Shine on top-left quadrant, normal fill elsewhere
         const isShine = r < rows / 3 && c < cols / 3;
         ctx.fillStyle = isShine ? palette.shine : palette.fill;
         ctx.fillRect(c * px, r * px, px, px);
       }
     }
-    // 1px outline pass (draw outline pixels)
     ctx.fillStyle = palette.outline;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (!pattern[r][c]) continue;
-        // Check neighbours — draw outline where neighbour is empty/out-of-bounds
         const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
         for (const [dr, dc] of dirs) {
           const nr = r + dr, nc = c + dc;
@@ -258,8 +249,14 @@
     return canvas.toDataURL();
   }
 
-  // Pre-render all patterns once on load (client-local random for visual only)
   function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  // ─── Viewport container ───────────────────────────────────────────────────
+  // Stars are appended to #viewport so they are contained within the canvas
+  // area and don't cover the header/sidebar UI.
+  function getViewport() {
+    return document.getElementById('viewport') || document.body;
+  }
 
   // ─── Star Balance (localStorage) ─────────────────────────────────────────
   function loadBalance() {
@@ -271,113 +268,116 @@
   }
 
   let balance = loadBalance();
-  const balanceEl = document.getElementById('star-balance-val');
+  const balanceEl  = document.getElementById('star-balance-val');
+  const balanceChip = document.getElementById('star-balance-chip');
+
   function updateBalanceUI() {
     if (balanceEl) balanceEl.textContent = balance.toLocaleString();
+    // Trigger pop animation on the chip
+    if (balanceChip) {
+      balanceChip.classList.remove('sp-pop');
+      // Force reflow so the animation re-triggers if it was already running
+      void balanceChip.offsetWidth;
+      balanceChip.classList.add('sp-pop');
+    }
   }
   updateBalanceUI();
 
-  function awardStars(amount, x, y) {
+  function awardStars(amount, viewportX, viewportY) {
     balance += amount;
     saveBalance(balance);
     updateBalanceUI();
-    showFloatingText(`+${amount} ⭐`, x, y);
+    showFloatingText(`+${amount} ⭐`, viewportX, viewportY);
   }
 
-  function showFloatingText(text, x, y) {
+  // ─── Floating reward text (viewport-relative) ─────────────────────────────
+  // viewportX / viewportY are already relative to #viewport's top-left corner.
+  function showFloatingText(text, viewportX, viewportY) {
+    const vp = getViewport();
     const el = document.createElement('div');
+    el.className = 'sp-star-reward';
     el.textContent = text;
-    Object.assign(el.style, {
-      position:   'fixed',
-      left:       x + 'px',
-      top:        y + 'px',
-      color:      '#FFD700',
-      fontWeight: '800',
-      fontSize:   '1.1rem',
-      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
-      pointerEvents: 'none',
-      zIndex:     '99998',
-      transform:  'translateX(-50%)',
-      transition: 'transform 1.1s ease, opacity 1.1s ease',
-      opacity:    '1',
-      willChange: 'transform, opacity',
-    });
-    document.body.appendChild(el);
+    el.style.left = viewportX + 'px';
+    el.style.top  = viewportY + 'px';
+    vp.appendChild(el);
+
+    // Double rAF: first frame lets the browser lay out the element at the
+    // start position; second frame applies the end-state class so the CSS
+    // transition actually fires (single rAF isn't enough in all browsers).
     requestAnimationFrame(() => {
-      el.style.transform = 'translateX(-50%) translateY(-60px)';
-      el.style.opacity   = '0';
+      requestAnimationFrame(() => {
+        el.classList.add('sp-star-reward--fly');
+      });
     });
-    setTimeout(() => el.remove(), 1200);
+
+    setTimeout(() => el.remove(), 1300);
   }
 
   // ─── Spawn a falling star ─────────────────────────────────────────────────
   function spawnStar(isBig) {
-    const pattern  = isBig ? pickRandom(BIG_STAR_PATTERNS)   : pickRandom(SMALL_STAR_PATTERNS);
-    const palette  = isBig ? pickRandom(BIG_PALETTES)        : pickRandom(SMALL_PALETTES);
-    const px       = isBig ? BIG_PX : SMALL_PX;
-    const reward   = isBig ? BIG_REWARD : SMALL_REWARD;
-    const imgSrc   = renderPixelArt(pattern, px, palette);
+    const vp = getViewport();
+    const vpW = vp.offsetWidth;
+    const vpH = vp.offsetHeight;
 
-    const img = document.createElement('img');
-    img.src   = imgSrc;
-    img.alt   = isBig ? 'Big Star (50 ⭐)' : 'Small Star (25 ⭐)';
-    img.title = `Click for ${reward} ⭐!`;
+    const pattern = isBig ? pickRandom(BIG_STAR_PATTERNS)  : pickRandom(SMALL_STAR_PATTERNS);
+    const palette = isBig ? pickRandom(BIG_PALETTES)       : pickRandom(SMALL_PALETTES);
+    const px      = isBig ? BIG_PX : SMALL_PX;
+    const reward  = isBig ? BIG_REWARD : SMALL_REWARD;
+    const imgSrc  = renderPixelArt(pattern, px, palette);
 
-    const size = pattern[0].length * px;
-
-    // Random horizontal start position (avoid edges)
-    const startX = size + Math.random() * (window.innerWidth - size * 2);
+    const size  = pattern[0].length * px;
+    const startX = size + Math.random() * Math.max(0, vpW - size * 2);
     const drift  = DRIFT_MIN + Math.random() * (DRIFT_MAX - DRIFT_MIN);
     const dur    = FALL_MIN  + Math.random() * (FALL_MAX  - FALL_MIN);
+    const rot1   = -15 + Math.random() * 30;
+    const rot2   = rot1 + (-10 + Math.random() * 20);
 
-    // Slight rotation wobble
-    const rot1 = -15 + Math.random() * 30;
-    const rot2 = rot1 + (-10 + Math.random() * 20);
+    const img = document.createElement('img');
+    img.src      = imgSrc;
+    img.alt      = isBig ? 'Big Star (50 ⭐)' : 'Small Star (25 ⭐)';
+    img.title    = `Click for ${reward} ⭐!`;
+    img.className = 'sp-star';
 
     Object.assign(img.style, {
-      position:   'fixed',
       top:        `-${size}px`,
-      left:       startX + 'px',
-      width:      size + 'px',
-      height:     size + 'px',
-      imageRendering: 'pixelated',
-      cursor:     'pointer',
-      zIndex:     '99997',
-      userSelect: 'none',
-      filter:     'drop-shadow(0 0 6px rgba(255,215,0,0.7))',
-      transition: `top ${dur}ms linear, left ${dur}ms ease-in-out, transform ${dur}ms ease-in-out, opacity 0.3s ease`,
+      left:       `${startX}px`,
+      width:      `${size}px`,
+      height:     `${size}px`,
       transform:  `rotate(${rot1}deg)`,
+      transition: `top ${dur}ms linear, left ${dur}ms ease-in-out, transform ${dur}ms ease-in-out, opacity 0.3s ease`,
     });
 
-    document.body.appendChild(img);
+    vp.appendChild(img);
 
-    // Trigger animation
+    // Trigger fall animation (single rAF is fine here — transition starts
+    // from the appended style, which the browser has already parsed)
     requestAnimationFrame(() => {
-      img.style.top       = `${window.innerHeight + size}px`;
+      img.style.top       = `${vpH + size}px`;
       img.style.left      = `${startX + drift}px`;
       img.style.transform = `rotate(${rot2}deg)`;
     });
 
-    // Click / tap handler
+    // Collect handler
     let collected = false;
     function collect(e) {
       if (collected) return;
       collected = true;
       e.stopPropagation();
-      const rect = img.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top;
-      // Burst animation
-      img.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
-      img.style.transform  = 'scale(2) rotate(30deg)';
-      img.style.opacity    = '0';
+
+      // Convert the star's current bounding rect to viewport-local coords
+      const vpRect  = vp.getBoundingClientRect();
+      const imgRect = img.getBoundingClientRect();
+      const cx = imgRect.left + imgRect.width  / 2 - vpRect.left;
+      const cy = imgRect.top                       - vpRect.top;
+
+      img.classList.add('sp-star--collected');
       awardStars(reward, cx, cy);
       setTimeout(() => img.remove(), 280);
     }
     img.addEventListener('click',      collect, { once: true });
     img.addEventListener('touchstart', collect, { once: true, passive: true });
 
-    // Auto-remove when it exits the screen
+    // Auto-remove once it exits the viewport
     setTimeout(() => { if (!collected) img.remove(); }, dur + 500);
   }
 
@@ -390,15 +390,13 @@
   }
 
   function scheduleNext() {
-    const nowSec = secondsFromMidnightUTC();
-    // Find the next un-spawned event after now (or wrapping to tomorrow)
+    const nowSec   = secondsFromMidnightUTC();
     const upcoming = schedule.filter(e => e.spawnAt > nowSec);
     if (!upcoming.length) {
-      // Near midnight — wait until next day schedule reloads
       setTimeout(scheduleNext, 60_000);
       return;
     }
-    const next = upcoming[0];
+    const next  = upcoming[0];
     const delay = (next.spawnAt - nowSec) * 1000;
     setTimeout(() => {
       spawnStar(next.isBig);
@@ -406,10 +404,9 @@
     }, Math.max(0, delay));
   }
 
-  // Kick off
   scheduleNext();
 
-  // ─── Expose API for other scripts ─────────────────────────────────────────
+  // ─── Public API ───────────────────────────────────────────────────────────
   window.SP_Stars = {
     getBalance: () => balance,
     addBalance: (n) => { balance += n; saveBalance(balance); updateBalanceUI(); },

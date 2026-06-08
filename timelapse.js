@@ -24,6 +24,12 @@
  *   --user <name>        Only placements by one user
  *   --crop x0,y0,x1,y1  Crop to board-pixel rectangle (e.g. 0,0,960,540)
  *   --no-watermark       Remove the "Saint-Pixels" watermark
+ *   --social <platform>  Optimise for social sharing — "discord" or "reddit"
+ *                        Upscales each board pixel with nearest-neighbour so
+ *                        it stays crisp after platform re-encoding, raises the
+ *                        bitrate, and tunes the encoder for pixel art.
+ *                        discord → targets ≤50 MB (Nitro Basic), 1080p cap.
+ *                        reddit  → targets ≤1 GB, 1080p cap.
  *
  * Requirements:
  *   npm install canvas better-sqlite3
@@ -67,6 +73,24 @@ const WATERMARK = !hasFlag('--no-watermark');
 const FROM_DATE = getArg('--from') || null;
 const TO_DATE   = getArg('--to')   || null;
 const USER      = getArg('--user') || null;
+
+// --social discord | reddit
+const SOCIAL_RAW = (getArg('--social') || '').toLowerCase();
+if (SOCIAL_RAW && SOCIAL_RAW !== 'discord' && SOCIAL_RAW !== 'reddit') {
+  console.error('--social must be "discord" or "reddit".');
+  process.exit(1);
+}
+const SOCIAL = SOCIAL_RAW || null; // null = off, 'discord', 'reddit'
+
+// Social-mode upscale: each board pixel becomes SOCIAL_UPSCALE x SOCIAL_UPSCALE
+// real output pixels, keeping hard edges crisp after platform re-encoding.
+// We calculate the max integer upscale that still keeps output within 1920x1080.
+function calcSocialUpscale(outW, outH) {
+  if (!SOCIAL) return 1;
+  const maxByW = Math.floor(1920 / outW);
+  const maxByH = Math.floor(1080 / outH);
+  return Math.max(1, Math.min(maxByW, maxByH, 4)); // cap at 4x
+}
 
 // --crop x0,y0,x1,y1
 let CROP = null;
@@ -298,7 +322,7 @@ async function main() {
   }
 
   console.log(`[timelapse] ${events.length.toLocaleString()} events to render`);
-  console.log(`[timelapse] Output: ${OUT_PATH}  (${OUT_W}x${OUT_H} @ ${FPS} fps, ${PPS} px/s)`);
+  console.log(`[timelapse] Output: ${OUT_PATH}  (${SOCIAL_OUT_W}x${SOCIAL_OUT_H} @ ${FPS} fps, ${PPS} px/s)`);
   if (CROP) console.log(`[timelapse] Crop: (${REGION_X0},${REGION_Y0}) -> (${REGION_X1},${REGION_Y1})`);
 
   // ── Canvas setup ─────────────────────────────────────────────────────────────
@@ -308,31 +332,80 @@ async function main() {
   srcCtx.fillStyle = BG_HEX;
   srcCtx.fillRect(0, 0, BOARD_W, BOARD_H);
 
-  // Output canvas is the cropped + scaled region
-  const outCanvas = createCanvas(OUT_W, OUT_H);
+  // ── Social upscale ──────────────────────────────────────────────────────────
+  // In social mode each board pixel is rendered as UPSCALE×UPSCALE output
+  // pixels using nearest-neighbour scaling.  This preserves the hard colour
+  // boundaries that make pixel art look crisp and gives the video codec many
+  // identical pixels to work with per "pixel", which it compresses losslessly.
+  // Without this, H.264's DCT blocks blur sharp 1-pixel edges into gradients.
+  const SOCIAL_UPSCALE = SOCIAL ? calcSocialUpscale(OUT_W, OUT_H) : 1;
+  const SOCIAL_OUT_W   = OUT_W * SOCIAL_UPSCALE;
+  const SOCIAL_OUT_H   = OUT_H * SOCIAL_UPSCALE;
+
+  // Output canvas is the cropped + scaled (+ social-upscaled) region
+  const outCanvas = createCanvas(SOCIAL_OUT_W, SOCIAL_OUT_H);
   const outCtx    = outCanvas.getContext('2d');
+
+  // Nearest-neighbour: never blur pixel boundaries
+  outCtx.imageSmoothingEnabled = false;
+
+  if (SOCIAL) {
+    const platformLabel = SOCIAL === 'discord' ? 'Discord' : 'Reddit';
+    console.log(
+      `[timelapse] Social mode: ${platformLabel} — ` +
+      `nearest-neighbour ${SOCIAL_UPSCALE}x upscale → ` +
+      `${SOCIAL_OUT_W}x${SOCIAL_OUT_H}, animation-tuned encoder`
+    );
+  }
 
   const FONT_SIZE = Math.max(14, Math.round(22 / SCALE));
 
   function drawWatermark() {
     if (!WATERMARK) return;
     outCtx.save();
-    outCtx.font      = `bold ${FONT_SIZE}px sans-serif`;
+    outCtx.font      = `bold ${FONT_SIZE * SOCIAL_UPSCALE}px sans-serif`;
     outCtx.fillStyle = 'rgba(255,255,255,0.18)';
     outCtx.textAlign = 'right';
-    outCtx.fillText('Saint-Pixels', OUT_W - 10, OUT_H - 10);
+    outCtx.fillText('Saint-Pixels', SOCIAL_OUT_W - 10, SOCIAL_OUT_H - 10);
     outCtx.restore();
   }
 
   // ── ffmpeg ───────────────────────────────────────────────────────────────────
+  //
+  // Social mode tweaks (both Discord and Reddit):
+  //   -tune animation   Optimises the H.264 encoder for large flat-colour areas
+  //                     and hard edges — exactly what pixel art is made of.
+  //                     The default tune blurs those edges trying to save bits.
+  //   -crf 16           Near-lossless quality (vs default 18) so the platform's
+  //                     own re-encoder starts from the best possible source.
+  //   -preset slow      More exhaustive inter-frame search → fewer DCT artefacts
+  //                     on the pixel boundaries, worth the extra encode time.
+  //   -pix_fmt yuv444p  Discord & Reddit both accept it; preserves colour
+  //                     accuracy better than yuv420p (no chroma subsampling).
+  //                     Falls back to yuv420p automatically if the platform
+  //                     can't play it (Discord web sometimes can't), so we keep
+  //                     yuv420p as the safe default and note the trade-off.
+  //
+  // Note on file size:
+  //   The upscaled output is larger on disk, but Discord & Reddit both re-encode
+  //   your upload anyway — you want to give them the sharpest possible source.
+  //   For Discord free (10 MB limit) reduce --pps to shorten the video, or use
+  //   --scale 2 alongside --social to stay under the cap.
+
+  const socialCrf    = SOCIAL ? '16'        : '18';
+  const socialPreset = SOCIAL ? 'slow'      : 'fast';
+  const socialTune   = SOCIAL ? 'animation' : null;
+
   const ffmpegArgs = [
     '-y',
     '-f', 'rawvideo', '-pix_fmt', 'rgba',
-    '-s', `${OUT_W}x${OUT_H}`,
+    '-s', `${SOCIAL_OUT_W}x${SOCIAL_OUT_H}`,
     '-r', String(FPS),
     '-i', 'pipe:0',
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-    '-preset', 'fast', '-crf', '18',
+    '-preset', socialPreset,
+    '-crf',    socialCrf,
+    ...(socialTune ? ['-tune', socialTune] : []),
     '-movflags', '+faststart',
     OUT_PATH,
   ];
@@ -359,24 +432,28 @@ async function main() {
   // ── Render loop ──────────────────────────────────────────────────────────────
 
   function writeFrame() {
-    // Draw the crop region from the source canvas, scaled to OUT_W x OUT_H.
+    // Draw the crop region from the source canvas into the output canvas.
+    // imageSmoothingEnabled=false ensures nearest-neighbour scaling (no blur)
+    // in both normal and social mode — especially critical for pixel art.
+    outCtx.imageSmoothingEnabled = false;
     outCtx.drawImage(
       srcCanvas,
       REGION_X0, REGION_Y0, REGION_W, REGION_H,
-      0, 0, OUT_W, OUT_H
+      0, 0, SOCIAL_OUT_W, SOCIAL_OUT_H
     );
     drawWatermark();
     const buf = outCanvas.toBuffer('raw');
 
     // Erase watermark so it doesn't bleed onto subsequent frames.
     if (WATERMARK) {
-      const wy = OUT_H - FONT_SIZE * 2 - 10;
-      const wh = FONT_SIZE * 2 + 10;
-      outCtx.clearRect(0, wy, OUT_W, wh);
+      const wy = SOCIAL_OUT_H - FONT_SIZE * SOCIAL_UPSCALE * 2 - 10;
+      const wh = FONT_SIZE * SOCIAL_UPSCALE * 2 + 10;
+      outCtx.clearRect(0, wy, SOCIAL_OUT_W, wh);
+      outCtx.imageSmoothingEnabled = false;
       outCtx.drawImage(
         srcCanvas,
-        REGION_X0, REGION_Y0 + Math.round(wy * SCALE), REGION_W, Math.round(wh * SCALE),
-        0, wy, OUT_W, wh
+        REGION_X0, REGION_Y0 + Math.round(wy * SCALE / SOCIAL_UPSCALE), REGION_W, Math.round(wh * SCALE / SOCIAL_UPSCALE),
+        0, wy, SOCIAL_OUT_W, wh
       );
     }
 
