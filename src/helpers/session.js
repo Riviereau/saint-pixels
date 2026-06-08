@@ -29,17 +29,42 @@ function closeSession(token) {
 }
 
 /**
+ * Returns true when the request IP is loopback or an RFC-1918 private address.
+ * Mirrors the client-side isLocalDev() check in auth.js and the isPrivateIp()
+ * helper in captcha.js so all three agree without needing any extra config flag.
+ */
+function isPrivateIp(req) {
+  const raw = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+    .split(',')[0]
+    .trim()
+    .replace(/^::ffff:/, ''); // normalise IPv4-mapped IPv6
+
+  if (raw === '127.0.0.1' || raw === '::1' || raw === 'localhost') return true;
+
+  const parts = raw.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!parts) return false;
+  const [, a, b] = parts.map(Number);
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+/**
  * Returns:
  *   { username, created_at }                          — valid session, not banned
  *   { banned: true, reason, message, expiresAt }      — valid session but banned
  *   null                                               — no valid session
  */
 function getSession(req) {
-  // mobileDebug bypass
-  if (req && req.localBypassUser) {
-    const ban = checkBan(req.localBypassUser);
+  // mobileDebug bypass — also accept any request from a private-network IP
+  // so LAN phones work without needing app.locals.mobileDebug to be set manually.
+  if (req && (req.localBypassUser || isPrivateIp(req))) {
+    const bypassUser = req.localBypassUser || 'anon-local';
+    const ban = checkBan(bypassUser);
     if (ban) return buildBanPayload(ban);
-    return { username: req.localBypassUser, created_at: Date.now() };
+    return { username: bypassUser, created_at: Date.now() };
   }
 
   const auth = req.headers.authorization || '';
@@ -75,4 +100,4 @@ function banCheckMiddleware(req, res, next) {
   next();
 }
 
-module.exports = { setDb, createSession, closeSession, getSession, banCheckMiddleware };
+module.exports = { setDb, createSession, closeSession, getSession, banCheckMiddleware, isPrivateIp };

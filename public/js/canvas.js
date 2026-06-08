@@ -4,13 +4,43 @@
 // coordinate utilities, and viewport resize.
 // ═══════════════════════════════════════════════════════════════════
 
-const canvas     = document.getElementById('canvas');
-const overlay    = document.getElementById('overlay');
-const gridCanvas = document.getElementById('grid');
-const ctx        = canvas.getContext('2d');
-const overlayCtx = overlay.getContext('2d');
-const gridCtx    = gridCanvas.getContext('2d');
-const viewport   = document.getElementById('viewport');
+// Defer ref capture until after DOM is ready to avoid race conditions
+let canvas     = null;
+let overlay    = null;
+let gridCanvas = null;
+let viewport   = null;
+
+let ctx        = null;
+let overlayCtx = null;
+let gridCtx    = null;
+function refreshCanvasRefs() {
+  if (!canvas) canvas = document.getElementById('canvas');
+  if (!overlay) overlay = document.getElementById('overlay');
+  const domGrid = document.getElementById('grid');
+  if (domGrid) gridCanvas = domGrid;
+  if (!viewport) viewport = document.getElementById('viewport');
+
+  if (canvas && !ctx) ctx = canvas.getContext('2d');
+  if (overlay && !overlayCtx) overlayCtx = overlay.getContext('2d');
+  if (gridCanvas && !gridCtx) gridCtx = gridCanvas.getContext('2d');
+}
+
+function ensureCanvasRefs() {
+  refreshCanvasRefs();
+  const missing = [];
+  if (!canvas) missing.push('canvas');
+  if (!overlay) missing.push('overlay');
+  if (!gridCanvas) missing.push('gridCanvas');
+  if (!viewport) missing.push('viewport');
+  if (!ctx) missing.push('ctx');
+  if (!overlayCtx) missing.push('overlayCtx');
+  if (!gridCtx) missing.push('gridCtx');
+  if (missing.length) {
+    console.warn('[canvas] Missing refs:', missing.join(', '));
+    return false;
+  }
+  return true;
+}
 
 const CANVAS_WIDTH  = 2000;
 const CANVAS_HEIGHT = 2000;
@@ -165,6 +195,11 @@ function fillArea(x, y) {
 // ── Grid ───────────────────────────────────────────────────────────
 
 function drawGrid() {
+  if (!ensureCanvasRefs()) {
+    console.warn('[canvas] Missing DOM refs in drawGrid; skipping grid draw.');
+    return;
+  }
+
   const dpr = window.devicePixelRatio || 1;
 
   // Skip redraw when nothing affecting the grid has changed.
@@ -317,7 +352,7 @@ function toggleGrid() {
 // ── Cursor ─────────────────────────────────────────────────────────
 
 function drawCursor() {
-  if (!cursorPosition || tool === 'hand' || tool === 'none') return;
+  if (!ensureCanvasRefs() || !cursorPosition || tool === 'hand' || tool === 'none') return;
 
   const dpr = window.devicePixelRatio || 1;
   const { x, y } = cursorPosition;
@@ -364,6 +399,10 @@ function redrawOverlay() {
   isOverlayRedrawPending = true;
   requestAnimationFrame(() => {
     isOverlayRedrawPending = false;
+    if (!ensureCanvasRefs()) {
+      console.warn('[canvas] Missing DOM refs in redrawOverlay; skipping overlay redraw.');
+      return;
+    }
     overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
     drawCursor();
@@ -398,6 +437,13 @@ function clampOffsets() {
 
 /** The actual render work — called from inside a rAF callback. */
 function _doRender() {
+  refreshCanvasRefs();
+  if (!ensureCanvasRefs()) {
+    console.warn('[canvas] Missing DOM refs in _doRender; scheduling retry.');
+    window.requestAnimationFrame(redraw);
+    return;
+  }
+
   clampOffsets();
 
   const dpr = window.devicePixelRatio || 1;
@@ -483,6 +529,11 @@ function getCanvasCoords(clientX, clientY) {
 
 function resizeViewport() {
   const dpr  = window.devicePixelRatio || 1;
+  if (!ensureCanvasRefs()) {
+    console.warn('[canvas] Missing DOM refs in resizeViewport; skipping viewport resize.');
+    return;
+  }
+
   const rect = viewport.getBoundingClientRect();
   const w    = Math.max(1, Math.floor(rect.width));
   const h    = Math.max(1, Math.floor(rect.height));
@@ -499,12 +550,15 @@ function resizeViewport() {
 }
 
 window.addEventListener('resize', resizeViewport);
+// Scripts load at end of <body> — DOMContentLoaded has already fired by the
+// time this runs, so addEventListener('DOMContentLoaded') would be a no-op.
+// Call immediately instead; refs will be available since the DOM is ready.
+refreshCanvasRefs();
 
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', resizeViewport);
   window.visualViewport.addEventListener('scroll', resizeViewport);
 }
-
 // ── Export ─────────────────────────────────────────────────────────
 
 function exportPng() {

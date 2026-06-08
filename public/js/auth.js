@@ -16,11 +16,33 @@ const authEmailLabel    = document.getElementById('authEmailLabel');
 const authMessage       = document.getElementById('authMessage');
 
 // ── Environment helpers ──────────────────────────────────────────────
-/** Returns true when running on localhost / 127.0.0.1 (dev mode). */
+/**
+ * Returns true when the captcha bypass should be active.
+ * Matches the server-side isPrivateIp() logic in captcha.js so that loopback
+ * AND LAN phones are bypassed without needing the server to inject any
+ * data-local-bypass attribute on <html> (which was never being set anyway).
+ */
 function isLocalDev() {
-  return window.location.hostname === 'localhost' ||
-         window.location.hostname === '127.0.0.1' ||
-         window.location.hostname === '::1';
+  const { hostname } = window.location;
+
+  // Loopback — always bypass
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+
+  // IPv6 link-local
+  if (/^\[?fe80:/i.test(hostname)) return true;
+
+  // RFC-1918 private ranges — bypass unconditionally, no server flag needed
+  const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [, a, b] = ipv4.map(Number);
+    return (
+      a === 10 ||                          // 10.x.x.x
+      (a === 172 && b >= 16 && b <= 31) || // 172.16-31.x.x
+      (a === 192 && b === 168)             // 192.168.x.x
+    );
+  }
+
+  return false;
 }
 
 // ── Storage keys ────────────────────────────────────────────────────
@@ -102,7 +124,10 @@ function getCaptchaToken() {
     const response = hcaptcha.getResponse();
     return response || null;
   }
-  return 'dev-bypass';
+  // hCaptcha widget failed to load — return null so the caller shows
+  // the "please complete the captcha" message rather than sending a
+  // 'dev-bypass' token that the server will reject with a confusing error.
+  return null;
 }
 
 function resetCaptcha() {

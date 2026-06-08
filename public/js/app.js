@@ -73,33 +73,30 @@ function safeParse(value, fallback) {
 }
 
 /**
- * Returns true when the mobileDebug bypass should be active on the client.
- * Two conditions must both be true:
- *   1. The server injected data-local-bypass="1" on <html>.
- *   2. The browser hostname is a loopback or private-network address.
+ * Returns true when the local-dev bypass should be active.
+ * Detects loopback and RFC-1918 private addresses directly — no
+ * data-local-bypass attribute injection needed from the server.
+ * Kept in sync with auth.js isLocalDev() and captcha.js isPrivateIp().
  */
 function isLocalDev() {
   const { hostname } = window.location;
 
-  // Fast path: genuine loopback
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+  // Loopback — always bypass
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
 
-  // mobileDebug path: LAN IP + server confirmed bypass is active
-  const serverBypass = document.documentElement.dataset.localBypass === '1';
-  if (!serverBypass) return false;
+  // IPv6 link-local
+  if (/^\[?fe80:/i.test(hostname)) return true;
 
+  // RFC-1918 private ranges — LAN phones, etc.
   const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4) {
     const [, a, b] = ipv4.map(Number);
     return (
-      a === 10 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168)
+      a === 10 ||                          // 10.x.x.x
+      (a === 172 && b >= 16 && b <= 31) || // 172.16-31.x.x
+      (a === 192 && b === 168)             // 192.168.x.x
     );
   }
-
-  // IPv6 loopback / link-local
-  if (hostname === '::1' || /^\[?fe80:/i.test(hostname)) return true;
 
   return false;
 }
