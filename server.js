@@ -48,6 +48,9 @@ app.use((req, res, next) => {
         "'sha256-cTc7j0QRPd2lahucuGoesYnoiY20ld2VoJH/dI1jo1Q='",
         "'sha256-VRHni0ghwcE6k2ag6cOlYFcp2gCLPlFMjucv3rvRtEo='",
         "'sha256-5hcVLnyeg7ovvPCWy9TY4zmi3k8SnAhE/oa2/McvSwk='",
+        // Hash reported by browser for the blocked inline script (see CSP console error).
+        // Add here rather than a nonce so cached HTML with missing nonce still works.
+        "'sha256-6Y1r0ipW2nGvNHy99N0UdQ26IeVwb6LxPwoRtSyIJBc='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
