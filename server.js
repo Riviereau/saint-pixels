@@ -48,9 +48,11 @@ app.use((req, res, next) => {
         "'sha256-cTc7j0QRPd2lahucuGoesYnoiY20ld2VoJH/dI1jo1Q='",
         "'sha256-VRHni0ghwcE6k2ag6cOlYFcp2gCLPlFMjucv3rvRtEo='",
         "'sha256-5hcVLnyeg7ovvPCWy9TY4zmi3k8SnAhE/oa2/McvSwk='",
-        // Hash reported by browser for the blocked inline script (see CSP console error).
-        // Add here rather than a nonce so cached HTML with missing nonce still works.
+        // Hashes reported by browser for blocked inline/dynamic scripts (see CSP console errors).
+        // These scripts are injected at runtime by third-party libraries (hCaptcha, Alpine, etc.)
+        // and cannot carry a nonce, so their SHA-256 hashes must be listed here instead.
         "'sha256-6Y1r0ipW2nGvNHy99N0UdQ26IeVwb6LxPwoRtSyIJBc='",
+        "'sha256-CslW5vTI7mG39IVtHaNDZyZVHaYIKdKoKJgse8X3zQk='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
