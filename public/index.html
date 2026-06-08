@@ -315,6 +315,11 @@
           style="display:none;"
           title="Day streak"
         ></span>
+        <span
+          id="star-balance-chip"
+          class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-yellow-400/40 bg-yellow-400/10 text-xs font-bold whitespace-nowrap text-yellow-300"
+          title="Your Stars — collected by clicking falling stars"
+        >⭐ <span id="star-balance-val">0</span></span>
         <button
           id="topbarRulesBtn"
           type="button"
@@ -451,7 +456,7 @@
               title="Toggle help tips"
             >Show</button>
           </h2>
-          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list" aria-hidden="false">
+          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.8rem] help-list" aria-hidden="false">
             <li>Left click the board to place a pixel</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">W</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">A</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">S</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">D</kbd> to navigate palette colors</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">Q</kbd> / <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">E</kbd> to scroll the top bar left / right</li>
@@ -861,6 +866,7 @@
 
   
   <script nonce="__CSP_NONCE__" src="/js/rules.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/stars.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/ios.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/timelapse-ui.js"></script>
   <!-- ── Achievement Popups ── -->
