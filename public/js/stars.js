@@ -344,6 +344,7 @@
       width:      `${size}px`,
       height:     `${size}px`,
       transform:  `rotate(${rot1}deg)`,
+      touchAction: 'manipulation',
       transition: `top ${dur}ms linear, left ${dur}ms ease-in-out, transform ${dur}ms ease-in-out, opacity 0.3s ease`,
     });
 
@@ -375,7 +376,11 @@
       setTimeout(() => img.remove(), 280);
     }
     img.addEventListener('click',      collect, { once: true });
-    img.addEventListener('touchstart', collect, { once: true, passive: true });
+    img.addEventListener('touchstart', function(e) {
+      // Prevent the parent canvas touch-action:none from swallowing this tap
+      e.stopPropagation();
+      collect(e);
+    }, { once: true, passive: true });
 
     // Auto-remove once it exits the viewport
     setTimeout(() => { if (!collected) img.remove(); }, dur + 500);

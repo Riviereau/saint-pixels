@@ -23,43 +23,7 @@
 (function () {
   'use strict';
 
-  // ── Load-bar styles (injected once) ──────────────────────────────────────────
-  const _tlStyle = document.createElement('style');
-  _tlStyle.textContent = `
-    .tl-load-bar-wrap {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 0 2px 2px;
-    }
-    .tl-load-bar-track {
-      flex: 1;
-      height: 6px;
-      border-radius: 99px;
-      background: rgba(255,255,255,0.08);
-      overflow: hidden;
-    }
-    .tl-load-bar-fill {
-      height: 100%;
-      width: 0%;
-      border-radius: 99px;
-      background: linear-gradient(90deg, #38bdf8, #818cf8);
-      transition: width 0.15s ease;
-    }
-    @keyframes tl-load-pulse {
-      0%   { opacity: 0.3; transform: scaleX(0.3) translateX(-100%); }
-      50%  { opacity: 1;   transform: scaleX(0.6) translateX(30%); }
-      100% { opacity: 0.3; transform: scaleX(0.3) translateX(200%); }
-    }
-    .tl-load-bar-label {
-      font-size: 0.72rem;
-      color: #94a3b8;
-      white-space: nowrap;
-      min-width: 140px;
-      text-align: right;
-    }
-  `;
-  document.head.appendChild(_tlStyle);
+  // ── Load-bar styles are defined in timelapse.css ─────────────────────────────
 
   const BOARD_W = 1920;
   const BOARD_H = 1080;
