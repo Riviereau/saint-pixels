@@ -86,10 +86,43 @@
   .mob-coords-chip {
     display: inline-flex !important;
   }
-  .mob-contribute-btn, .mob-donate-btn, .mob-discord-btn, .mob-reddit-btn, .mob-live-count {
+  /* Hide the desktop star chip — mob-star-chip takes over on mobile */
+  #star-balance-chip {
+    display: none !important;
+  }
+  .mob-contribute-btn, .mob-donate-btn, .mob-discord-btn, .mob-reddit-btn, .mob-live-count, .mob-star-chip {
     display: inline-flex !important;
     white-space: nowrap !important;
     flex-shrink: 0 !important;
+  }
+
+  /* ── Uniform height for every chip/button in the mobile topbar ── */
+  /* All flex children of the first header row (mob buttons + chips + star-balance) */
+  header .mob-contribute-btn,
+  header .mob-donate-btn,
+  header .mob-discord-btn,
+  header .mob-reddit-btn,
+  header .mob-settings-btn,
+  header .mob-live-count,
+  header .mob-star-chip,
+  header #star-balance-chip,
+  header #streak-badge,
+  header #topbarRulesBtn,
+  header .brand-rules,
+  header .brand-contribute,
+  header .brand-discord,
+  header .brand-reddit,
+  header .brand-donate,
+  header [role="group"] > div {
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    font-size: 0.7rem !important;
+    line-height: 1 !important;
   }
   .palette-toolbox-spacer {
     display: block !important;

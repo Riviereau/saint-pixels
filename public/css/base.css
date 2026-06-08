@@ -1380,3 +1380,58 @@
     }
   }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TOPBAR — uniform height for every chip, button, and info pill  (desktop + mobile)
+   All interactive elements in <header> share one height token so nothing is
+   taller or shorter than its neighbours, regardless of py-* Tailwind classes.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --topbar-item-h: 30px;   /* single source of truth — change here to resize everything */
+  --topbar-font:   0.75rem; /* unified font size across all chips and buttons            */
+}
+
+/* Every chip, pill, button, and link inside the header */
+body > div.app-shell > header a,
+body > div.app-shell > header button,
+body > div.app-shell > header span.inline-flex,
+body > div.app-shell > header [role="group"] > div {
+  height:      var(--topbar-item-h) !important;
+  min-height:  var(--topbar-item-h) !important;
+  max-height:  var(--topbar-item-h) !important;
+  padding-top:    0 !important;
+  padding-bottom: 0 !important;
+  align-items:    center !important;
+  box-sizing:     border-box !important;
+  font-size:      var(--topbar-font) !important;
+  line-height:    1 !important;
+}
+
+/* The Logout button lives inside a chip — keep it slightly shorter so it doesn't overflow */
+body > div.app-shell > header #logoutButton {
+  height:     24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  font-size:  0.7rem !important;
+  padding-left:  10px !important;
+  padding-right: 10px !important;
+}
+
+/* The color swatch inside the Current Color chip has its own inner padding — respect it */
+body > div.app-shell > header #current-color {
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  padding-top:    3px !important;
+  padding-bottom: 3px !important;
+}
+
+/* Keep the drag handle its natural size — it's not a button */
+body > div.app-shell > header .topbar-drag-handle {
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  padding: 0 !important;
+}
