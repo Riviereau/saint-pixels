@@ -130,4 +130,4 @@ function initializeSSE(app, db, guardMiddleware) {
   }
 }
 
-module.exports = { initializeSSE, broadcastSSE, setDb };
+module.exports = { initializeSSE, broadcastSSE, broadcastCount, setDb };

@@ -33,6 +33,20 @@
   <link rel="stylesheet" href="/css/settings.css">
   <link rel="stylesheet" href="/css/ios.css">
   <link rel="stylesheet" href="/css/timelapse.css">
+  <style nonce="__CSP_NONCE__">
+    /* Remove the black box that appears when hovering scrollbars on Windows/Linux.
+       scrollbar-color sets track+thumb to transparent/subtle so the background
+       of the scrolling element shows through instead of the OS default black. */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.18) transparent;
+    }
+    *::-webkit-scrollbar { width: 6px; height: 6px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 99px; }
+    *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.32); }
+    *::-webkit-scrollbar-corner { background: transparent; }
+  </style>
 </head>
 <body
   class="h-screen overflow-hidden text-slate-100 font-sans flex items-stretch" style="background:#2e2e2f;"
@@ -437,7 +451,7 @@
               title="Toggle help tips"
             >Show</button>
           </h2>
-          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list" aria-hidden="false" style="max-height: 50vh; overflow-y: auto;">
+          <ul id="help-section-content" class="grid gap-1.5 p-0 m-0 list-none text-slate-300 text-[0.9rem] help-list" aria-hidden="false">
             <li>Left click the board to place a pixel</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">W</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">A</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">S</kbd><kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">D</kbd> to navigate palette colors</li>
             <li>Use <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">Q</kbd> / <kbd class="bg-white/10 border border-white/15 rounded-md px-1.5 py-0.5 text-[0.85rem] text-white">E</kbd> to scroll the top bar left / right</li>
