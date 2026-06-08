@@ -178,6 +178,14 @@
           <span id="tl-load-bar-label" class="tl-load-bar-label">Downloading…</span>
         </div>
 
+        <!-- Playback ETA bar (visible only while playing) -->
+        <div id="tl-eta-bar-wrap" class="tl-load-bar-wrap tl-eta-bar-wrap" style="display:none">
+          <div class="tl-load-bar-track">
+            <div id="tl-eta-bar-fill" class="tl-load-bar-fill tl-eta-bar-fill"></div>
+          </div>
+          <span id="tl-eta-bar-label" class="tl-load-bar-label">Rendering…</span>
+        </div>
+
         <!-- Progress bar -->
         <div id="tl-progress-wrap" class="tl-progress-wrap" title="Click or drag to seek">
           <div id="tl-progress-bg" class="tl-progress-bg">
@@ -460,6 +468,9 @@
   const loadBarWrap   = document.getElementById('tl-load-bar-wrap');
   const loadBarFill   = document.getElementById('tl-load-bar-fill');
   const loadBarLabel  = document.getElementById('tl-load-bar-label');
+  const etaBarWrap    = document.getElementById('tl-eta-bar-wrap');
+  const etaBarFill    = document.getElementById('tl-eta-bar-fill');
+  const etaBarLabel   = document.getElementById('tl-eta-bar-label');
 
   // ── Error banner helper ───────────────────────────────────────────────────────
   function showError(msg) {
@@ -481,6 +492,10 @@
   let cursor  = 0;
   let playing = false;
   let rafId   = null;
+
+  // ETA tracking — reset on play(), updated each tick
+  let _etaStartTime    = 0;   // performance.now() when play started
+  let _etaStartCursor  = 0;   // cursor position when play started
 
   const SPEED_TIERS = [10, 50, 200, 600, 2000];
   const SPEED_NAMES = ['Slow', 'Normal', 'Fast', 'Faster', 'Max'];
@@ -725,6 +740,41 @@
     tlCtx.fillRect(ev.x, ev.y, 1, 1);
   }
 
+  // ── ETA helpers ───────────────────────────────────────────────────────────────
+  function fmtETA(sec) {
+    if (!isFinite(sec) || sec < 0) return '…';
+    sec = Math.round(sec);
+    if (sec < 5)  return 'almost done';
+    if (sec < 60) return `~${sec}s left`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s > 0 ? `~${m}m ${s}s left` : `~${m}m left`;
+  }
+
+  function updateETA() {
+    if (!playing || !events.length) return;
+    const pct      = cursor / events.length;
+    const elapsed  = (performance.now() - _etaStartTime) / 1000;
+    const evDone   = cursor - _etaStartCursor;
+    const evLeft   = events.length - cursor;
+    const rate     = evDone > 0 ? evDone / elapsed : 0;
+    const etaSec   = rate > 0 ? evLeft / rate : Infinity;
+    const pctLabel = Math.round(pct * 100);
+
+    etaBarFill.style.width  = pctLabel + '%';
+    etaBarLabel.textContent = `${pctLabel}%  ${fmtETA(etaSec)}`;
+  }
+
+  function showEtaBar() {
+    etaBarWrap.style.display = '';
+    etaBarFill.style.width   = '0%';
+    etaBarLabel.textContent  = 'Starting…';
+  }
+
+  function hideEtaBar() {
+    etaBarWrap.style.display = 'none';
+  }
+
   // ── Animation loop ────────────────────────────────────────────────────────────
   function tick() {
     if (!playing) return;
@@ -733,8 +783,10 @@
     for (let i = cursor; i < end; i++) drawEvent(events[i]);
     cursor = end;
     updateProgress();
+    updateETA();
     if (cursor >= events.length) {
       pause();
+      hideEtaBar();
       playBtn.textContent  = '✓ Done';
       subtitle.textContent = `Complete — ${events.length.toLocaleString()} events`;
       return;
@@ -745,6 +797,9 @@
   function play() {
     if (!events.length || cursor >= events.length) return;
     playing = true;
+    _etaStartTime   = performance.now();
+    _etaStartCursor = cursor;
+    showEtaBar();
     playBtn.textContent = '⏸ Pause';
     playBtn.classList.add('tl-btn--playing');
     rafId = requestAnimationFrame(tick);
@@ -753,6 +808,7 @@
   function pause() {
     playing = false;
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    hideEtaBar();
     if (cursor < events.length) {
       playBtn.textContent = '▶ Play';
       playBtn.classList.remove('tl-btn--playing');
@@ -767,6 +823,7 @@
     cursor = 0;
     resetCanvas();
     updateProgress();
+    hideEtaBar();
     playBtn.textContent = '▶ Play';
     playBtn.classList.remove('tl-btn--playing');
     subtitle.textContent = 'Replay every pixel ever placed';
@@ -808,6 +865,7 @@
       const decoder = new TextDecoder();
       let   raw      = '';
       let   received = 0;
+      const fetchStart = performance.now();
 
       // Show the load bar, hide the playback progress bar while loading
       loadBarWrap.style.display  = '';
@@ -826,11 +884,16 @@
         if (done) break;
         received += value.byteLength;
         raw      += decoder.decode(value, { stream: true });
-        const mb = (received / 1048576).toFixed(1);
+        const mb      = (received / 1048576).toFixed(1);
+        const elapsed = (performance.now() - fetchStart) / 1000;
         if (contentLength > 0) {
-          const pct = Math.min(99, Math.round(received / contentLength * 100));
+          const pct      = Math.min(99, Math.round(received / contentLength * 100));
+          const rate     = elapsed > 0.5 ? received / elapsed : 0; // bytes/s
+          const bytesLeft = contentLength - received;
+          const etaSec   = rate > 0 ? bytesLeft / rate : Infinity;
+          const etaStr   = fmtETA(etaSec);
           loadBarFill.style.width  = pct + '%';
-          loadBarLabel.textContent = `Downloading… ${mb} MB (${pct}%)`;
+          loadBarLabel.textContent = `${mb} MB — ${pct}%  ${etaStr}`;
           subtitle.textContent     = `Downloading… ${mb} MB (${pct}%)`;
         } else {
           loadBarLabel.textContent = `Downloading… ${mb} MB`;

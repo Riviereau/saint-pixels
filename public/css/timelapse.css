@@ -831,3 +831,21 @@
   .tl-speed-grid { grid-template-columns: 1fr 1fr; }
   .tl-speed-grid .tl-speed-card:last-child { grid-column: 1 / -1; }
 }
+
+/* ── Playback ETA bar ─────────────────────────────────────────────────── */
+/*
+   Reuses the same .tl-load-bar-wrap / .tl-load-bar-track / .tl-load-bar-fill
+   classes from the injected <style> block for layout.
+   The modifier classes below give it a distinct amber/green colour and
+   position it right between the fetch bar slot and the seek bar.
+*/
+.tl-eta-bar-wrap {
+  /* sits just above the seek bar — already inside .tl-panel flow */
+  margin-top: 0;
+}
+
+.tl-eta-bar-fill {
+  /* amber → emerald gradient to distinguish from the blue download bar */
+  background: linear-gradient(90deg, #f59e0b, #34d399) !important;
+  transition: width 0.3s ease !important;
+}
