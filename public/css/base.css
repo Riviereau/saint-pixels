@@ -1435,3 +1435,8 @@ body > div.app-shell > header .topbar-drag-handle {
   max-height: unset !important;
   padding: 0 !important;
 }
+
+/* mob-star-chip is hidden on desktop; mobile.css shows it inside the media query */
+.mob-star-chip {
+  display: none !important;
+}
