@@ -604,14 +604,18 @@
 /* Both bars live INSIDE .tl-canvas-wrap as absolute overlays.               */
 /* This is immune to the panel's overflow:hidden / flex squash problem.      */
 .tl-load-bar-wrap {
+  /* BUG FIX #1: explicit display value required — when JS does
+     loadBarWrap.style.display = '' it removes the inline style, but if
+     there is no CSS display rule the element stays hidden.  block here
+     ensures it becomes visible when the inline override is cleared. */
+  display: block;
   position: absolute;
-  /* Sit in the bottom third of the canvas wrap — clearly visible, not covering the centre */
   bottom: 20%;
   left: 50%;
   transform: translateX(-50%);
   width: min(480px, 88%);
   z-index: 20;
-  pointer-events: none; /* don't block canvas interaction */
+  pointer-events: none;
 }
 /* Inner pill — gives the frosted-glass card look */
 .tl-load-bar-inner {
@@ -639,11 +643,16 @@
   border-radius: 99px;
   background: linear-gradient(90deg, #38bdf8, #818cf8);
   transition: width 0.15s ease;
+  /* BUG FIX #2: transform-origin must be left so that the pulse sweep
+     travels left-to-right through the overflow:hidden track. Without this
+     scaleX collapses around center and the fill disappears entirely. */
+  transform-origin: left center;
 }
 @keyframes tl-load-pulse {
-  0%   { opacity: 0.3; transform: scaleX(0.3) translateX(-100%); }
-  50%  { opacity: 1;   transform: scaleX(0.6) translateX(30%); }
-  100% { opacity: 0.3; transform: scaleX(0.3) translateX(200%); }
+  /* Sweeps a ~40% wide bar from off-left to off-right. The track clips it. */
+  0%   { transform: translateX(-150%) scaleX(0.4); opacity: 0.5; }
+  50%  { transform: translateX(100%)  scaleX(0.4); opacity: 1;   }
+  100% { transform: translateX(350%)  scaleX(0.4); opacity: 0.5; }
 }
 .tl-load-bar-label {
   font-size: 0.72rem;

@@ -693,10 +693,20 @@
     resetCanvas();
     cursor = 0;
     const end = Math.min(index, events.length);
-    for (let i = 0; i < end; i++) drawEvent(events[i]);
-    cursor = end;
-    updateProgress();
-    if (wasPlaying && cursor < events.length) play();
+    // BUG FIX #6: for large seeks the replay loop blocks the main thread for
+    // several seconds with zero visual feedback.  Update the subtitle first
+    // and yield so the browser paints the 'Seeking…' state before we block.
+    if (end > 1000) {
+      subtitle.textContent = `Seeking to ${end.toLocaleString()}…`;
+    }
+    // Use setTimeout(0) to let the paint happen before the blocking loop.
+    setTimeout(() => {
+      for (let i = 0; i < end; i++) drawEvent(events[i]);
+      cursor = end;
+      updateProgress();
+      subtitle.textContent = `${events.length.toLocaleString()} events loaded`;
+      if (wasPlaying && cursor < events.length) play();
+    }, 0);
   }
 
   // ── Draw one event ────────────────────────────────────────────────────────────
@@ -722,8 +732,12 @@
 
   function updateETA() {
     if (!playing || !events.length) return;
-    const pct      = cursor / events.length;
     const elapsed  = (performance.now() - _etaStartTime) / 1000;
+    // BUG FIX #7: skip the first ~300 ms — elapsed is near-zero, rate is
+    // meaningless, and we'd immediately overwrite the 'Starting…' label
+    // with '…' before the user has a chance to see it.
+    if (elapsed < 0.3) return;
+    const pct      = cursor / events.length;
     const evDone   = cursor - _etaStartCursor;
     const evLeft   = events.length - cursor;
     const rate     = evDone > 0 ? evDone / elapsed : 0;
@@ -819,6 +833,10 @@
           ? 'Please log in to view the timelapse.'
           : `Failed to load (HTTP ${res.status}) — try again later.`;
         console.error('[timelapse-ui] fetch failed — HTTP', res.status, res.statusText);
+        // BUG FIX #3: hide the load bar and restore the progress wrap on every
+        // early-return error path — previously these were left in broken state.
+        loadBarWrap.style.display  = 'none';
+        progressWrap.style.display = '';
         subtitle.textContent = errMsg;
         showError(errMsg);
         if (!events.length) downloadBtn.disabled = true;
@@ -831,6 +849,37 @@
       // Drive the load bar: determinate (%) when Content-Length is known,
       // animated pulse otherwise.
       const contentLength = parseInt(res.headers.get('Content-Length') || '0', 10);
+
+      // BUG FIX #5: res.body can be null in some proxied/older environments.
+      // Guard before showing the load bar so we don't leave progressWrap hidden.
+      if (!res.body) {
+        const raw2 = await res.text();
+        let data2;
+        try { data2 = JSON.parse(raw2); }
+        catch (e2) {
+          console.error('[timelapse-ui] JSON parse error (no-stream path):', e2);
+          const msg = 'Failed to parse response — try again later.';
+          subtitle.textContent = msg; showError(msg);
+          if (!events.length) downloadBtn.disabled = true;
+          loadBtn.disabled = false; loadBtn.textContent = 'Retry';
+          return;
+        }
+        events = Array.isArray(data2.events) ? data2.events : [];
+        if (!events.length) {
+          console.error('[timelapse-ui] no events (no-stream path) — keys:', Object.keys(data2));
+          const msg = 'No pixel history yet — start painting!';
+          subtitle.textContent = msg; showError(msg);
+          downloadBtn.disabled = true; loadBtn.disabled = false; loadBtn.textContent = 'Load';
+          return;
+        }
+        progressWrap.style.display = '';
+        initCanvas(); cursor = 0; updateProgress();
+        subtitle.textContent = `${events.length.toLocaleString()} events loaded`;
+        playBtn.disabled = false; resetBtn.disabled = false;
+        loadBtn.textContent = 'Reload'; loadBtn.disabled = false;
+        return;
+      }
+
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let   raw      = '';
@@ -847,6 +896,8 @@
       } else {
         // No Content-Length — use a CSS pulse animation to show activity
         loadBarFill.style.animation = 'tl-load-pulse 1.4s ease-in-out infinite';
+        // BUG FIX #2 companion: pulse needs width set to 100% so the element
+        // exists in the track for the transform sweep to be visible.
         loadBarFill.style.width     = '100%';
       }
 
@@ -871,6 +922,10 @@
           subtitle.textContent     = `Downloading… ${mb} MB`;
         }
       }
+      // BUG FIX #4: flush the TextDecoder so any buffered multi-byte UTF-8
+      // sequence in the final chunk is written into `raw`.  Without this call
+      // a split codepoint at the end of a chunk causes JSON.parse to throw.
+      raw += decoder.decode();
 
       // Fill to 100% briefly before switching to parse state
       loadBarFill.style.animation = 'none';
@@ -884,6 +939,9 @@
       try { data = JSON.parse(raw); }
       catch (parseErr) {
         console.error('[timelapse-ui] JSON parse error:', parseErr, '— raw (first 200 chars):', raw.slice(0, 200));
+        // BUG FIX #3: restore UI state on parse failure
+        loadBarWrap.style.display  = 'none';
+        progressWrap.style.display = '';
         const msg = 'Failed to parse response — try again later.';
         subtitle.textContent = msg;
         showError(msg);
@@ -896,6 +954,9 @@
       events = Array.isArray(data.events) ? data.events : [];
       if (!events.length) {
         console.error('[timelapse-ui] no events returned — data keys:', Object.keys(data));
+        // BUG FIX #3: restore UI state when there are no events
+        loadBarWrap.style.display  = 'none';
+        progressWrap.style.display = '';
         const msg = 'No pixel history yet — start painting!';
         subtitle.textContent = msg;
         showError(msg);
