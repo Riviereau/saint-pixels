@@ -79,9 +79,22 @@ function connectSSE() {
     // Without this, switching tabs or a brief network blip can spawn
     // multiple concurrent retry timers all calling connectSSE().
     const failedSource = _sseSource;
-    if (!failedSource || failedSource.readyState === EventSource.CLOSED) return;
+    if (!failedSource) return;
+
+    // readyState 2 = CLOSED: the browser already closed it, nothing to do.
+    if (failedSource.readyState === EventSource.CLOSED) return;
+
     failedSource.close();
     _sseSource = null;
+
+    // readyState 0 = CONNECTING when the error fires means the server dropped
+    // an established stream (e.g. a keep-alive timeout while the tab was hidden).
+    // This is a routine mid-session drop — reset backoff so we reconnect at
+    // SSE_RETRY_BASE (2 s) rather than continuing an exponential ramp.
+    if (failedSource.readyState === EventSource.CONNECTING) {
+      _sseRetryDelay = SSE_RETRY_BASE;
+    }
+
     const delay = _sseRetryDelay;
     _sseRetryDelay = Math.min(_sseRetryDelay * 2, SSE_RETRY_MAX);
     setTimeout(() => { if (!_sseSource) connectSSE(); }, delay);
