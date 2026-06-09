@@ -523,7 +523,10 @@
   function _onDomReady() {
     _installMutationWatcher();
     _runCSSChecks();
-    _authCheck();
+    // Auth check is deferred — window.__token is null until auth.js finishes
+    // its /api/me fetch (~200-500ms after load). Running it here produces a
+    // false-positive mismatch: localStorage has the token but the overlay is
+    // still visible because Alpine hasn't received sp-state-change yet.
     _tryHookTimelapse();
   }
 
@@ -533,12 +536,28 @@
     _onDomReady();
   }
 
-  // Re-run CSS checks + auth after full page load (stylesheets definitely applied)
+  // Re-run CSS checks after full page load (stylesheets definitely applied)
   window.addEventListener('load', () => {
     _runCSSChecks();
-    _authCheck();
     _entry('page_load_complete', _perfSnapshot());
   });
+
+  // Auth check: run after sp-state-change fires (auth.js resolved) or after
+  // a 2 s fallback, whichever comes first. This avoids false-positive
+  // auth_state_mismatch errors during the /api/me fetch window.
+  (function () {
+    let _authCheckDone = false;
+    function _runAuthCheckOnce() {
+      if (_authCheckDone) return;
+      _authCheckDone = true;
+      _authCheck();
+    }
+    // Primary trigger: Alpine/auth.js dispatches sp-state-change when auth resolves
+    window.addEventListener('sp-state-change', _runAuthCheckOnce, { once: true });
+    // Fallback: if sp-state-change never fires (e.g. no token, overlay stays open)
+    // wait 2s then check — enough time for /api/me to complete or fail
+    setTimeout(_runAuthCheckOnce, 2000);
+  })();
 
   /* ═══════════════════════════════════════════════════════════════════════════
      PUBLIC API
