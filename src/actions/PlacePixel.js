@@ -8,6 +8,9 @@ const path = require('path');
 const BOARD_WIDTH  = 1920;
 const BOARD_HEIGHT = 1080;
 
+// Guest pixel budget — must match GUEST_PIXEL_BUDGET in server.js.
+const GUEST_PIXEL_BUDGET = 3;
+
 // Path to the rolling JSON pixel-history file.
 // Set JSON_HISTORY_PATH in your environment (or .env) to override the default.
 // The file stores a JSON array; each new event is appended by rewriting the
@@ -20,6 +23,39 @@ let _db = null;
 let _broadcast = () => {};
 /** Returns the currently active cooldown duration in ms (event-aware). */
 let _getEffectiveCooldownMs = () => 0;
+
+/**
+ * Resolve the session for a request.
+ * Returns one of:
+ *   { username, isGuest: false }   — valid registered session
+ *   { username, isGuest: true  }   — valid guest session
+ *   { banned: true, … }            — banned
+ *   null                           — not authenticated
+ *
+ * Guest tokens live in guest_sessions, not sessions, so they are never
+ * accidentally accepted by getSession(). We check guest_sessions here
+ * explicitly so PlacePixel is the single place that understands both kinds.
+ */
+function resolveSession(req) {
+  // Try regular session first (covers local-bypass path too)
+  const regular = getSession(req);
+  if (regular) {
+    if (regular.banned) return regular; // pass ban payload through unchanged
+    return { ...regular, isGuest: false };
+  }
+
+  // Try guest token
+  if (!_db) return null;
+  const [type, token] = (req.headers.authorization || '').split(' ');
+  if (type !== 'Bearer' || !token) return null;
+
+  const row = _db.prepare(
+    'SELECT username, pixels_used, expires_at FROM guest_sessions WHERE token = ? AND expires_at > ?'
+  ).get(token, Date.now());
+
+  if (!row) return null;
+  return { username: row.username, isGuest: true, pixelsUsed: row.pixels_used, guestToken: token };
+}
 
 /**
  * Append one pixel-history event to the JSON file on disk.
@@ -102,10 +138,20 @@ class PlacePixel {
    * POST /api/pixel — place a coloured pixel
    */
   static execute(req, res) {
-    const session = getSession(req);
+    const session = resolveSession(req);
     if (!session) return res.status(401).json({ error: 'Unauthorized' });
     if (session.banned) {
       return res.status(403).json({ error: 'banned', message: session.message, reason: session.reason, expiresAt: session.expiresAt });
+    }
+
+    // ── Guest pixel-budget enforcement ──────────────────────────────────────
+    // Checked before the cooldown so a guest who has exhausted their budget
+    // gets a clear 403 (not a 429 cooldown error) and the cooldown is NOT
+    // consumed, which would otherwise block the conversion-prompt signup flow.
+    if (session.isGuest) {
+      if (session.pixelsUsed >= GUEST_PIXEL_BUDGET) {
+        return res.status(403).json({ error: 'guest_limit', message: 'Guest pixel budget exhausted. Create a free account to keep placing pixels.' });
+      }
     }
 
     const cooldownLeft = getCooldown(session.username, _getEffectiveCooldownMs());
@@ -146,8 +192,33 @@ class PlacePixel {
     // Record this placement against the IP for anti-cheat enforcement
     recordIp(req.ip || req.socket?.remoteAddress || 'unknown', session.username);
 
+    // ── Guest: increment pixels_used atomically ──────────────────────────────
+    // We use a conditional UPDATE (WHERE pixels_used < budget) as a database-
+    // level guard so two concurrent requests from the same guest token can
+    // never both sneak through a budget=2 check and each write their pixel —
+    // only the first UPDATE will match, the second returns changes=0 → 403.
+    if (session.isGuest && _db) {
+      try {
+        const info = _db.prepare(`
+          UPDATE guest_sessions
+          SET pixels_used = pixels_used + 1
+          WHERE token = ? AND pixels_used < ?
+        `).run(session.guestToken, GUEST_PIXEL_BUDGET);
+
+        if (info.changes === 0) {
+          // Race condition: another concurrent request already hit the cap.
+          return res.status(403).json({ error: 'guest_limit', message: 'Guest pixel budget exhausted.' });
+        }
+      } catch (err) {
+        console.error('[PlacePixel] Guest pixel_count update failed:', err.message);
+        return res.status(500).json({ error: 'Failed to update guest pixel count.' });
+      }
+    }
+
     // Increment this player's pixel count for today (UTC-4 day boundary)
-    if (_db) {
+    // Guests are intentionally excluded from the leaderboard (their usernames
+    // are ephemeral and would pollute the ranking). Skip pixel_counts for them.
+    if (_db && !session.isGuest) {
       try {
         const day = getDayUTC4();
         _db.prepare(`
@@ -180,6 +251,14 @@ class PlacePixel {
         // Broadcast uses the same sanitised, #-prefixed color so SSE clients
         // and the DB are always consistent.
         _broadcast({ type: 'pixel', x, y, color: '#' + safeColor, user: session.username });
+
+        // Include remaining guest budget in the response so the client HUD
+        // can update without needing a separate /api/guest/me call.
+        if (session.isGuest) {
+          const remaining = GUEST_PIXEL_BUDGET - (session.pixelsUsed + 1);
+          return res.json({ success: true, guestPixelsRemaining: Math.max(0, remaining) });
+        }
+
         return res.json({ success: true });
       } catch (err) {
         console.error('PIXEL WRITE FAILED:', err.message, err.code);
@@ -197,12 +276,18 @@ class PlacePixel {
   /**
    * POST /api/erase — erase a pixel (stored as color='erase' sentinel)
    * Uses the same cooldown as a regular pixel placement.
+   * Guests are blocked — erasing requires a registered account.
    */
   static erase(req, res) {
-    const session = getSession(req);
+    const session = resolveSession(req);
     if (!session) return res.status(401).json({ error: 'Unauthorized' });
     if (session.banned) {
       return res.status(403).json({ error: 'banned', message: session.message, reason: session.reason, expiresAt: session.expiresAt });
+    }
+
+    // ── Guests cannot erase ──────────────────────────────────────────────────
+    if (session.isGuest) {
+      return res.status(403).json({ error: 'guest_no_erase', message: 'Erasing requires a registered account.' });
     }
 
     const cooldownLeft = getCooldown(session.username, _getEffectiveCooldownMs());

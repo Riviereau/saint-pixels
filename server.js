@@ -129,6 +129,10 @@ db.pragma('busy_timeout = 5000');
 
 const { setDb: setSessionDb, createSession, closeSession, getSession } = require('./src/helpers/session.js');
 const { setDb: setCooldownDb, getCooldown, COOLDOWN_MS } = require('./src/helpers/cooldown.js');
+
+// ── Guest mode constants ──────────────────────────────────────────────────────
+const GUEST_PIXEL_BUDGET = 3;
+const GUEST_SESSION_MS   = 180 * 60 * 1000; // 180 minutes
 const { setDb: setAntiCheatDb } = require('./src/helpers/AntiCheat.js');
 const { checkIpBan, banCheckMiddleware, setDb: setBanDb } = require('./src/helpers/ban.js');
 const { hashPassword, verifyPassword } = require('./src/helpers/password.js');
@@ -421,6 +425,27 @@ const chatHistoryLimiter = rateLimit({
 const meLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => safeIp(req),
+  message: { error: 'Too many requests. Please slow down.' },
+});
+
+// ── Guest session limiter: 10 new sessions / hour / IP ───────────────────────
+// Each guest session costs a DB row. Tight limit prevents bots farming tokens
+// to bypass the pixel-budget cap.
+const guestSessionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => safeIp(req),
+  message: { error: 'Too many guest sessions from this IP. Try again in an hour.' },
+});
+
+const guestMeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => safeIp(req),
@@ -789,6 +814,65 @@ app.post('/api/logout', logoutLimiter, (req, res) => {
   res.json({ success: closeSession(token) });
 });
 
+// ── Guest session ─────────────────────────────────────────────────────────────
+
+// POST /api/guest/session — create a short-lived guest token
+// Returns { token, username, expiresAt }
+// guest.js stores this in sessionStorage (never localStorage) so it dies with the tab.
+app.post('/api/guest/session', guestSessionLimiter, (req, res) => {
+  const ip = (req.ip || safeIp(req) || 'unknown').slice(0, 45);
+
+  // Probabilistic cleanup of expired rows (~2% of requests) — same pattern as sessions.
+  if (Math.random() < 0.02) {
+    try { db.prepare('DELETE FROM guest_sessions WHERE expires_at < ?').run(Date.now()); }
+    catch { /* non-fatal */ }
+  }
+
+  try {
+    const token     = crypto.randomBytes(32).toString('hex');
+    const suffix    = crypto.randomBytes(3).toString('hex');
+    const username  = `guest-${suffix}`;
+    const now       = Date.now();
+    const expiresAt = now + GUEST_SESSION_MS;
+
+    db.prepare(`
+      INSERT INTO guest_sessions (token, username, ip, created_at, expires_at, pixels_used)
+      VALUES (?, ?, ?, ?, ?, 0)
+    `).run(token, username, ip, now, expiresAt);
+
+    return res.json({ token, username, expiresAt });
+  } catch (err) {
+    console.error('[guest] Failed to create session:', err);
+    return res.status(500).json({ error: 'Could not create guest session.' });
+  }
+});
+
+// GET /api/guest/me — returns current guest session state (used on tab restore)
+// Authorization: Bearer <guest-token>
+// Response 200: { username, pixelsUsed, expiresAt, budget }
+app.get('/api/guest/me', guestMeLimiter, (req, res) => {
+  const [type, token] = (req.headers.authorization || '').split(' ');
+  if (type !== 'Bearer' || !token) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const row = db.prepare(
+      'SELECT username, pixels_used, expires_at FROM guest_sessions WHERE token = ? AND expires_at > ?'
+    ).get(token, Date.now());
+
+    if (!row) return res.status(401).json({ error: 'Guest session expired or not found.' });
+
+    return res.json({
+      username:   row.username,
+      pixelsUsed: row.pixels_used,
+      expiresAt:  row.expires_at,
+      budget:     GUEST_PIXEL_BUDGET,
+    });
+  } catch (err) {
+    console.error('[guest] /api/guest/me error:', err);
+    return res.status(500).json({ error: 'Server error.' });
+  }
+});
+
 // ── Palette ───────────────────────────────────────────────────────────────────
 app.get('/api/palette', paletteLimiter, (req, res) => {
   try {
@@ -823,6 +907,27 @@ function initStreakTables() {
   )`).run();
 }
 initStreakTables();
+
+// ── Guest sessions table ──────────────────────────────────────────────────────
+// Stores short-lived guest tokens. Separate from `sessions` so guest tokens
+// can never be validated by getSession() as real users.
+function initGuestTable() {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS guest_sessions (
+      token       TEXT    PRIMARY KEY,
+      username    TEXT    NOT NULL,
+      ip          TEXT    NOT NULL,
+      created_at  INTEGER NOT NULL,
+      expires_at  INTEGER NOT NULL,
+      pixels_used INTEGER NOT NULL DEFAULT 0
+    )
+  `).run();
+  db.prepare(`
+    CREATE INDEX IF NOT EXISTS idx_guest_sessions_token
+    ON guest_sessions (token)
+  `).run();
+}
+initGuestTable();
 
 // Update a user's streak when they place a pixel. Called from placePixel paths.
 function updateStreak(username) {

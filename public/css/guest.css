@@ -1,0 +1,462 @@
+/* ═══════════════════════════════════════════════════════════════════
+   guest.css — Observer mode + Guest trial UI
+   Sits atop the existing Saint-Pixels visual system.
+   Uses the same slate/sky palette already in the app CSS.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Shared button system ─────────────────────────────────────────── */
+
+.gm-btn {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  gap:             6px;
+  border:          none;
+  border-radius:   10px;
+  font-family:     inherit;
+  font-weight:     600;
+  line-height:     1;
+  cursor:          pointer;
+  transition:      background 120ms ease, transform 80ms ease, opacity 120ms ease;
+  white-space:     nowrap;
+  text-decoration: none;
+}
+
+.gm-btn:disabled {
+  opacity: 0.5;
+  cursor:  not-allowed;
+  transform: none !important;
+}
+
+/* Sizes */
+.gm-btn--lg { font-size: 0.95rem; padding: 13px 24px; border-radius: 12px; }
+.gm-btn--sm { font-size: 0.78rem; padding:  7px 14px; }
+.gm-btn--xs { font-size: 0.72rem; padding:  5px 10px; }
+/* default size */
+.gm-btn:not(.gm-btn--lg):not(.gm-btn--sm):not(.gm-btn--xs) {
+  font-size: 0.83rem;
+  padding:   8px 16px;
+}
+
+/* Variants */
+.gm-btn--primary {
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+  color: #0c1a2e;
+  box-shadow: 0 2px 8px rgba(14,165,233,0.35);
+}
+.gm-btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(14,165,233,0.45);
+}
+.gm-btn--primary:active:not(:disabled) { transform: translateY(0); }
+
+.gm-btn--ghost {
+  background: rgba(255,255,255,0.08);
+  color: #94a3b8;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.gm-btn--ghost:hover:not(:disabled) {
+  background: rgba(255,255,255,0.14);
+  color: #cbd5e1;
+}
+
+/* ── Observer banner ─────────────────────────────────────────────── */
+
+.gm-observer-banner {
+  position:       fixed;
+  bottom:         0;
+  left:           50%;
+  transform:      translateX(-50%) translateY(110%);
+  z-index:        900;
+
+  display:        flex;
+  align-items:    center;
+  flex-wrap:      wrap;
+  gap:            10px;
+
+  background:     rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border:         1px solid rgba(56,189,248,0.25);
+  border-bottom:  none;
+  border-radius:  16px 16px 0 0;
+  padding:        12px 18px 14px;
+
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.4);
+  transition: transform 380ms cubic-bezier(0.34, 1.18, 0.64, 1);
+
+  /* prevent overflow on small screens */
+  max-width: calc(100vw - 24px);
+  width: max-content;
+}
+
+.gm-observer-banner.gm-visible {
+  transform: translateX(-50%) translateY(0);
+}
+
+.gm-observer-banner.gm-dismissed {
+  transform: translateX(-50%) translateY(110%);
+  pointer-events: none;
+}
+
+.gm-obs-eye {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.gm-obs-text {
+  font-size:   0.82rem;
+  color:       #94a3b8;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.gm-obs-dismiss {
+  background:  none;
+  border:      none;
+  color:       #475569;
+  font-size:   0.85rem;
+  cursor:      pointer;
+  padding:     2px 4px;
+  margin-left: 2px;
+  border-radius: 4px;
+  line-height: 1;
+  transition:  color 120ms;
+}
+.gm-obs-dismiss:hover { color: #94a3b8; }
+
+.gm-obs-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  width: 100%;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ── Observer sticky badge (post-dismiss) ─────────────────────────── */
+
+.gm-observer-badge {
+  position:     fixed;
+  bottom:       16px;
+  left:         50%;
+  transform:    translateX(-50%);
+  z-index:      900;
+
+  display:      flex;
+  align-items:  center;
+  gap:          6px;
+
+  background:   rgba(15,23,42,0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border:       1px solid rgba(56,189,248,0.3);
+  border-radius: 20px;
+  padding:      8px 16px;
+  font-size:    0.8rem;
+  font-weight:  600;
+  color:        #38bdf8;
+  cursor:       pointer;
+  box-shadow:   0 4px 16px rgba(0,0,0,0.4);
+  transition:   transform 120ms ease, background 120ms;
+  font-family:  inherit;
+}
+.gm-observer-badge:hover { transform: translateX(-50%) translateY(-2px); }
+
+/* ── Guest HUD ───────────────────────────────────────────────────── */
+
+.gm-hud {
+  position:   fixed;
+  top:        60px; /* below the topbar */
+  right:      12px;
+  z-index:    800;
+
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border:     1px solid rgba(56,189,248,0.2);
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+
+  animation:  gm-hud-in 300ms cubic-bezier(0.34,1.18,0.64,1) both;
+}
+
+@keyframes gm-hud-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.gm-hud-inner {
+  display:        flex;
+  flex-direction: column;
+  gap:            10px;
+  padding:        14px 16px;
+  min-width:      168px;
+}
+
+.gm-hud-label {
+  font-size:    0.65rem;
+  font-weight:  700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color:        #475569;
+}
+
+.gm-hud-pixels {
+  display:     flex;
+  flex-direction: column;
+  gap:         5px;
+}
+
+/* Pixel pip track */
+.gm-pixel-pips {
+  display: flex;
+  gap:     6px;
+}
+
+.gm-pip {
+  width:        14px;
+  height:       14px;
+  border-radius: 3px;
+  background:   rgba(56,189,248,0.25);
+  border:       1px solid rgba(56,189,248,0.4);
+  transition:   background 250ms ease, border-color 250ms ease;
+}
+
+.gm-pip--used {
+  background:  #38bdf8;
+  border-color: #7dd3fc;
+  box-shadow:  0 0 6px rgba(56,189,248,0.5);
+}
+
+.gm-pixel-count {
+  font-size:   0.78rem;
+  font-weight: 600;
+  color:       #cbd5e1;
+}
+
+/* Timer */
+.gm-hud-timer {
+  display:     flex;
+  align-items: center;
+  gap:         5px;
+}
+
+.gm-hud-timer-icon {
+  font-size: 0.8rem;
+  opacity:   0.7;
+}
+
+.gm-timer-label {
+  font-size:   0.78rem;
+  font-weight: 600;
+  color:       #64748b;
+  font-variant-numeric: tabular-nums;
+  transition:  color 300ms;
+}
+
+.gm-timer--warn {
+  color: #fbbf24 !important;
+  animation: gm-timer-pulse 2s ease-in-out infinite;
+}
+
+@keyframes gm-timer-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* ── Suppress eraser tool for guests ─────────────────────────────── */
+/* The backend also enforces this; this is purely a UI hint. */
+
+html[data-guest] [data-tool="eraser"],
+html[data-guest] #eraserBtn {
+  opacity: 0.35;
+  pointer-events: none;
+  position: relative;
+}
+
+html[data-guest] [data-tool="eraser"]::after,
+html[data-guest] #eraserBtn::after {
+  content:       'Guest';
+  position:      absolute;
+  bottom:        -18px;
+  left:          50%;
+  transform:     translateX(-50%);
+  font-size:     0.6rem;
+  font-weight:   700;
+  color:         #f87171;
+  white-space:   nowrap;
+  pointer-events: none;
+}
+
+/* ── Conversion overlay ───────────────────────────────────────────── */
+
+.gm-conversion-overlay {
+  position:   fixed;
+  inset:      0;
+  z-index:    1100;
+
+  background: rgba(7, 15, 30, 0.8);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+
+  display:        flex;
+  align-items:    center;
+  justify-content: center;
+
+  opacity:    0;
+  transition: opacity 280ms ease;
+}
+
+.gm-conversion-overlay.gm-visible { opacity: 1; }
+
+.gm-conversion-modal {
+  position:       relative;
+  background:     #0f172a;
+  border:         1px solid rgba(56,189,248,0.25);
+  border-radius:  20px;
+  padding:        36px 32px 32px;
+  max-width:      380px;
+  width:          calc(100vw - 40px);
+  text-align:     center;
+  box-shadow:     0 24px 60px rgba(0,0,0,0.6);
+
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            16px;
+
+  animation: gm-modal-in 320ms cubic-bezier(0.34,1.18,0.64,1) both;
+}
+
+@keyframes gm-modal-in {
+  from { transform: scale(0.92) translateY(10px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);    opacity: 1; }
+}
+
+/* Pixel art decoration */
+.gm-conv-art {
+  display:  grid;
+  grid-template-columns: repeat(2, 18px);
+  grid-template-rows:    repeat(2, 18px);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.gm-conv-pixel {
+  border-radius: 3px;
+  animation: gm-pixel-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.gm-conv-pixel--a { background: #38bdf8; animation-delay: 0ms;   }
+.gm-conv-pixel--b { background: #f472b6; animation-delay: 60ms;  }
+.gm-conv-pixel--c { background: #34d399; animation-delay: 120ms; }
+.gm-conv-pixel--d { background: #fbbf24; animation-delay: 180ms; }
+
+@keyframes gm-pixel-pop {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+.gm-conv-headline {
+  font-size:   1.25rem;
+  font-weight: 700;
+  color:       #f1f5f9;
+  margin:      0;
+  line-height: 1.25;
+}
+
+.gm-conv-sub {
+  font-size:   0.875rem;
+  color:       #64748b;
+  margin:      0;
+  line-height: 1.5;
+}
+
+/* Perks list */
+.gm-conv-perks {
+  list-style:     none;
+  padding:        0;
+  margin:         0;
+  width:          100%;
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+}
+
+.gm-conv-perks li {
+  display:        flex;
+  align-items:    center;
+  gap:            10px;
+  font-size:      0.82rem;
+  color:          #94a3b8;
+  text-align:     left;
+  background:     rgba(255,255,255,0.03);
+  border:         1px solid rgba(255,255,255,0.06);
+  border-radius:  8px;
+  padding:        8px 12px;
+}
+
+.gm-conv-perks li span { font-size: 1rem; }
+
+/* ── Upgrade strip (post-modal dismiss) ───────────────────────────── */
+
+.gm-upgrade-strip {
+  position:   fixed;
+  bottom:     0;
+  left:       0;
+  right:      0;
+  z-index:    850;
+
+  display:    flex;
+  align-items: center;
+  justify-content: center;
+  gap:        12px;
+  flex-wrap:  wrap;
+
+  background: rgba(7,15,30,0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(56,189,248,0.2);
+  padding:    10px 16px;
+
+  font-size:  0.8rem;
+  color:      #94a3b8;
+
+  transform:  translateY(100%);
+  transition: transform 300ms ease;
+}
+
+.gm-upgrade-strip.gm-visible { transform: translateY(0); }
+.gm-upgrade-strip strong     { color: #f1f5f9; }
+
+/* ── Responsive tweaks ────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .gm-observer-banner {
+    border-radius: 12px 12px 0 0;
+    padding: 10px 14px 12px;
+  }
+  .gm-obs-text { display: none; } /* save space on tiny screens */
+
+  .gm-hud {
+    top:   auto;
+    bottom: 72px; /* above the mobile toolbar */
+    right: 8px;
+  }
+
+  .gm-conversion-modal {
+    padding: 28px 20px 24px;
+  }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .gm-observer-banner,
+  .gm-conversion-overlay,
+  .gm-conversion-modal,
+  .gm-hud,
+  .gm-btn,
+  .gm-upgrade-strip { transition: none; animation: none; }
+
+  .gm-conv-pixel { animation: none; opacity: 1; transform: scale(1); }
+}
