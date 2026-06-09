@@ -517,27 +517,49 @@
       return;
     }
 
-    // Wait for the main app to report auth state before deciding
-    // whether to show the observer banner. If currentUser is already
-    // set (e.g. returning user), do nothing.
-    function checkAndShow() {
-      if (window.currentUser) return; // already logged in
-      showObserverMode();
+    // Wait for the main app to report auth state before deciding whether to
+    // show the observer banner. We track whether auth has resolved and whether
+    // the resolved user is a real (non-guest) account so both the event handler
+    // and the fallback timer use the same logic.
+    let _authResolved  = false; // true once sp-state-change fires with currentUser
+    let _userIsReal    = false; // true if the resolved user is a signed-in account
+
+    function onAuthResolved(username) {
+      _authResolved = true;
+      // A real (non-guest) username means the user is signed in — do nothing.
+      _userIsReal = !!(username && !/^Guest \d{7}$/.test(username));
+      if (_userIsReal) return;
+      // null or a guest username means nobody is signed in yet.
+      if (!_guestActive) showObserverMode();
     }
 
-    // sp-state-change fires when updateAuthState resolves
+    // sp-state-change fires when updateAuthState resolves. We keep listening
+    // (don't removeEventListener) because updateAuthState can fire once with
+    // null (token missing) and then again after a retry with the real username.
+    // We stop acting on it once a real user has been confirmed.
     window.addEventListener('sp-state-change', function onFirst(e) {
-      if (e.detail && 'currentUser' in e.detail) {
+      if (!e.detail || !('currentUser' in e.detail)) return;
+      const u = e.detail.currentUser;
+      const isReal = !!(u && !/^Guest \d{7}$/.test(u));
+      if (isReal) {
+        // Signed-in user confirmed — stop listening, ensure no banner shows.
         window.removeEventListener('sp-state-change', onFirst);
-        checkAndShow();
+        _authResolved = true;
+        _userIsReal   = true;
+        return;
+      }
+      if (u === null && !_authResolved) {
+        // Confirmed logged-out (no token) — show the observer banner once.
+        window.removeEventListener('sp-state-change', onFirst);
+        onAuthResolved(null);
       }
     });
 
     // Fallback: if no state change fires within 3 s (e.g. network timeout),
-    // show the observer banner anyway — it does no harm to logged-in users
-    // because the sp-state-change listener above will clean it up.
+    // only show the banner when we have no confirmed real user.
     setTimeout(() => {
-      if (!window.currentUser && !_guestActive) showObserverMode();
+      if (_userIsReal || _guestActive) return;
+      if (!_authResolved) showObserverMode();
     }, 3000);
   }
 
