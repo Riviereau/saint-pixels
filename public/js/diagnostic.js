@@ -572,7 +572,13 @@
       const overlay     = document.getElementById('authOverlay');
       const overlayGone = overlay ? window.getComputedStyle(overlay).display === 'none' : false;
       if (tokenReady || overlayGone) {
-        _runAuthCheckOnce();
+        // Defer by two animation frames so Alpine's x-show directive has time
+        // to evaluate and update the overlay's display before we read it.
+        // Without this delay the check fires synchronously right after
+        // setAuthToken() sets window.__token, catching a 1-3 ms window where
+        // window.__token is truthy but Alpine hasn't hidden the overlay yet —
+        // producing a spurious auth_state_mismatch error on every page load.
+        requestAnimationFrame(() => requestAnimationFrame(_runAuthCheckOnce));
       } else {
         // Re-register for the next sp-state-change (Alpine init fired, not auth)
         window.addEventListener('sp-state-change', _onStateChange, { once: true });
