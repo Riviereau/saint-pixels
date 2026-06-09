@@ -60,6 +60,7 @@
     liveCount: 1,
     emailVerified: false,
     showAuth: false,
+    guestObserver: false,
     syncFromEngine(d) {
       if (d.currentUser    !== undefined) this.currentUser    = d.currentUser;
       if (d.currentTool    !== undefined) this.currentTool    = d.currentTool;
@@ -67,6 +68,7 @@
       if (d.zoomLevel      !== undefined) this.zoomLevel      = d.zoomLevel;
       if (d.liveCount      !== undefined) this.liveCount      = d.liveCount;
       if (d.emailVerified  !== undefined) this.emailVerified  = d.emailVerified;
+      if (d.guestObserver  !== undefined) this.guestObserver  = d.guestObserver;
       // Once a real (non-guest) user is set, close any force-opened auth panel
       if (d.currentUser && !/^Guest \d{7}$/.test(d.currentUser)) this.showAuth = false;
     }
@@ -78,7 +80,7 @@
   <div
     class="fixed inset-0 z-[400] bg-black/75 grid place-items-center"
     id="authOverlay"
-    x-show="!currentUser || showAuth"
+    x-show="(!currentUser && !guestObserver) || showAuth"
     x-cloak
   >
     <div class="w-[min(420px,calc(100%-40px))] p-7 rounded-3xl bg-[#2e2e2f] border border-white/10 shadow-2xl grid gap-4 transition-all">

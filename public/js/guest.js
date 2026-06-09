@@ -8,7 +8,7 @@
 //    and read the chat. SSE is already open. This file shows a small
 //    passive banner: "You're watching. Place pixels — sign up free."
 //
-// 2. GUEST SESSION (3 free pixels, 180-minute window)
+// 2. GUEST SESSION (300 free pixels, 180-minute window)
 //    Clicking "Try as guest" calls POST /api/guest/session which
 //    returns a short-lived Bearer token + a username like "guest-a7k2".
 //    The guest token is stored in sessionStorage (not localStorage so
@@ -61,7 +61,7 @@
   'use strict';
 
   // ── Constants ──────────────────────────────────────────────────────────────
-  const GUEST_PIXEL_BUDGET   = 3;
+  const GUEST_PIXEL_BUDGET   = 300;
   const GUEST_SESSION_MS     = 180 * 60 * 1000; // 180 minutes
   const GUEST_TOKEN_KEY      = 'sp_guest_token';
   const GUEST_USER_KEY       = 'sp_guest_username';
@@ -119,7 +119,7 @@
       <span class="gm-obs-eye" aria-hidden="true">👁</span>
       <span class="gm-obs-text">You're watching live. Want to leave your mark?</span>
       <button id="gm-try-guest-btn"  class="gm-btn gm-btn--primary" type="button">
-        Try 3 free pixels
+        Try 300 free pixels
       </button>
       <button id="gm-signup-btn" class="gm-btn gm-btn--ghost" type="button">
         Sign up free
@@ -140,6 +140,11 @@
     requestAnimationFrame(() => {
       setTimeout(() => banner.classList.add('gm-visible'), 800);
     });
+
+    // Tell Alpine the observer banner is active so the auth overlay steps aside
+    if (typeof dispatchStateChange === 'function') {
+      dispatchStateChange({ guestObserver: true });
+    }
   }
 
   // Small persistent badge shown after the observer banner is dismissed
@@ -165,6 +170,10 @@
     if (b) b.remove();
     const badge = document.getElementById('gm-observer-badge');
     if (badge) badge.remove();
+    // Let Alpine know the observer layer is gone so auth overlay can resume normal behaviour
+    if (typeof dispatchStateChange === 'function') {
+      dispatchStateChange({ guestObserver: false });
+    }
   }
 
   // ── Guest HUD (pixel counter + timer + upgrade CTA) ───────────────────────
@@ -180,7 +189,9 @@
       <div class="gm-hud-inner">
         <span class="gm-hud-label">Guest session</span>
         <div class="gm-hud-pixels">
-          <span id="gm-pixel-pips" class="gm-pixel-pips" aria-hidden="true"></span>
+          <div class="gm-pixel-bar-wrap" aria-hidden="true">
+            <div id="gm-pixel-bar" class="gm-pixel-bar"></div>
+          </div>
           <span id="gm-pixel-count" class="gm-pixel-count">0 / ${GUEST_PIXEL_BUDGET} pixels</span>
         </div>
         <div class="gm-hud-timer">
@@ -197,19 +208,18 @@
     updateHUD();
   }
 
-  function updatePixelPips() {
-    const pips = document.getElementById('gm-pixel-pips');
-    if (!pips) return;
-    pips.innerHTML = '';
-    for (let i = 0; i < GUEST_PIXEL_BUDGET; i++) {
-      const pip = document.createElement('span');
-      pip.className = 'gm-pip' + (i < _pixelsUsed ? ' gm-pip--used' : '');
-      pips.appendChild(pip);
-    }
+  function updatePixelBar() {
+    const bar = document.getElementById('gm-pixel-bar');
+    if (!bar) return;
+    const pct = Math.min(100, (_pixelsUsed / GUEST_PIXEL_BUDGET) * 100);
+    bar.style.width = pct + '%';
+    // Shift to amber when ≥ 80 % used, red when exhausted
+    bar.classList.toggle('gm-pixel-bar--warn',  pct >= 80 && pct < 100);
+    bar.classList.toggle('gm-pixel-bar--empty', pct >= 100);
   }
 
   function updateHUD() {
-    updatePixelPips();
+    updatePixelBar();
     const countEl = document.getElementById('gm-pixel-count');
     if (countEl) {
       const remaining = Math.max(0, GUEST_PIXEL_BUDGET - _pixelsUsed);
@@ -259,7 +269,7 @@
     overlay.className = 'gm-conversion-overlay';
 
     const headline = reason === 'pixels'
-      ? "You've used all 3 free pixels!"
+      ? "You've used all 300 free pixels!"
       : 'Your guest session has ended.';
     const sub = reason === 'pixels'
       ? 'Sign up to keep placing pixels — it\'s free and takes 30 seconds.'
@@ -358,7 +368,7 @@
       console.warn('[guest] Could not start session:', err.message);
       if (tryBtn) {
         tryBtn.disabled    = false;
-        tryBtn.textContent = 'Try 3 free pixels';
+        tryBtn.textContent = 'Try 300 free pixels';
       }
       // Surface a friendly error in the banner
       const banner = document.getElementById('gm-observer-banner');

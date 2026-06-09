@@ -208,25 +208,32 @@
   gap:         5px;
 }
 
-/* Pixel pip track */
-.gm-pixel-pips {
-  display: flex;
-  gap:     6px;
+/* Pixel progress bar */
+.gm-pixel-bar-wrap {
+  width:         100%;
+  height:        6px;
+  background:    rgba(56,189,248,0.15);
+  border-radius: 99px;
+  overflow:      hidden;
 }
 
-.gm-pip {
-  width:        14px;
-  height:       14px;
-  border-radius: 3px;
-  background:   rgba(56,189,248,0.25);
-  border:       1px solid rgba(56,189,248,0.4);
-  transition:   background 250ms ease, border-color 250ms ease;
+.gm-pixel-bar {
+  height:        100%;
+  width:         0%;
+  border-radius: 99px;
+  background:    linear-gradient(90deg, #38bdf8 0%, #0ea5e9 100%);
+  box-shadow:    0 0 6px rgba(56,189,248,0.4);
+  transition:    width 300ms ease, background 300ms ease;
 }
 
-.gm-pip--used {
-  background:  #38bdf8;
-  border-color: #7dd3fc;
-  box-shadow:  0 0 6px rgba(56,189,248,0.5);
+.gm-pixel-bar--warn {
+  background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 0 6px rgba(251,191,36,0.4);
+}
+
+.gm-pixel-bar--empty {
+  background: linear-gradient(90deg, #f87171 0%, #ef4444 100%);
+  box-shadow: 0 0 6px rgba(248,113,113,0.4);
 }
 
 .gm-pixel-count {
