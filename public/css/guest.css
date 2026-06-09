@@ -438,19 +438,64 @@ html[data-guest] #eraserBtn::after {
 
 /* ── Responsive tweaks ────────────────────────────────────────────── */
 
-@media (max-width: 480px) {
+@media (max-width: 720px) {
+  /* Observer banner: full-width pill on mobile */
   .gm-observer-banner {
     border-radius: 12px 12px 0 0;
-    padding: 10px 14px 12px;
+    padding: 10px 12px 12px;
+    gap: 8px;
   }
-  .gm-obs-text { display: none; } /* save space on tiny screens */
+  .gm-obs-text { display: none; } /* save space — eye icon alone is enough */
 
+  /* Guest HUD: collapse from a card to a compact bottom bar */
   .gm-hud {
-    top:   auto;
-    bottom: 72px; /* above the mobile toolbar */
-    right: 8px;
+    /* Detach from top-right; pin to bottom above the mobile toolbar */
+    top:          auto !important;
+    bottom:       calc(156px + env(safe-area-inset-bottom, 0px)); /* above mob-bottom-total */
+    right:        0;
+    left:         0;
+    border-radius: 0;
+    border-left:  none;
+    border-right: none;
+    border-bottom: none;
+    border-top:   1px solid rgba(56,189,248,0.2);
+    box-shadow:   0 -2px 16px rgba(0,0,0,0.4);
   }
 
+  .gm-hud-inner {
+    flex-direction: row;
+    align-items:    center;
+    gap:            10px;
+    padding:        8px 12px;
+    min-width:      0;
+  }
+
+  /* Hide the label and timer on mobile — keep only the bar + count + CTA */
+  .gm-hud-label,
+  .gm-hud-timer { display: none; }
+
+  /* Let the progress bar fill the available space */
+  .gm-hud-pixels {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .gm-pixel-bar-wrap { width: 100%; }
+
+  /* Tighter count text */
+  .gm-pixel-count {
+    font-size: 0.72rem;
+  }
+
+  /* Shrink the sign-up button */
+  #gm-hud-signup-btn {
+    flex-shrink: 0;
+    font-size:   0.72rem;
+    padding:     6px 10px;
+    white-space: nowrap;
+  }
+
+  /* Conversion modal */
   .gm-conversion-modal {
     padding: 28px 20px 24px;
   }

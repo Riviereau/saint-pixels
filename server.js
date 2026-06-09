@@ -431,12 +431,13 @@ const meLimiter = rateLimit({
   message: { error: 'Too many requests. Please slow down.' },
 });
 
-// ── Guest session limiter: 10 new sessions / hour / IP ───────────────────────
-// Each guest session costs a DB row. Tight limit prevents bots farming tokens
-// to bypass the pixel-budget cap.
+// ── Guest session limiter: 1 new session / hour / IP ─────────────────────────
+// One guest account per IP per hour. Prevents farming fresh 300-pixel budgets
+// by refreshing — sessionStorage restore means a legitimate visitor never needs
+// a second session within the same hour window.
 const guestSessionLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 10,
+  max: 1,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => safeIp(req),

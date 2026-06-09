@@ -26,6 +26,10 @@
 //   • dispatchStateChange({ currentUser }) — keeps Alpine reactive.
 //   • connectSSE()                         — already running; guest
 //     receives the same stream, no change needed.
+//   • window.__guestMode.syncPixels(remaining) — call this in the pixel POST
+//     success handler with data.guestPixelsRemaining so the HUD stays in sync
+//     with the server. Avoids the double-count from sp-pixel-placed firing
+//     twice (once on send, once on SSE echo).
 //
 // BACKEND CONTRACT (implement in your API layer)
 // ──────────────────────────────────────────────
@@ -417,8 +421,8 @@
     const remaining = Math.max(0, expiresAt - Date.now());
     _sessionTimeout = setTimeout(() => expireGuestSession('time'), remaining);
 
-    // Hook into the pixel-placed event to track budget
-    window.addEventListener('sp-pixel-placed', onGuestPixelPlaced);
+    // Budget tracking is handled via syncPixelsFromServer(), called by
+    // the pixel POST response handler with the server-returned remaining count.
 
     // Mark the <html> so CSS can suppress erase / certain tools for guests
     document.documentElement.setAttribute('data-guest', '1');
@@ -426,16 +430,19 @@
     console.info(`[guest] Session active: ${username}, expires in ${Math.round(remaining / 60000)} min`);
   }
 
-  // ── Track pixel use ────────────────────────────────────────────────────────
+  // ── Track pixel use — server-authoritative ────────────────────────────────
+  // Called by the pixel POST handler (via window.__guestMode.syncPixels) with
+  // the guestPixelsRemaining value the server returns in the response body.
+  // This avoids the double-count that occurred when sp-pixel-placed fired once
+  // on send and again when the SSE echo arrived, incrementing _pixelsUsed twice.
 
-  function onGuestPixelPlaced() {
+  function syncPixelsFromServer(remaining) {
     if (!_guestActive) return;
-    _pixelsUsed++;
+    _pixelsUsed = Math.max(_pixelsUsed, GUEST_PIXEL_BUDGET - remaining);
     ssSet(GUEST_PIXELS_KEY, String(_pixelsUsed));
     updateHUD();
 
     if (_pixelsUsed >= GUEST_PIXEL_BUDGET) {
-      // Let the last pixel animation finish, then prompt
       setTimeout(() => expireGuestSession('pixels'), 600);
     }
   }
@@ -446,7 +453,6 @@
     if (!_guestActive) return; // already expired
     _guestActive = false;
 
-    window.removeEventListener('sp-pixel-placed', onGuestPixelPlaced);
     if (_countdownTimer)  { clearInterval(_countdownTimer);   _countdownTimer  = null; }
     if (_sessionTimeout)  { clearTimeout(_sessionTimeout);    _sessionTimeout  = null; }
 
@@ -489,7 +495,6 @@
         document.documentElement.removeAttribute('data-guest');
         if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
         if (_sessionTimeout) { clearTimeout(_sessionTimeout);  _sessionTimeout = null; }
-        window.removeEventListener('sp-pixel-placed', onGuestPixelPlaced);
       }
       if (!isGuest) {
         // Clean up any lingering conversion prompts
@@ -582,9 +587,12 @@
 
   // ── Expose for debugging / manual testing ──────────────────────────────────
   window.__guestMode = {
-    start:   startGuestSession,
-    expire:  (reason = 'pixels') => expireGuestSession(reason),
-    status:  () => ({ active: _guestActive, pixelsUsed: _pixelsUsed, expiresAt: _expiresAt }),
+    start:      startGuestSession,
+    expire:     (reason = 'pixels') => expireGuestSession(reason),
+    status:     () => ({ active: _guestActive, pixelsUsed: _pixelsUsed, expiresAt: _expiresAt }),
+    // Called by the pixel POST success handler with the server-returned remaining count.
+    // This is the authoritative update path — avoids the sp-pixel-placed double-fire issue.
+    syncPixels: (remaining) => syncPixelsFromServer(remaining),
   };
 
 })();
