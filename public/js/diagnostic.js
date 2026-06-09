@@ -542,9 +542,20 @@
     _entry('page_load_complete', _perfSnapshot());
   });
 
-  // Auth check: run after sp-state-change fires (auth.js resolved) or after
-  // a 2 s fallback, whichever comes first. This avoids false-positive
-  // auth_state_mismatch errors during the /api/me fetch window.
+  // Auth check: deferred until auth.js has actually resolved.
+  //
+  // WHY THIS IS TRICKY:
+  //   Alpine.js initialises x-data on DOMContentLoaded and immediately
+  //   dispatches sp-state-change with currentUser: null — before auth.js
+  //   has even started its /api/me fetch. If we run _authCheck() then,
+  //   window.__token is still null while sp_token exists in localStorage,
+  //   producing a false-positive mismatch every single page load.
+  //
+  // SOLUTION: listen to sp-state-change but only act when the event
+  //   carries a real resolved state — indicated by window.__token being
+  //   set (auth succeeded) OR the authOverlay being hidden (Alpine hid it
+  //   because currentUser is now truthy). Fall back to a 3 s timeout so
+  //   we still catch the no-token / logged-out case.
   (function () {
     let _authCheckDone = false;
     function _runAuthCheckOnce() {
@@ -552,11 +563,25 @@
       _authCheckDone = true;
       _authCheck();
     }
-    // Primary trigger: Alpine/auth.js dispatches sp-state-change when auth resolves
-    window.addEventListener('sp-state-change', _runAuthCheckOnce, { once: true });
-    // Fallback: if sp-state-change never fires (e.g. no token, overlay stays open)
-    // wait 2s then check — enough time for /api/me to complete or fail
-    setTimeout(_runAuthCheckOnce, 2000);
+    function _onStateChange() {
+      // window.__token is set by setAuthToken() in auth.js only after
+      // /api/me resolves successfully. If it's still falsy, Alpine just
+      // initialised with the default currentUser: null — ignore this event
+      // and keep waiting for the real resolution.
+      const tokenReady  = !!window.__token;
+      const overlay     = document.getElementById('authOverlay');
+      const overlayGone = overlay ? window.getComputedStyle(overlay).display === 'none' : false;
+      if (tokenReady || overlayGone) {
+        _runAuthCheckOnce();
+      } else {
+        // Re-register for the next sp-state-change (Alpine init fired, not auth)
+        window.addEventListener('sp-state-change', _onStateChange, { once: true });
+      }
+    }
+    // Primary trigger: wait for a sp-state-change that carries real auth state
+    window.addEventListener('sp-state-change', _onStateChange, { once: true });
+    // Fallback: 3 s is enough for /api/me to complete or fail even on slow connections
+    setTimeout(_runAuthCheckOnce, 3000);
   })();
 
   /* ═══════════════════════════════════════════════════════════════════════════
