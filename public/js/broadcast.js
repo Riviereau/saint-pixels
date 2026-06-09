@@ -38,6 +38,8 @@ function connectSSE() {
   _sseSource.onmessage = (e) => {
     try {
       const event = JSON.parse(e.data);
+      // Ignore server heartbeat pings — they exist only to keep the proxy alive
+      if (event.type === 'ping') return;
       if (event.type === 'init') {
         if (Array.isArray(event.pixels)) {
           _sseRetryDelay = SSE_RETRY_BASE;

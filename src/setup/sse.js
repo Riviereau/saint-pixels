@@ -106,15 +106,20 @@ function initializeSSE(app, db, guardMiddleware) {
       }
     }
 
-    // Heartbeat every 25 s keeps the connection alive through proxies
+    // Heartbeat every 20 s keeps the connection alive through reverse proxies.
+    // Use a named SSE event ("event: ping") rather than a bare comment line
+    // (": heartbeat") — some proxies (nginx proxy_read_timeout, Caddy, Railway,
+    // Render, etc.) only reset their idle timer when they see actual data bytes,
+    // not SSE comment lines.  A named event with an empty data field is the
+    // smallest payload that reliably resets proxy read timeouts.
     const heartbeat = setInterval(() => {
       try {
-        res.write(': heartbeat\n\n');
+        res.write('event: ping\ndata: \n\n');
       } catch {
         clearInterval(heartbeat);
         clients.delete(res);
       }
-    }, 25_000);
+    }, 20_000);
 
     req.on('close', () => {
       clearInterval(heartbeat);
