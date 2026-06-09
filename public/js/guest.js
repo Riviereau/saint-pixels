@@ -321,21 +321,14 @@
   }
 
   // ── Auth modal open helper ─────────────────────────────────────────────────
-  // Reuses the existing auth panel that's already in the DOM (auth.js).
+  // Reuses the existing auth panel in the DOM. When a guest is active Alpine's
+  // currentUser is set (to the guest username), so the overlay x-show="!currentUser"
+  // keeps it hidden. We dispatch 'sp-open-auth' which the Alpine body handler
+  // catches via @sp-open-auth.window and flips a dedicated showAuth flag,
+  // making the overlay visible regardless of currentUser.
 
   function openAuthModal() {
-    // The existing app uses Alpine.js with showAuth state.
-    // Dispatch a native event that the Alpine x-data body handler can pick up.
     window.dispatchEvent(new CustomEvent('sp-open-auth'));
-
-    // Fallback: if there's a visible auth button or Alpine method, use it.
-    // The Alpine component on <body> should listen for 'sp-open-auth'.
-    // If it doesn't yet, clicking the button that triggers showAuth = true works.
-    const authBtn = document.getElementById('authBtn') ||
-                    document.querySelector('[data-auth-trigger]');
-    if (authBtn && document.getElementById('gm-conversion-overlay') === null) {
-      authBtn.click();
-    }
   }
 
   // ── Start guest session ────────────────────────────────────────────────────
@@ -476,7 +469,7 @@
 
     // A real login happened (non-guest username, token set)
     if (detail.currentUser && typeof detail.currentUser === 'string') {
-      const isGuest = detail.currentUser.startsWith('guest-');
+      const isGuest = /^Guest \d{7}$/.test(detail.currentUser);
       if (!isGuest && _guestActive) {
         // User registered or logged in — clean up guest state silently
         _guestActive = false;
@@ -508,7 +501,7 @@
 
   function showObserverMode() {
     // Don't show if already logged in as a real user
-    if (window.currentUser && !window.currentUser.startsWith('guest-')) return;
+    if (window.currentUser && !/^Guest \d{7}$/.test(window.currentUser)) return;
     if (_guestActive) return;
     buildObserverBanner();
   }

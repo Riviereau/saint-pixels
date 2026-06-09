@@ -9,7 +9,7 @@ const BOARD_WIDTH  = 1920;
 const BOARD_HEIGHT = 1080;
 
 // Guest pixel budget — must match GUEST_PIXEL_BUDGET in server.js.
-const GUEST_PIXEL_BUDGET = 3;
+const GUEST_PIXEL_BUDGET = 300;
 
 // Path to the rolling JSON pixel-history file.
 // Set JSON_HISTORY_PATH in your environment (or .env) to override the default.
@@ -215,10 +215,10 @@ class PlacePixel {
       }
     }
 
-    // Increment this player's pixel count for today (UTC-4 day boundary)
-    // Guests are intentionally excluded from the leaderboard (their usernames
-    // are ephemeral and would pollute the ranking). Skip pixel_counts for them.
-    if (_db && !session.isGuest) {
+    // Increment this player's pixel count for today (UTC-4 day boundary).
+    // Guests are included — their usernames are stable within a session and
+    // they appear on the leaderboard like any other player.
+    if (_db) {
       try {
         const day = getDayUTC4();
         _db.prepare(`

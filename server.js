@@ -131,7 +131,7 @@ const { setDb: setSessionDb, createSession, closeSession, getSession } = require
 const { setDb: setCooldownDb, getCooldown, COOLDOWN_MS } = require('./src/helpers/cooldown.js');
 
 // ── Guest mode constants ──────────────────────────────────────────────────────
-const GUEST_PIXEL_BUDGET = 3;
+const GUEST_PIXEL_BUDGET = 300;
 const GUEST_SESSION_MS   = 180 * 60 * 1000; // 180 minutes
 const { setDb: setAntiCheatDb } = require('./src/helpers/AntiCheat.js');
 const { checkIpBan, banCheckMiddleware, setDb: setBanDb } = require('./src/helpers/ban.js');
@@ -830,10 +830,16 @@ app.post('/api/guest/session', guestSessionLimiter, (req, res) => {
 
   try {
     const token     = crypto.randomBytes(32).toString('hex');
-    const suffix    = crypto.randomBytes(3).toString('hex');
-    const username  = `guest-${suffix}`;
     const now       = Date.now();
     const expiresAt = now + GUEST_SESSION_MS;
+
+    // Atomically increment the guest counter for a human-readable username.
+    // The transaction guarantees no two concurrent requests get the same number.
+    const username = db.transaction(() => {
+      db.prepare('UPDATE guest_counter SET seq = seq + 1 WHERE id = 1').run();
+      const row = db.prepare('SELECT seq FROM guest_counter WHERE id = 1').get();
+      return 'Guest ' + String(row.seq).padStart(7, '0');
+    })();
 
     db.prepare(`
       INSERT INTO guest_sessions (token, username, ip, created_at, expires_at, pixels_used)
@@ -926,6 +932,14 @@ function initGuestTable() {
     CREATE INDEX IF NOT EXISTS idx_guest_sessions_token
     ON guest_sessions (token)
   `).run();
+  // Monotonic counter for human-readable guest numbers (Guest 0000001, etc.)
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS guest_counter (
+      id  INTEGER PRIMARY KEY CHECK (id = 1),
+      seq INTEGER NOT NULL DEFAULT 0
+    )
+  `).run();
+  db.prepare(`INSERT OR IGNORE INTO guest_counter (id, seq) VALUES (1, 0)`).run();
 }
 initGuestTable();
 
