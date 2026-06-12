@@ -63,7 +63,7 @@ const SFX = (() => {
   ['pixel-placed','pixel-placed2','pixel-placed3','pixel-erased','tool-changed','eyedropper',
    'hand','ruler','none','click','notification','achievement','ultra-achivement', 'error', 'equiping',
    'leaderboard-open','leaderboard-close','chat-open','chat-close',
-   'star-picked','failling-star'].forEach(load);
+   'star-picked'].forEach(load);
 
   /**
    * Play a sound.

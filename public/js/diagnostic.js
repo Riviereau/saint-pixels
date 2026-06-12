@@ -160,7 +160,9 @@
       _entry('sse_open_attempt', { id, url });
 
       es.addEventListener('open',  () => _entry('sse_open',    { id, url }));
-      es.addEventListener('error', () => _err('sse_error',     { id, url, readyState: es.readyState }));
+      // SSE reconnects are routine (proxy keepalive drops, tab backgrounded, etc.)
+      // Log as info rather than error so the badge doesn't increment on normal reconnects.
+      es.addEventListener('error', () => _entry('sse_error',   { id, url, readyState: es.readyState }));
       es.addEventListener('message', e => _entry('sse_message', { id, url, dataPreview: String(e.data).slice(0, 120) }));
 
       return es;
@@ -341,10 +343,16 @@
     _entry('tl_hooks_installed', { missing, hooked: hooks.length - missing.length });
   }
 
+  // Cap retries: poll for up to 10 s after DOMContentLoaded (40 × 250 ms).
+  // If the timelapse modal hasn't been injected by then it won't be on this
+  // page at all — stop silently, no error logged, no infinite loop.
+  let _tlHookAttempts = 0;
+  const TL_HOOK_MAX_ATTEMPTS = 40;
   function _tryHookTimelapse() {
     if (document.getElementById('tl-load-btn')) {
       _hookTimelapse();
-    } else {
+    } else if (_tlHookAttempts < TL_HOOK_MAX_ATTEMPTS) {
+      _tlHookAttempts++;
       setTimeout(_tryHookTimelapse, 250);
     }
   }
@@ -359,11 +367,19 @@
     const overlay = document.getElementById('authOverlay');
     const overlayVisible = overlay ? window.getComputedStyle(overlay).display !== 'none' : null;
 
+    // A user can be "logged in" (overlay hidden) without an sp_token in two
+    // legitimate cases: the local-dev/LAN bypass (setCurrentUser('dev'/'anon-*', true))
+    // and any other anonymous/guest session. In both, window.__username is set
+    // even though no Bearer token exists. Treat that as a valid non-mismatch state.
+    const loggedInWithoutToken = !token && !!window.__username;
+
     const result = {
       hasToken:       !!token,
       windowToken:    typeof window.__token !== 'undefined' ? !!window.__token : null,
       overlayVisible,
-      mismatch:       overlayVisible !== null && !!token !== !overlayVisible,
+      mismatch:       overlayVisible !== null
+                       && !!token !== !overlayVisible
+                       && !loggedInWithoutToken,
     };
 
     if (result.mismatch) {

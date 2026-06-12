@@ -142,6 +142,7 @@ const { initializeActions }      = require('./src/setup/actions.js');
 const { initializeDatabase, runMaintenance } = require('./src/setup/database.js');
 const { initializeSSE, broadcastSSE, setDb: setSseDb } = require('./src/setup/sse.js');
 const { initializeChat }         = require('./src/setup/chat.js');
+const { initializeClan }         = require('./src/setup/clan.js');
 const { initializeTimelapse }    = require('./src/setup/timelapse.js');
 const { localBypassMiddleware }  = require('./src/helpers/localBypass.js');
 
@@ -419,6 +420,16 @@ const chatHistoryLimiter = rateLimit({
   message: { error: 'Too many history requests. Please slow down.' },
 });
 
+// ── Clan limiter: 30 req / min / IP ──────────────────────────────────────────
+const clanLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyGenerator: ipKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many clan requests. Slow down.' },
+});
+
 // ── /api/me limiter: 120 req / min / IP ──────────────────────────────────────
 // /api/me does two DB lookups per call (session + account row).
 // Without a limiter a script can poll it freely to exhaust DB read capacity.
@@ -551,6 +562,7 @@ initializeSSE(app, db, sseConnectionGuard);
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 initializeChat(app, db, broadcastSSE, chatLimiter, chatHistoryLimiter);
+initializeClan(app, db, broadcastSSE, clanLimiter);
 
 // ── Timelapse API: 4 requests / 10 min / IP ───────────────────────────────────
 // Timelapse renders are CPU-heavy (ffmpeg + canvas). Tight limit prevents a
@@ -1171,7 +1183,7 @@ function getLocalIP() {
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-const desiredPort = process.env.PORT ? Number(process.env.PORT) : 3000;
+const desiredPort = process.env.PORT ? Number(process.env.PORT) : 3005;
 const ip = getLocalIP();
 // Binding to '0.0.0.0' allows connections from both localhost and your local Wi-Fi IP
 const server = app.listen(desiredPort, '0.0.0.0', () => {

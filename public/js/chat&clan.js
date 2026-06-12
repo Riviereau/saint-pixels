@@ -1,0 +1,1084 @@
+/**
+ * public/js/chat&clan.js — Global chat + Clan panel (client-side)
+ *
+ * Drop  <script nonce="__CSP_NONCE__" src="/js/chat&clan.js"></script>
+ * after app.js in index.html (replaces chat.js).
+ *
+ * Requires app.js to expose after login / session restore:
+ *   window.__username — logged-in username string
+ *   window.__token    — session Bearer token string
+ *
+ * Requires the SSE handler (broadcast.js) to forward:
+ *   if (data.type === 'chat')       window.__chatIncoming?.(data);
+ *   if (data.type === 'clan_chat')  window.__clanChatIncoming?.(data);
+ *   if (data.type === 'clan_event') window.__clanEventIncoming?.(data);
+ *
+ * Optional profile click-through:
+ *   window.__openProfile = (username) => { ... };
+ *
+ * Security notes:
+ * - All user content rendered via textContent / dataset, never innerHTML.
+ */
+
+(function () {
+  'use strict';
+
+  const MAX_DISPLAY   = 200;
+  const COOLDOWN_MS   = 2_000;
+
+  // ── DOM refs — shell ────────────────────────────────────────────────────
+  const toggleBtn   = document.getElementById('chatclan-toggle-btn');
+  const panel       = document.getElementById('chatclan-panel');
+  const closeBtn    = document.getElementById('chatclan-close-btn');
+  const unreadBadge = document.getElementById('chatclan-unread');
+
+  const tabGlobal   = document.getElementById('cc-tab-global');
+  const tabClan     = document.getElementById('cc-tab-clan');
+  const globalBadge = document.getElementById('cc-global-badge');
+  const clanBadge   = document.getElementById('cc-clan-badge');
+
+  const pageGlobal  = document.getElementById('cc-page-global');
+  const pageClan    = document.getElementById('cc-page-clan');
+
+  if (!panel || !toggleBtn) return;
+
+  // ── Global chat refs ────────────────────────────────────────────────────
+  const globalList     = document.getElementById('cc-global-messages');
+  const globalForm     = document.getElementById('cc-global-form');
+  const globalInput    = document.getElementById('cc-global-input');
+  const globalSendBtn  = document.getElementById('cc-global-send');
+  const globalDownload = document.getElementById('cc-global-download');
+
+  // ── Clan refs ────────────────────────────────────────────────────────────
+  const clanLanding   = document.getElementById('cc-clan-landing');
+  const landingCreate = document.getElementById('cc-landing-create');
+  const landingJoin   = document.getElementById('cc-landing-join');
+
+  const createPanel   = document.getElementById('cc-create-panel');
+  const createBack    = document.getElementById('cc-create-back');
+  const createName    = document.getElementById('cc-create-name');
+  const createDesc    = document.getElementById('cc-create-desc');
+  const createEmoji   = document.getElementById('cc-create-emoji');
+  const createOpen    = document.getElementById('cc-create-open');
+  const createSubmit  = document.getElementById('cc-create-submit');
+
+  const searchPanel   = document.getElementById('cc-search-panel');
+  const searchBack    = document.getElementById('cc-search-back');
+  const searchInput   = document.getElementById('cc-search-input');
+  const searchBtn     = document.getElementById('cc-search-btn');
+  const searchResults = document.getElementById('cc-search-results');
+
+  const clanHome       = document.getElementById('cc-clan-home');
+  const crestDisplay   = document.getElementById('cc-crest-display');
+  const clanNameDisp   = document.getElementById('cc-clan-name-display');
+  const clanMetaDisp   = document.getElementById('cc-clan-meta-display');
+
+  const pendingSection = document.getElementById('cc-pending-section');
+  const pendingList    = document.getElementById('cc-pending-list');
+
+  const navChat      = document.getElementById('cc-nav-chat');
+  const navMembers   = document.getElementById('cc-nav-members');
+  const navAlliances = document.getElementById('cc-nav-alliances');
+  const navSettings  = document.getElementById('cc-nav-settings');
+
+  const subChat      = document.getElementById('cc-sub-chat');
+  const subMembers   = document.getElementById('cc-sub-members');
+  const subAlliances = document.getElementById('cc-sub-alliances');
+  const subSettings  = document.getElementById('cc-sub-settings');
+
+  const clanMsgList  = document.getElementById('cc-clan-messages');
+  const clanForm     = document.getElementById('cc-clan-form');
+  const clanInput    = document.getElementById('cc-clan-input');
+  const clanSendBtn  = document.getElementById('cc-clan-send');
+
+  const memberList   = document.getElementById('cc-member-list');
+
+  const allyList         = document.getElementById('cc-ally-list');
+  const addAllyInput     = document.getElementById('cc-add-ally-input');
+  const addAllyBtn       = document.getElementById('cc-add-ally-btn');
+  const addEnemyInput    = document.getElementById('cc-add-enemy-input');
+  const addEnemyBtn      = document.getElementById('cc-add-enemy-btn');
+
+  const settingsName  = document.getElementById('cc-settings-name');
+  const settingsDesc  = document.getElementById('cc-settings-desc');
+  const settingsEmoji = document.getElementById('cc-settings-emoji');
+  const settingsOpen  = document.getElementById('cc-settings-open');
+  const settingsSave  = document.getElementById('cc-settings-save');
+  const leaveClanBtn  = document.getElementById('cc-leave-clan-btn');
+  const disbandBtn    = document.getElementById('cc-disband-clan-btn');
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let isOpen        = false;
+  let activeTab     = 'global'; // 'global' | 'clan'
+  let unreadGlobal  = 0;
+  let unreadClan    = 0;
+  let sendCooldownGlobal = false;
+  let sendCooldownClan   = false;
+
+  let myClan        = null; // { id, name, description, emoji, open, leader, memberCount, myRole }
+  const seenGlobalIds = new Set();
+  const seenClanIds   = new Set();
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Utilities
+  // ══════════════════════════════════════════════════════════════════════
+
+  function isAtBottom(list) {
+    return list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+  }
+  function scrollToBottom(list, force) {
+    if (force || isAtBottom(list)) list.scrollTop = list.scrollHeight;
+  }
+  function formatTime(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function appendMessage(list, { username, message, sent_at, role }, scroll, seenIds, capacity) {
+    const safeUser = String(username ?? '').slice(0, 30);
+    const safeMsg  = String(message  ?? '').slice(0, 300);
+    const safeTime = formatTime(typeof sent_at === 'number' ? sent_at : Date.now());
+
+    const li = document.createElement('li');
+    li.className = 'cc-msg';
+
+    if (role === 'leader' || role === 'officer') {
+      const badge = document.createElement('span');
+      badge.className = `cc-role-badge cc-role-${role}`;
+      badge.textContent = role === 'leader' ? '★ LEADER' : '◆ OFFICER';
+      li.appendChild(badge);
+    }
+
+    const userSpan = document.createElement('span');
+    userSpan.className = 'cc-user';
+    userSpan.dataset.u = safeUser;
+    userSpan.textContent = safeUser;
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'cc-text';
+    textSpan.textContent = safeMsg;
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'cc-time';
+    timeSpan.textContent = safeTime;
+
+    li.appendChild(userSpan);
+    li.appendChild(textSpan);
+    li.appendChild(timeSpan);
+    list.appendChild(li);
+
+    while (list.children.length > capacity) {
+      list.removeChild(list.firstChild);
+    }
+    if (scroll !== false) scrollToBottom(list);
+  }
+
+  function appendSystem(list, text) {
+    const li = document.createElement('li');
+    li.className = 'cc-msg cc-system';
+    li.textContent = String(text).slice(0, 200);
+    list.appendChild(li);
+    scrollToBottom(list);
+  }
+
+  function setUnreadBadges() {
+    const total = unreadGlobal + unreadClan;
+    if (unreadBadge) {
+      unreadBadge.textContent = total > 99 ? '99+' : (total > 0 ? String(total) : '');
+      unreadBadge.classList.toggle('visible', total > 0);
+    }
+    if (globalBadge) {
+      globalBadge.textContent = unreadGlobal > 99 ? '99+' : (unreadGlobal > 0 ? String(unreadGlobal) : '');
+      globalBadge.classList.toggle('visible', unreadGlobal > 0);
+    }
+    if (clanBadge) {
+      clanBadge.textContent = unreadClan > 99 ? '99+' : (unreadClan > 0 ? String(unreadClan) : '');
+      clanBadge.classList.toggle('visible', unreadClan > 0);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Panel open / close / tabs
+  // ══════════════════════════════════════════════════════════════════════
+
+  function openPanel() {
+    isOpen = true;
+    panel.classList.add('cc-open');
+    if (activeTab === 'global') { unreadGlobal = 0; scrollToBottom(globalList, true); }
+    else                         { unreadClan = 0; scrollToBottom(clanMsgList, true); }
+    setUnreadBadges();
+  }
+  function closePanel() {
+    isOpen = false;
+    panel.classList.remove('cc-open');
+  }
+
+  toggleBtn.addEventListener('click', () => (isOpen ? closePanel() : openPanel()));
+  if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isOpen) closePanel();
+  });
+
+  function switchTab(tab) {
+    activeTab = tab;
+    const isGlobal = tab === 'global';
+
+    tabGlobal.classList.toggle('cc-tab-active', isGlobal);
+    tabGlobal.setAttribute('aria-selected', String(isGlobal));
+    tabClan.classList.toggle('cc-tab-active', !isGlobal);
+    tabClan.setAttribute('aria-selected', String(!isGlobal));
+
+    pageGlobal.classList.toggle('cc-page-active', isGlobal);
+    pageClan.classList.toggle('cc-page-active', !isGlobal);
+
+    if (isGlobal) {
+      unreadGlobal = 0;
+      scrollToBottom(globalList, true);
+    } else {
+      unreadClan = 0;
+      scrollToBottom(clanMsgList, true);
+      // Refresh clan state when opening the clan tab
+      refreshMyClan();
+    }
+    setUnreadBadges();
+  }
+
+  if (tabGlobal) tabGlobal.addEventListener('click', () => switchTab('global'));
+  if (tabClan)   tabClan.addEventListener('click', () => switchTab('clan'));
+
+  // ══════════════════════════════════════════════════════════════════════
+  // GLOBAL CHAT
+  // ══════════════════════════════════════════════════════════════════════
+
+  async function loadGlobalHistory() {
+    try {
+      const res = await fetch('/api/chat');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data?.messages)) return;
+      globalList.innerHTML = '';
+      seenGlobalIds.clear();
+      for (const msg of data.messages) {
+        if (msg.id) seenGlobalIds.add(msg.id);
+        appendMessage(globalList, msg, false, seenGlobalIds, MAX_DISPLAY);
+      }
+      scrollToBottom(globalList, true);
+    } catch (err) {
+      console.warn('[chatclan] Could not load global history:', err);
+    }
+  }
+
+  window.__chatIncoming = function (data) {
+    if (!data || typeof data !== 'object') return;
+
+    if (data.id) {
+      if (seenGlobalIds.has(data.id)) return;
+      seenGlobalIds.add(data.id);
+      if (seenGlobalIds.size > MAX_DISPLAY * 2) {
+        const first = seenGlobalIds.values().next().value;
+        seenGlobalIds.delete(first);
+      }
+    }
+
+    const wasAtBottom = isAtBottom(globalList);
+    const viewingGlobal = isOpen && activeTab === 'global';
+    appendMessage(globalList, data, wasAtBottom || viewingGlobal, seenGlobalIds, MAX_DISPLAY);
+
+    if (!viewingGlobal) {
+      unreadGlobal++;
+      setUnreadBadges();
+    }
+  };
+
+  async function sendGlobalMessage() {
+    if (sendCooldownGlobal) return;
+    const text = globalInput.value.trim();
+    if (!text) return;
+
+    if (!window.__username) {
+      appendSystem(globalList, 'You must be logged in to chat.');
+      return;
+    }
+
+    globalSendBtn.disabled = true;
+    sendCooldownGlobal = true;
+    globalInput.value = '';
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${window.__token || ''}`,
+        },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        appendSystem(globalList, data?.error || 'Failed to send message.');
+        globalInput.value = text;
+      } else if (typeof window.__chatIncoming === 'function') {
+        window.__chatIncoming(data);
+      }
+    } catch (err) {
+      console.error('[chatclan] global send error:', err);
+      appendSystem(globalList, 'Network error — could not send.');
+      globalInput.value = text;
+    }
+
+    setTimeout(() => {
+      sendCooldownGlobal = false;
+      globalSendBtn.disabled = false;
+    }, COOLDOWN_MS);
+  }
+
+  if (globalForm) {
+    globalForm.addEventListener('submit', (e) => { e.preventDefault(); sendGlobalMessage(); });
+  }
+  if (globalInput) {
+    globalInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGlobalMessage(); }
+    });
+  }
+
+  if (globalDownload) {
+    globalDownload.addEventListener('click', () => {
+      const lines = [];
+      for (const li of globalList.querySelectorAll('.cc-msg:not(.cc-system)')) {
+        const user = li.querySelector('.cc-user')?.textContent || '?';
+        const msg  = li.querySelector('.cc-text')?.textContent || '';
+        const time = li.querySelector('.cc-time')?.textContent || '';
+        lines.push(`[${time}] ${user}: ${msg}`);
+      }
+      if (!lines.length) return;
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `saint-pixels-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // ── Profile click-through (both chats) ──────────────────────────────────
+  function handleProfileClick(e) {
+    if (!e.target.classList.contains('cc-user')) return;
+    const u = e.target.dataset?.u;
+    if (u && typeof window.__openProfile === 'function') window.__openProfile(u);
+  }
+  globalList.addEventListener('click', handleProfileClick);
+  if (clanMsgList) clanMsgList.addEventListener('click', handleProfileClick);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — view-state management
+  // ══════════════════════════════════════════════════════════════════════
+
+  function showClanView(view) {
+    // view: 'landing' | 'create' | 'search' | 'home'
+    clanLanding.classList.toggle('hidden', view !== 'landing');
+    createPanel.classList.toggle('hidden', view !== 'create');
+    searchPanel.classList.toggle('hidden', view !== 'search');
+    clanHome.classList.toggle('hidden', view !== 'home');
+  }
+
+  function showClanSubpage(sub) {
+    // sub: 'chat' | 'members' | 'alliances' | 'settings'
+    subChat.classList.toggle('active', sub === 'chat');
+    subMembers.classList.toggle('active', sub === 'members');
+    subAlliances.classList.toggle('active', sub === 'alliances');
+    subSettings.classList.toggle('active', sub === 'settings');
+
+    navChat.classList.toggle('active', sub === 'chat');
+    navMembers.classList.toggle('active', sub === 'members');
+    navAlliances.classList.toggle('active', sub === 'alliances');
+    navSettings.classList.toggle('active', sub === 'settings');
+
+    if (sub === 'chat')      { loadClanHistory(); scrollToBottom(clanMsgList, true); }
+    if (sub === 'members')   loadMembers();
+    if (sub === 'alliances') loadRelations();
+    if (sub === 'settings')  loadSettings();
+  }
+
+  // ── Landing actions ──────────────────────────────────────────────────────
+  if (landingCreate) landingCreate.addEventListener('click', () => showClanView('create'));
+  if (landingJoin)   landingJoin.addEventListener('click', () => {
+    showClanView('search');
+    runClanSearch('');
+  });
+  if (createBack) createBack.addEventListener('click', () => showClanView('landing'));
+  if (searchBack) searchBack.addEventListener('click', () => showClanView('landing'));
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — fetch current membership
+  // ══════════════════════════════════════════════════════════════════════
+
+  function authHeaders(extra) {
+    return Object.assign({
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${window.__token || ''}`,
+    }, extra || {});
+  }
+
+  async function refreshMyClan() {
+    if (!window.__username) {
+      myClan = null;
+      showClanView('landing');
+      return;
+    }
+    try {
+      const res = await fetch('/api/clan/mine', { headers: authHeaders() });
+      if (!res.ok) { showClanView('landing'); return; }
+      const data = await res.json();
+      myClan = data.clan;
+
+      if (!myClan) {
+        showClanView('landing');
+        return;
+      }
+
+      renderClanHome(data);
+      showClanView('home');
+      // default to chat sub-page on first load of this clan
+      showClanSubpage('chat');
+    } catch (err) {
+      console.warn('[chatclan] refreshMyClan error:', err);
+    }
+  }
+
+  function renderClanHome(data) {
+    crestDisplay.textContent = myClan.emoji || '🛡️';
+    crestDisplay.title = myClan.name;
+    clanNameDisp.textContent = myClan.name;
+    clanMetaDisp.textContent = `${myClan.memberCount} member${myClan.memberCount === 1 ? '' : 's'} · ${myClan.open ? 'Open' : 'Invite Only'}`;
+
+    const isLeaderOrOfficer = myClan.myRole === 'leader' || myClan.myRole === 'officer';
+
+    // Pending requests (leader/officer only)
+    if (isLeaderOrOfficer && Array.isArray(data.pending) && data.pending.length > 0) {
+      pendingSection.classList.remove('hidden');
+      pendingList.innerHTML = '';
+      for (const p of data.pending) {
+        const row = document.createElement('div');
+        row.className = 'cc-pending-row';
+
+        const name = document.createElement('span');
+        name.className = 'cc-pending-name';
+        name.textContent = p.username;
+
+        const acceptBtn = document.createElement('button');
+        acceptBtn.className = 'cc-accept-btn';
+        acceptBtn.textContent = '✓ Accept';
+        acceptBtn.addEventListener('click', () => respondToRequest(p.username, true));
+
+        const rejectBtn = document.createElement('button');
+        rejectBtn.className = 'cc-reject-btn';
+        rejectBtn.textContent = '✕';
+        rejectBtn.addEventListener('click', () => respondToRequest(p.username, false));
+
+        row.appendChild(name);
+        row.appendChild(acceptBtn);
+        row.appendChild(rejectBtn);
+        pendingList.appendChild(row);
+      }
+    } else {
+      pendingSection.classList.add('hidden');
+      pendingList.innerHTML = '';
+    }
+
+    // Show/hide settings save + disband based on role
+    settingsSave.classList.toggle('hidden', myClan.myRole !== 'leader');
+    disbandBtn.classList.toggle('hidden', myClan.myRole !== 'leader');
+
+    // Hide ally-management inputs unless leader/officer
+    const allyActions = document.querySelector('.cc-ally-actions');
+    if (allyActions) allyActions.classList.toggle('hidden', !isLeaderOrOfficer);
+  }
+
+  async function respondToRequest(username, accept) {
+    if (!myClan) return;
+    try {
+      const res = await fetch(`/api/clan/${myClan.id}/requests/${encodeURIComponent(username)}/${accept ? 'accept' : 'reject'}`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (res.ok) refreshMyClan();
+    } catch (err) {
+      console.warn('[chatclan] respondToRequest error:', err);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — create
+  // ══════════════════════════════════════════════════════════════════════
+
+  if (createSubmit) {
+    createSubmit.addEventListener('click', async () => {
+      const name = createName.value.trim();
+      if (!name) { createName.focus(); return; }
+
+      createSubmit.disabled = true;
+      try {
+        const res = await fetch('/api/clan/create', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            name,
+            description: createDesc.value.trim(),
+            emoji: createEmoji.value.trim() || '🛡️',
+            open: !!createOpen.checked,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data?.error || 'Failed to create clan.');
+        } else {
+          createName.value = '';
+          createDesc.value = '';
+          createEmoji.value = '🛡️';
+          createOpen.checked = true;
+          refreshMyClan();
+        }
+      } catch (err) {
+        console.error('[chatclan] create error:', err);
+        alert('Network error — could not create clan.');
+      }
+      createSubmit.disabled = false;
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — search / join
+  // ══════════════════════════════════════════════════════════════════════
+
+  async function runClanSearch(query) {
+    searchResults.innerHTML = '<div class="cc-loading">Searching…</div>';
+    try {
+      const res = await fetch(`/api/clan/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      renderSearchResults(data.clans || []);
+    } catch (err) {
+      searchResults.innerHTML = '<div class="cc-empty">Could not search clans.</div>';
+    }
+  }
+
+  function renderSearchResults(clans) {
+    if (!clans.length) {
+      searchResults.innerHTML = '<div class="cc-empty">No clans found.</div>';
+      return;
+    }
+    searchResults.innerHTML = '';
+    for (const c of clans) {
+      const row = document.createElement('div');
+      row.className = 'cc-clan-result';
+
+      const crest = document.createElement('div');
+      crest.className = 'cc-clan-result-crest';
+      crest.textContent = c.emoji || '🛡️';
+
+      const info = document.createElement('div');
+      info.className = 'cc-clan-result-info';
+      const name = document.createElement('div');
+      name.className = 'cc-clan-result-name';
+      name.textContent = c.name;
+      const meta = document.createElement('div');
+      meta.className = 'cc-clan-result-meta';
+      meta.textContent = `${c.memberCount} member${c.memberCount === 1 ? '' : 's'} · ${c.open ? 'Open' : 'Invite Only'}`;
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const btn = document.createElement('button');
+      btn.className = 'cc-btn cc-btn--gold cc-btn--sm';
+      btn.textContent = c.open ? 'Join' : 'Request';
+      btn.addEventListener('click', () => joinClan(c.id, btn));
+
+      row.appendChild(crest);
+      row.appendChild(info);
+      row.appendChild(btn);
+      searchResults.appendChild(row);
+    }
+  }
+
+  async function joinClan(clanId, btn) {
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/clan/join/${clanId}`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data?.error || 'Failed to join clan.');
+        btn.disabled = false;
+        return;
+      }
+      if (data.joined) {
+        refreshMyClan();
+      } else if (data.requested) {
+        btn.textContent = 'Requested';
+      }
+    } catch (err) {
+      console.error('[chatclan] joinClan error:', err);
+      alert('Network error — could not join clan.');
+      btn.disabled = false;
+    }
+  }
+
+  if (searchBtn)   searchBtn.addEventListener('click', () => runClanSearch(searchInput.value.trim()));
+  if (searchInput) searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); runClanSearch(searchInput.value.trim()); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — inner nav
+  // ══════════════════════════════════════════════════════════════════════
+
+  if (navChat)      navChat.addEventListener('click', () => showClanSubpage('chat'));
+  if (navMembers)   navMembers.addEventListener('click', () => showClanSubpage('members'));
+  if (navAlliances) navAlliances.addEventListener('click', () => showClanSubpage('alliances'));
+  if (navSettings)  navSettings.addEventListener('click', () => showClanSubpage('settings'));
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — chat
+  // ══════════════════════════════════════════════════════════════════════
+
+  async function loadClanHistory() {
+    if (!myClan) return;
+    try {
+      const res = await fetch('/api/clan/chat', { headers: authHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data?.messages)) return;
+      clanMsgList.innerHTML = '';
+      seenClanIds.clear();
+      for (const msg of data.messages) {
+        if (msg.id) seenClanIds.add(msg.id);
+        appendMessage(clanMsgList, msg, false, seenClanIds, MAX_DISPLAY);
+      }
+      scrollToBottom(clanMsgList, true);
+    } catch (err) {
+      console.warn('[chatclan] loadClanHistory error:', err);
+    }
+  }
+
+  window.__clanChatIncoming = function (data) {
+    if (!data || typeof data !== 'object') return;
+    // Only render if it's for our clan
+    if (!myClan || data.clan_id !== myClan.id) return;
+
+    if (data.id) {
+      if (seenClanIds.has(data.id)) return;
+      seenClanIds.add(data.id);
+      if (seenClanIds.size > MAX_DISPLAY * 2) {
+        const first = seenClanIds.values().next().value;
+        seenClanIds.delete(first);
+      }
+    }
+
+    const wasAtBottom = isAtBottom(clanMsgList);
+    const viewingClanChat = isOpen && activeTab === 'clan' && subChat.classList.contains('active');
+    appendMessage(clanMsgList, data, wasAtBottom || viewingClanChat, seenClanIds, MAX_DISPLAY);
+
+    if (!viewingClanChat) {
+      unreadClan++;
+      setUnreadBadges();
+    }
+  };
+
+  window.__clanEventIncoming = function (data) {
+    if (!data || typeof data !== 'object') return;
+    if (!myClan || data.clan_id !== myClan.id) return;
+
+    switch (data.event) {
+      case 'join':
+        appendSystem(clanMsgList, `${data.username} joined the clan.`);
+        refreshMyClan();
+        break;
+      case 'leave':
+        appendSystem(clanMsgList, `${data.username} left the clan.`);
+        refreshMyClan();
+        break;
+      case 'kicked':
+        appendSystem(clanMsgList, `${data.target} was removed from the clan.`);
+        if (data.target === window.__username) {
+          myClan = null;
+          showClanView('landing');
+        } else {
+          refreshMyClan();
+        }
+        break;
+      case 'role_change':
+        appendSystem(clanMsgList, `${data.target} is now ${data.role === 'officer' ? 'an officer' : 'a member'}.`);
+        refreshMyClan();
+        break;
+      case 'disbanded':
+        if (data.target === window.__username || !data.target) {
+          myClan = null;
+          showClanView('landing');
+        }
+        break;
+      case 'settings_updated':
+        refreshMyClan();
+        break;
+      default:
+        break;
+    }
+  };
+
+  async function sendClanMessage() {
+    if (sendCooldownClan || !myClan) return;
+    const text = clanInput.value.trim();
+    if (!text) return;
+
+    if (!window.__username) {
+      appendSystem(clanMsgList, 'You must be logged in to chat.');
+      return;
+    }
+
+    clanSendBtn.disabled = true;
+    sendCooldownClan = true;
+    clanInput.value = '';
+
+    try {
+      const res = await fetch('/api/clan/chat', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        appendSystem(clanMsgList, data?.error || 'Failed to send message.');
+        clanInput.value = text;
+      } else if (typeof window.__clanChatIncoming === 'function') {
+        window.__clanChatIncoming(data);
+      }
+    } catch (err) {
+      console.error('[chatclan] clan send error:', err);
+      appendSystem(clanMsgList, 'Network error — could not send.');
+      clanInput.value = text;
+    }
+
+    setTimeout(() => {
+      sendCooldownClan = false;
+      clanSendBtn.disabled = false;
+    }, COOLDOWN_MS);
+  }
+
+  if (clanForm) clanForm.addEventListener('submit', (e) => { e.preventDefault(); sendClanMessage(); });
+  if (clanInput) clanInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendClanMessage(); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — members
+  // ══════════════════════════════════════════════════════════════════════
+
+  async function loadMembers() {
+    if (!myClan) return;
+    memberList.innerHTML = '<li class="cc-loading">Loading…</li>';
+    try {
+      const res = await fetch(`/api/clan/${myClan.id}/members`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('members fetch failed');
+      const data = await res.json();
+      renderMembers(data.members || []);
+    } catch (err) {
+      memberList.innerHTML = '<li class="cc-loading">Could not load members.</li>';
+    }
+  }
+
+  function renderMembers(rows) {
+    memberList.innerHTML = '';
+    const myRole = myClan.myRole;
+
+    for (const m of rows) {
+      const li = document.createElement('li');
+      li.className = 'cc-member-row';
+
+      if (m.role === 'leader' || m.role === 'officer') {
+        const badge = document.createElement('span');
+        badge.className = `cc-role-badge cc-role-${m.role}`;
+        badge.textContent = m.role === 'leader' ? '★' : '◆';
+        li.appendChild(badge);
+      }
+
+      const name = document.createElement('span');
+      name.className = 'cc-member-name';
+      name.textContent = m.username;
+      name.addEventListener('click', () => {
+        if (typeof window.__openProfile === 'function') window.__openProfile(m.username);
+      });
+      li.appendChild(name);
+
+      // Action buttons — visible based on role
+      const actions = document.createElement('div');
+      actions.className = 'cc-member-actions';
+
+      const isSelf = m.username === window.__username;
+
+      if (!isSelf && myRole === 'leader' && m.role !== 'leader') {
+        const promoteBtn = document.createElement('button');
+        promoteBtn.textContent = m.role === 'officer' ? 'Demote' : 'Promote';
+        promoteBtn.addEventListener('click', () => promoteMember(m.username));
+        actions.appendChild(promoteBtn);
+      }
+
+      if (!isSelf && (myRole === 'leader' || myRole === 'officer') && m.role !== 'leader'
+          && !(m.role === 'officer' && myRole === 'officer')) {
+        const kickBtn = document.createElement('button');
+        kickBtn.className = 'cc-kick-btn';
+        kickBtn.textContent = 'Kick';
+        kickBtn.addEventListener('click', () => kickMember(m.username));
+        actions.appendChild(kickBtn);
+      }
+
+      if (actions.children.length > 0) li.appendChild(actions);
+      memberList.appendChild(li);
+    }
+  }
+
+  async function promoteMember(username) {
+    if (!myClan) return;
+    try {
+      const res = await fetch(`/api/clan/${myClan.id}/promote`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ username }),
+      });
+      if (res.ok) loadMembers();
+      else {
+        const data = await res.json();
+        alert(data?.error || 'Failed to update role.');
+      }
+    } catch (err) {
+      console.error('[chatclan] promoteMember error:', err);
+    }
+  }
+
+  async function kickMember(username) {
+    if (!myClan) return;
+    if (!confirm(`Remove ${username} from the clan?`)) return;
+    try {
+      const res = await fetch(`/api/clan/${myClan.id}/kick`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ username }),
+      });
+      if (res.ok) { loadMembers(); refreshMyClan(); }
+      else {
+        const data = await res.json();
+        alert(data?.error || 'Failed to remove member.');
+      }
+    } catch (err) {
+      console.error('[chatclan] kickMember error:', err);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — alliances / enemies
+  // ══════════════════════════════════════════════════════════════════════
+
+  async function loadRelations() {
+    if (!myClan) return;
+    allyList.innerHTML = '<div class="cc-loading">Loading…</div>';
+    try {
+      const res = await fetch(`/api/clan/${myClan.id}/relations`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('relations fetch failed');
+      const data = await res.json();
+      renderRelations(data.allies || [], data.enemies || []);
+    } catch (err) {
+      allyList.innerHTML = '<div class="cc-empty">Could not load alliances.</div>';
+    }
+  }
+
+  function renderRelations(allies, enemies) {
+    allyList.innerHTML = '';
+
+    const canManage = myClan.myRole === 'leader' || myClan.myRole === 'officer';
+
+    const alliesTitle = document.createElement('div');
+    alliesTitle.className = 'cc-ally-section-title allies';
+    alliesTitle.textContent = `🤝 Allies (${allies.length}/10)`;
+    allyList.appendChild(alliesTitle);
+
+    if (allies.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'cc-empty';
+      empty.textContent = 'No allies yet.';
+      allyList.appendChild(empty);
+    } else {
+      for (const c of allies) allyList.appendChild(relationRow(c, 'ally', canManage));
+    }
+
+    const enemiesTitle = document.createElement('div');
+    enemiesTitle.className = 'cc-ally-section-title enemies';
+    enemiesTitle.textContent = `🔥 Rivals (${enemies.length}/10)`;
+    allyList.appendChild(enemiesTitle);
+
+    if (enemies.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'cc-empty';
+      empty.textContent = 'No rivals declared.';
+      allyList.appendChild(empty);
+    } else {
+      for (const c of enemies) allyList.appendChild(relationRow(c, 'enemy', canManage));
+    }
+  }
+
+  function relationRow(clan, relation, canManage) {
+    const row = document.createElement('div');
+    row.className = 'cc-ally-row';
+
+    const crest = document.createElement('span');
+    crest.className = 'cc-ally-crest';
+    crest.textContent = clan.emoji || '🛡️';
+
+    const name = document.createElement('span');
+    name.className = 'cc-ally-name';
+    name.textContent = clan.name;
+
+    row.appendChild(crest);
+    row.appendChild(name);
+
+    if (canManage) {
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '✕';
+      removeBtn.title = relation === 'ally' ? 'Remove ally' : 'Remove rival';
+      removeBtn.addEventListener('click', () => removeRelation(clan.id, relation));
+      row.appendChild(removeBtn);
+    }
+
+    return row;
+  }
+
+  async function addRelation(name, relation) {
+    if (!myClan || !name) return;
+    try {
+      const endpoint = relation === 'ally' ? 'allies' : 'enemies';
+      const res = await fetch(`/api/clan/${myClan.id}/${endpoint}`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data?.error || 'Failed to update relation.'); return; }
+      loadRelations();
+    } catch (err) {
+      console.error('[chatclan] addRelation error:', err);
+    }
+  }
+
+  async function removeRelation(targetId, relation) {
+    if (!myClan) return;
+    try {
+      const endpoint = relation === 'ally' ? 'allies' : 'enemies';
+      const res = await fetch(`/api/clan/${myClan.id}/${endpoint}/${targetId}`, {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      if (res.ok) loadRelations();
+    } catch (err) {
+      console.error('[chatclan] removeRelation error:', err);
+    }
+  }
+
+  if (addAllyBtn) addAllyBtn.addEventListener('click', () => {
+    const name = addAllyInput.value.trim();
+    if (!name) return;
+    addAllyInput.value = '';
+    addRelation(name, 'ally');
+  });
+  if (addEnemyBtn) addEnemyBtn.addEventListener('click', () => {
+    const name = addEnemyInput.value.trim();
+    if (!name) return;
+    addEnemyInput.value = '';
+    addRelation(name, 'enemy');
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLAN — settings
+  // ══════════════════════════════════════════════════════════════════════
+
+  function loadSettings() {
+    if (!myClan) return;
+    settingsName.value  = myClan.name || '';
+    settingsDesc.value  = myClan.description || '';
+    settingsEmoji.value = myClan.emoji || '🛡️';
+    settingsOpen.checked = !!myClan.open;
+
+    const isLeader = myClan.myRole === 'leader';
+    settingsName.disabled  = !isLeader;
+    settingsDesc.disabled  = !isLeader;
+    settingsEmoji.disabled = !isLeader;
+    settingsOpen.disabled  = !isLeader;
+  }
+
+  if (settingsSave) {
+    settingsSave.addEventListener('click', async () => {
+      if (!myClan || myClan.myRole !== 'leader') return;
+      settingsSave.disabled = true;
+      try {
+        const res = await fetch(`/api/clan/${myClan.id}/settings`, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            name: settingsName.value.trim(),
+            description: settingsDesc.value.trim(),
+            emoji: settingsEmoji.value.trim() || '🛡️',
+            open: !!settingsOpen.checked,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data?.error || 'Failed to save settings.');
+        } else {
+          myClan = data.clan;
+          renderClanHome({ clan: myClan, pending: [] });
+        }
+      } catch (err) {
+        console.error('[chatclan] settings save error:', err);
+        alert('Network error — could not save settings.');
+      }
+      settingsSave.disabled = false;
+    });
+  }
+
+  if (leaveClanBtn) {
+    leaveClanBtn.addEventListener('click', async () => {
+      if (!myClan) return;
+      if (!confirm(`Leave ${myClan.name}?`)) return;
+      try {
+        const res = await fetch('/api/clan/leave', { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        if (!res.ok) { alert(data?.error || 'Failed to leave clan.'); return; }
+        myClan = null;
+        showClanView('landing');
+      } catch (err) {
+        console.error('[chatclan] leave error:', err);
+      }
+    });
+  }
+
+  if (disbandBtn) {
+    disbandBtn.addEventListener('click', async () => {
+      if (!myClan) return;
+      if (!confirm(`Disband ${myClan.name}? This cannot be undone.`)) return;
+      try {
+        const res = await fetch('/api/clan/disband', { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        if (!res.ok) { alert(data?.error || 'Failed to disband clan.'); return; }
+        myClan = null;
+        showClanView('landing');
+      } catch (err) {
+        console.error('[chatclan] disband error:', err);
+      }
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Boot
+  // ══════════════════════════════════════════════════════════════════════
+
+  loadGlobalHistory();
+  // Panel starts collapsed — CSS default (no cc-open class) keeps it off-screen.
+  switchTab('global');
+
+  // Refresh clan state once auth resolves (app.js sets window.__username after load)
+  window.addEventListener('sp-state-change', (e) => {
+    if (e.detail && e.detail.currentUser !== undefined) {
+      if (activeTab === 'clan') refreshMyClan();
+    }
+  });
+
+})();

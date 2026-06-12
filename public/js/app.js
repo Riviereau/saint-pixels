@@ -24,6 +24,10 @@
 // ── State dispatcher ─────────────────────────────────────────────────
 /** Send reactive state updates to Alpine without touching the DOM. */
 function dispatchStateChange(detail) {
+  // Keep window.__username in sync for chat&clan.js (reads it directly)
+  if (detail && detail.currentUser !== undefined) {
+    window.__username = detail.currentUser || null;
+  }
   window.dispatchEvent(new CustomEvent('sp-state-change', { detail }));
 }
 
@@ -47,7 +51,8 @@ let cursorPosition = null; // set to board-center on first load in canvas.js
 //   • timelapse-ui.js — reads localStorage('sp_token') for /api/timelapse/history
 //
 // Both are kept in sync by setAuthToken so they always see the same value.
-window.__token = null;
+window.__token    = null;
+window.__username = null; // kept in sync by dispatchStateChange; read by chat&clan.js
 
 /**
  * Called by auth.js after every login / session restore and on logout.

@@ -1,68 +1,94 @@
 /* ── stars.css — Saint-Pixels Star Currency System ──────────────────────── */
 
-/* ── Falling star images ─────────────────────────────────────────────────── */
-.sp-star {
-  position: absolute;   /* relative to #viewport */
+/* ── Falling star canvas elements ───────────────────────────────────────── */
+/*
+   Stars are now drawn as pixel-art canvas elements by stars.js —
+   no img tag or background-image involved.
+   The canvas already has inline styles for positioning; these rules
+   add the drop-shadow glow and ensure crisp pixel rendering everywhere.
+*/
+.sp-star,
+#viewport canvas.sp-star-canvas {
+  position: absolute;
   image-rendering: pixelated;
+  image-rendering: crisp-edges;   /* Firefox */
   cursor: pointer;
-  /* Above the overlay canvas (z-index: 3) and all mobile UI layers.
-     Must be below the timelapse modal (11500) and auth overlay (400). */
   z-index: 395;
   user-select: none;
   pointer-events: auto;
-  /* Override the parent #viewport's touch-action: none so touchstart fires */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.70));
-  will-change: top, left, transform, opacity;
+  /* Warm gold glow — layered so it reads even on dark or light canvases */
+  filter:
+    drop-shadow(0 0 4px rgba(255, 215,   0, 0.80))
+    drop-shadow(0 0 10px rgba(255, 180,   0, 0.45))
+    drop-shadow(0 0 18px rgba(255, 140,   0, 0.20));
+  will-change: top, left, opacity, transform;
 }
 
-.sp-star--collected {
-  pointer-events: none;
-  transition: transform 0.25s ease, opacity 0.25s ease !important;
-  transform: scale(2) rotate(30deg) !important;
-  opacity: 0 !important;
+/* ── Hover: star brightens on mouse-over ────────────────────────────────── */
+#viewport canvas:hover {
+  filter:
+    drop-shadow(0 0 6px  rgba(255, 255, 200, 0.95))
+    drop-shadow(0 0 14px rgba(255, 215,   0, 0.70))
+    drop-shadow(0 0 28px rgba(255, 160,   0, 0.35))
+    brightness(1.15);
+  transition: filter 0.15s ease;
 }
+
+/* ── Collection burst (applied by JS via inline transition) ─────────────── */
+/*
+   stars.js applies these inline:
+     transform: scale(2.4) rotate(20deg)
+     opacity: 0
+     transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.22s ease
+   No class needed — inline transition is simpler to synchronise with rAF.
+*/
 
 /* ── Floating "+50 ⭐" reward text ──────────────────────────────────────── */
 .sp-star-reward {
-  position: absolute;   /* relative to #viewport */
-  color: #FFD700;
-  font-weight: 800;
-  font-size: 1.05rem;
+  position: absolute;
+  color: #FFE566;
+  font-weight: 900;
+  font-size: 0.92rem;
+  letter-spacing: 0.03em;
   line-height: 1;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+  /* Pixel-font feel: render sharp and blocky */
+  font-family: 'Courier New', 'Consolas', monospace;
+  text-shadow:
+    0  1px 0 #B8860B,
+    0 -1px 0 #B8860B,
+    1px  0 0 #B8860B,
+   -1px  0 0 #B8860B,
+    0  3px 8px rgba(0, 0, 0, 0.80);
   pointer-events: none;
-  z-index: 396;         /* one above .sp-star */
+  z-index: 396;
   transform: translateX(-50%);
   white-space: nowrap;
   will-change: transform, opacity;
   opacity: 1;
-  transition: transform 1.1s ease, opacity 1.1s ease;
+  transition: transform 1.1s cubic-bezier(0.22, 1, 0.36, 1), opacity 1.0s ease;
 }
 
 .sp-star-reward--fly {
-  transform: translateX(-50%) translateY(-64px);
+  transform: translateX(-50%) translateY(-72px);
   opacity: 0;
 }
 
-/* ── Star balance chip in the header ────────────────────────────────────── */
-/*
-   The chip (#star-balance-chip) is already in index.html with Tailwind classes.
-   These rules add the "pop" animation that fires whenever the balance changes.
-*/
+/* ── Star balance chip pop animation ────────────────────────────────────── */
 @keyframes sp-star-pop {
   0%   { transform: scale(1); }
-  40%  { transform: scale(1.28); }
-  70%  { transform: scale(0.94); }
+  35%  { transform: scale(1.32); }
+  65%  { transform: scale(0.92); }
+  85%  { transform: scale(1.06); }
   100% { transform: scale(1); }
 }
 
 #star-balance-chip.sp-pop {
-  animation: sp-star-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: sp-star-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* ── Fullscreen: keep button above stars ─────────────────────────────────── */
+/* ── Fullscreen button must stay above stars ─────────────────────────────── */
 #fullscreen-btn {
   z-index: 20002 !important;
 }

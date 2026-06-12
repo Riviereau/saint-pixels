@@ -1,0 +1,873 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   CHAT + CLAN  —  public/css/chat&clan.css
+   Clash-of-Clans (2016) inspired: dark riveted wood panels, parchment
+   scrolls, gold trim, banner headers, tab bar.
+
+   Layout: mirrors lb-panel exactly, on the right edge.
+     - #chatclan-panel is the fixed flex row (toggle + body).
+     - When collapsed, the WHOLE panel shifts right by --cc-panel-width
+       (the body's width) — leaving exactly --cc-toggle-w of it on
+       screen, which is the toggle tab. This is the same trick lb-panel
+       uses with `left: calc(-1 * var(--lb-width))`.
+
+   Z-index hierarchy:
+     fullscreen button : z-[20002]  (Tailwind inline class in index.html)
+     #chatclan-panel   : 20500      (must be above fullscreen btn)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --cc-gold:        #ffd76b;
+  --cc-gold-dark:   #9c6a16;
+  --cc-gold-deep:   #6e4a0f;
+  --cc-wood:        #3a2615;
+  --cc-wood-light:  #6b4726;
+  --cc-wood-dark:   #20140a;
+  --cc-parchment:   #e8d9b5;
+  --cc-parchment-2: #d9c49a;
+  --cc-ink:         #4a3a28;
+  --cc-green:       #5fcf52;
+  --cc-red:         #e5483f;
+  --cc-panel-width: 340px;
+  --cc-toggle-w:    30px;
+}
+
+/* ── Panel — fixed right side, slides in/out (mirrors .lb-panel) ────── */
+#chatclan-panel {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  display: flex;
+  flex-direction: row;   /* toggle tab on left, body on right */
+  z-index: 20500;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  transition: right 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Collapsed: shift the whole row right by the body's width, exposing
+   only the toggle tab — exactly like .lb-panel:not(.lb-open). */
+#chatclan-panel:not(.cc-open) {
+  right: calc(-1 * var(--cc-panel-width));
+}
+
+/* ── Toggle tab — left edge of the panel, always visible ──────────── */
+/* Mirrors .lb-toggle: fixed width, centered vertically, rounded on the
+   outward edge, with a wood-grain + rivet treatment. */
+#chatclan-toggle-btn {
+  flex-shrink: 0;
+  width: var(--cc-toggle-w);
+  align-self: center;
+  height: 68px;
+  margin: 0;
+  position: relative;
+
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.18), transparent 40%),
+    linear-gradient(180deg, var(--cc-wood-light) 0%, var(--cc-wood) 55%, var(--cc-wood-dark) 100%);
+  border: 1px solid var(--cc-gold-deep);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  color: var(--cc-gold);
+  cursor: pointer;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 1rem;
+  line-height: 1;
+
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  box-shadow:
+    -4px 0 14px rgba(0, 0, 0, 0.5),
+    inset 1px 0 0 rgba(255,255,255,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+}
+/* Corner rivets, CoC-style */
+#chatclan-toggle-btn::before,
+#chatclan-toggle-btn::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff6d8, var(--cc-gold-dark) 70%, #5a3a08 100%);
+  box-shadow: 0 1px 1px rgba(0,0,0,0.6);
+}
+#chatclan-toggle-btn::before { top: 6px; }
+#chatclan-toggle-btn::after  { bottom: 6px; }
+#chatclan-toggle-btn:hover {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.24), transparent 40%),
+    linear-gradient(180deg, #8a5f37 0%, #4a341f 55%, var(--cc-wood-dark) 100%);
+  color: #ffe9a8;
+  border-color: var(--cc-gold);
+}
+.cc-tab-icon { font-size: 1.1rem; }
+
+.chatclan-unread-badge {
+  background: var(--cc-red);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 1px 4px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 1.4;
+  display: none;
+  pointer-events: none;
+  border: 1px solid #fff3;
+}
+.chatclan-unread-badge.visible { display: inline-block; }
+
+/* ── Panel body — the actual content area ──────────────────────────── */
+#cc-panel-body {
+  width: var(--cc-panel-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    repeating-linear-gradient(180deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 2px, transparent 2px, transparent 5px),
+    linear-gradient(180deg, #5a3d23 0%, #3a2615 45%, #20140a 100%);
+  border-left: 3px solid var(--cc-gold-dark);
+  overflow: hidden;
+  box-shadow:
+    -6px 0 24px rgba(0, 0, 0, 0.55),
+    inset 2px 0 0 rgba(255,255,255,0.06);
+}
+
+/* Gold top accent band — embossed ribbon look */
+.cc-top-band {
+  height: 7px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--cc-gold-deep), var(--cc-gold) 50%, var(--cc-gold-deep));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -2px 0 rgba(0,0,0,0.35);
+}
+
+/* ── Tab bar: Global / Clan ────────────────────────────────────────── */
+.cc-tabs {
+  display: flex;
+  align-items: stretch;
+  background: linear-gradient(180deg, #2a1c10, #1a0f06);
+  border-bottom: 3px solid var(--cc-gold-dark);
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+}
+.cc-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-right: 1px solid rgba(255,215,107,0.12);
+  color: #c9b690;
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  padding: 0.6rem 0.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  transition: background 0.15s, color 0.15s;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.cc-tab:hover { background: rgba(255,215,107,0.08); color: var(--cc-gold); }
+.cc-tab-active {
+  background: linear-gradient(180deg, rgba(255,215,107,0.28), rgba(255,215,107,0.04));
+  color: var(--cc-gold);
+  box-shadow: inset 0 -3px 0 var(--cc-gold), inset 0 2px 4px rgba(0,0,0,0.3);
+}
+.cc-tab--global.cc-tab-active {
+  background: linear-gradient(180deg, rgba(56,189,248,0.26), rgba(56,189,248,0.04));
+  color: #38bdf8;
+  box-shadow: inset 0 -3px 0 #38bdf8, inset 0 2px 4px rgba(0,0,0,0.3);
+}
+.cc-tab--clan.cc-tab-active {
+  background: linear-gradient(180deg, rgba(255,215,107,0.28), rgba(255,215,107,0.04));
+  color: var(--cc-gold);
+  box-shadow: inset 0 -3px 0 var(--cc-gold), inset 0 2px 4px rgba(0,0,0,0.3);
+}
+.cc-tab-badge {
+  background: var(--cc-red);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 1px 5px;
+  min-width: 14px;
+  display: none;
+}
+.cc-tab-badge.visible { display: inline-block; }
+
+#chatclan-close-btn {
+  flex: 0 0 36px;
+  background: none;
+  border: none;
+  color: #c9b690;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: color 0.15s;
+}
+#chatclan-close-btn:hover { color: #fff; }
+
+/* ── Pages ─────────────────────────────────────────────────────────── */
+.cc-page {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.cc-page.cc-page-active { display: flex; }
+
+/* ── Page header ────────────────────────────────────────────────────── */
+.cc-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  background: linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.28));
+  border-bottom: 2px solid var(--cc-gold-dark);
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+.cc-page-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--cc-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.cc-icon-btn {
+  background: linear-gradient(180deg, rgba(255,215,107,0.18), rgba(255,215,107,0.05));
+  border: 1px solid var(--cc-gold-dark);
+  color: var(--cc-gold);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  transition: background 0.15s;
+}
+.cc-icon-btn:hover { background: rgba(255,215,107,0.28); }
+
+/* ── Message list — shared by global + clan chat ───────────────────── */
+.cc-msg-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.55rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  list-style: none;
+  margin: 0;
+  scroll-behavior: smooth;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(246,199,90,0.04), transparent 60%);
+}
+.cc-msg-list::-webkit-scrollbar { width: 4px; }
+.cc-msg-list::-webkit-scrollbar-thumb {
+  background: rgba(246,199,90,0.18);
+  border-radius: 2px;
+}
+
+.cc-msg {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #e8d9b5;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.14);
+  border: 1px solid rgba(255,215,107,0.06);
+  word-break: break-word;
+}
+.cc-msg .cc-user {
+  font-weight: 800;
+  color: var(--cc-gold);
+  margin-right: 0.3em;
+  cursor: pointer;
+}
+.cc-msg .cc-user:hover { text-decoration: underline; }
+.cc-msg .cc-text { color: #e8d9b5; }
+.cc-msg .cc-time {
+  font-size: 0.65rem;
+  color: #8a7a60;
+  margin-left: 0.35em;
+}
+.cc-msg.cc-system {
+  color: #c9b690;
+  font-style: italic;
+  font-size: 0.74rem;
+  text-align: center;
+  padding: 0.2rem 0;
+}
+.cc-role-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.cc-role-leader  { background: rgba(246,199,90,0.25); color: var(--cc-gold); border: 1px solid var(--cc-gold); }
+.cc-role-officer { background: rgba(120,200,255,0.18); color: #8fd0ff; border: 1px solid #5fa8d6; }
+
+/* ── Input row — shared ──────────────────────────────────────────────── */
+.cc-input-row {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid rgba(246,199,90,0.18);
+  background: rgba(0,0,0,0.18);
+  flex-shrink: 0;
+}
+.cc-input {
+  flex: 1;
+  background: linear-gradient(180deg, rgba(0,0,0,0.32), rgba(0,0,0,0.18));
+  border: 1px solid var(--cc-gold-deep);
+  border-radius: 9px;
+  color: #f1e6c8;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.65rem;
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.45), inset 0 -1px 0 rgba(255,255,255,0.06);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cc-input:focus { border-color: var(--cc-gold); box-shadow: inset 0 2px 4px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,215,107,0.25); }
+.cc-input::placeholder { color: #8a7a60; }
+
+.cc-send-btn {
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid;
+  transition: background 0.15s;
+}
+.cc-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cc-send-btn--global {
+  background: rgba(56,189,248,0.18);
+  border-color: rgba(56,189,248,0.4);
+  color: #38bdf8;
+}
+.cc-send-btn--global:hover { background: rgba(56,189,248,0.3); }
+.cc-send-btn--clan {
+  background: rgba(246,199,90,0.18);
+  border-color: var(--cc-gold-dark);
+  color: var(--cc-gold);
+}
+.cc-send-btn--clan:hover { background: rgba(246,199,90,0.3); }
+
+/* ── CLAN PAGE: Landing ─────────────────────────────────────────────── */
+#cc-page-clan { padding: 0; }
+
+#cc-clan-landing,
+#cc-create-panel,
+#cc-search-panel {
+  padding: 1rem 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  overflow-y: auto;
+}
+.cc-clan-crest-placeholder {
+  font-size: 3rem;
+  text-align: center;
+  margin-top: 0.4rem;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));
+}
+.cc-landing-title {
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--cc-gold);
+  letter-spacing: 0.04em;
+}
+.cc-landing-sub {
+  text-align: center;
+  font-size: 0.78rem;
+  color: #c9b690;
+  line-height: 1.5;
+  padding: 0 0.5rem;
+}
+.cc-landing-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/* ── Buttons (CoC style) ────────────────────────────────────────────── */
+.cc-btn {
+  flex: 1;
+  border-radius: 12px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  border: 1px solid;
+  text-align: center;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.25);
+  transition: filter 0.12s, transform 0.05s, box-shadow 0.05s;
+}
+.cc-btn:active { transform: translateY(2px); }
+.cc-btn--full { flex: none; width: 100%; }
+.cc-btn--sm { flex: none; padding: 0.42rem 0.65rem; font-size: 0.75rem; border-radius: 9px; }
+
+.cc-btn--gold {
+  background: linear-gradient(180deg, #ffe9a8 0%, #ffd76b 35%, var(--cc-gold-dark) 100%);
+  border-color: var(--cc-gold-deep);
+  color: #4a2e05;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.6),
+    inset 0 -3px 4px rgba(110,74,15,0.5),
+    0 3px 6px rgba(0,0,0,0.4);
+}
+.cc-btn--gold:hover { filter: brightness(1.06); }
+.cc-btn--gold:active {
+  box-shadow:
+    inset 0 2px 4px rgba(110,74,15,0.6),
+    0 1px 2px rgba(0,0,0,0.3);
+}
+
+.cc-btn--slate {
+  background: linear-gradient(180deg, #9fb0c0 0%, #7c8a99 35%, #4a5a68 100%);
+  border-color: #2e3a44;
+  color: #1a242c;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.5),
+    inset 0 -3px 4px rgba(30,40,50,0.5),
+    0 3px 6px rgba(0,0,0,0.4);
+}
+.cc-btn--slate:hover { filter: brightness(1.08); }
+
+.cc-btn--green {
+  background: linear-gradient(180deg, #bdf5a8 0%, #79d96a 35%, #4caf50 100%);
+  border-color: #2e6b30;
+  color: #1c3a1c;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.55),
+    inset 0 -3px 4px rgba(30,90,30,0.45),
+    0 3px 6px rgba(0,0,0,0.4);
+}
+.cc-btn--green:hover { filter: brightness(1.06); }
+
+.cc-btn--red {
+  background: linear-gradient(180deg, #ffb3ab 0%, #f06a5e 35%, #c0392b 100%);
+  border-color: #7a1f17;
+  color: #fff;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.45),
+    inset 0 -3px 4px rgba(110,30,20,0.5),
+    0 3px 6px rgba(0,0,0,0.4);
+}
+.cc-btn--red:hover { filter: brightness(1.06); }
+
+.cc-back-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--cc-gold);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+.cc-back-btn:hover { text-decoration: underline; }
+
+/* ── Form elements (create / settings) ─────────────────────────────── */
+.cc-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.cc-form-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--cc-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cc-form-input,
+.cc-form-textarea {
+  background: linear-gradient(180deg, rgba(0,0,0,0.32), rgba(0,0,0,0.18));
+  border: 1px solid var(--cc-gold-deep);
+  border-radius: 9px;
+  color: #f1e6c8;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.65rem;
+  outline: none;
+  font-family: inherit;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.45), inset 0 -1px 0 rgba(255,255,255,0.06);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cc-form-input:focus,
+.cc-form-textarea:focus { border-color: var(--cc-gold); box-shadow: inset 0 2px 4px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,215,107,0.25); }
+.cc-form-input::placeholder,
+.cc-form-textarea::placeholder { color: #8a7a60; }
+.cc-form-textarea { resize: vertical; min-height: 56px; }
+
+/* ── Search panel ────────────────────────────────────────────────────── */
+.cc-search-row {
+  display: flex;
+  gap: 0.4rem;
+}
+.cc-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.3rem;
+}
+.cc-clan-result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(246,199,90,0.15);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+}
+.cc-clan-result-crest {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  width: 32px;
+  text-align: center;
+}
+.cc-clan-result-info {
+  flex: 1;
+  min-width: 0;
+}
+.cc-clan-result-name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #f1e6c8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-clan-result-meta {
+  font-size: 0.68rem;
+  color: #a99873;
+}
+.cc-empty, .cc-loading {
+  color: #a99873;
+  font-style: italic;
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.82rem;
+}
+
+/* ── Clan home ──────────────────────────────────────────────────────── */
+#cc-clan-home {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.cc-clan-header-band {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 0.85rem;
+  background: linear-gradient(135deg, #6b4726 0%, #3a2615 55%, #20140a 100%);
+  border-bottom: 3px solid var(--cc-gold-dark);
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+.cc-clan-crest {
+  font-size: 2.1rem;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.22), rgba(255,215,107,0.12) 60%, transparent 80%);
+  border: 2px solid var(--cc-gold);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.cc-clan-info { flex: 1; min-width: 0; }
+.cc-clan-name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--cc-gold);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-clan-meta {
+  font-size: 0.72rem;
+  color: #c9b690;
+  margin-top: 2px;
+}
+
+/* Pending requests */
+.cc-requests-section {
+  padding: 0.5rem 0.75rem;
+  background: rgba(246,199,90,0.06);
+  border-bottom: 1px solid rgba(246,199,90,0.15);
+  flex-shrink: 0;
+  max-height: 130px;
+  overflow-y: auto;
+}
+.cc-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  font-size: 0.78rem;
+  color: #f1e6c8;
+}
+.cc-pending-row .cc-pending-name { flex: 1; font-weight: 700; }
+.cc-pending-row button {
+  border: none;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.cc-accept-btn { background: var(--cc-green); color: #fff; }
+.cc-reject-btn { background: var(--cc-red); color: #fff; }
+
+/* ── Inner nav: Chat / Members / Alliances / Settings ──────────────── */
+.cc-clan-nav {
+  display: flex;
+  background: #2a1c10;
+  border-bottom: 1px solid rgba(246,199,90,0.18);
+  flex-shrink: 0;
+}
+.cc-clan-nav-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-right: 1px solid rgba(246,199,90,0.1);
+  color: #a99873;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.45rem 0.2rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cc-clan-nav-btn:last-child { border-right: none; }
+.cc-clan-nav-btn:hover { background: rgba(246,199,90,0.08); color: var(--cc-gold); }
+.cc-clan-nav-btn.active {
+  color: var(--cc-gold);
+  background: rgba(246,199,90,0.12);
+  box-shadow: inset 0 -2px 0 var(--cc-gold);
+}
+
+/* ── Sub pages ──────────────────────────────────────────────────────── */
+.cc-sub-page {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.cc-sub-page.active { display: flex; }
+#cc-sub-chat.active { display: flex; }
+
+/* ── Member list ────────────────────────────────────────────────────── */
+.cc-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.cc-member-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  color: #f1e6c8;
+  border-bottom: 1px solid rgba(246,199,90,0.06);
+}
+.cc-member-row:hover { background: rgba(246,199,90,0.05); }
+.cc-member-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  font-weight: 600;
+}
+.cc-member-name:hover { color: var(--cc-gold); }
+.cc-member-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+.cc-member-actions button {
+  border: none;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 3px 7px;
+  cursor: pointer;
+  background: rgba(246,199,90,0.15);
+  color: var(--cc-gold);
+  border: 1px solid rgba(246,199,90,0.3);
+}
+.cc-member-actions button:hover { background: rgba(246,199,90,0.28); }
+.cc-member-actions .cc-kick-btn { background: rgba(229,75,75,0.15); color: #ff8a8a; border-color: rgba(229,75,75,0.35); }
+.cc-member-actions .cc-kick-btn:hover { background: rgba(229,75,75,0.3); }
+
+/* ── Alliances / Enemies ─────────────────────────────────────────────── */
+.cc-ally-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.cc-ally-section-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0.4rem 0 0.1rem;
+}
+.cc-ally-section-title.allies  { color: var(--cc-green); }
+.cc-ally-section-title.enemies { color: var(--cc-red); }
+.cc-ally-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  color: #f1e6c8;
+}
+.cc-ally-row .cc-ally-crest { font-size: 1.1rem; }
+.cc-ally-row .cc-ally-name { flex: 1; font-weight: 700; }
+.cc-ally-row button {
+  border: none;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  cursor: pointer;
+  background: rgba(229,75,75,0.15);
+  color: #ff8a8a;
+  border: 1px solid rgba(229,75,75,0.3);
+}
+.cc-ally-row button:hover { background: rgba(229,75,75,0.3); }
+
+.cc-ally-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid rgba(246,199,90,0.15);
+  flex-shrink: 0;
+}
+.cc-ally-actions > div {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* ── Settings ───────────────────────────────────────────────────────── */
+#cc-settings-panel {
+  padding: 0.8rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.cc-settings-section-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--cc-gold);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+.cc-danger-zone {
+  margin-top: 0.8rem;
+  padding: 0.7rem;
+  border: 1px solid rgba(229,75,75,0.35);
+  border-radius: 10px;
+  background: rgba(229,75,75,0.06);
+}
+.cc-danger-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #ff8a8a;
+  margin-bottom: 0.2rem;
+}
+.cc-danger-sub {
+  font-size: 0.7rem;
+  color: #c9a8a8;
+  margin-bottom: 0.6rem;
+}
+
+/* ── Utility ─────────────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── Mobile portrait (≤ 720 px) ──────────────────────────────────────── */
+@media (max-width: 720px) {
+  :root { --cc-panel-width: 100vw; }
+
+  #chatclan-panel {
+    /* On mobile: full-width panel slides up from the bottom.
+       Override the desktop horizontal slide entirely. */
+    top: auto;
+    bottom: 0;
+    right: 0 !important;
+    left: 0;
+    width: 100%;
+    height: 68vh;
+    flex-direction: column-reverse; /* toggle tab at bottom */
+    border-radius: 14px 14px 0 0;
+    overflow: hidden;
+    transition: none;
+  }
+
+  #chatclan-toggle-btn {
+    width: 100%;
+    height: 32px;
+    border-radius: 14px 14px 0 0;
+    border: 1px solid var(--cc-gold-dark);
+    border-bottom: none;
+    flex-direction: row;
+    align-self: auto;
+    margin: 0;
+  }
+  /* Rivets sit at the left/right ends of the horizontal bar on mobile */
+  #chatclan-toggle-btn::before,
+  #chatclan-toggle-btn::after {
+    top: 50%;
+    left: auto;
+    transform: translateY(-50%);
+  }
+  #chatclan-toggle-btn::before { left: 10px; }
+  #chatclan-toggle-btn::after  { left: auto; right: 10px; }
+
+  #cc-panel-body {
+    width: 100%;
+    flex: 1;
+    border-left: none;
+    border-top: 2px solid var(--cc-gold-dark);
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+  }
+  #chatclan-panel.cc-open #cc-panel-body {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 480px) {
+  #chatclan-panel { height: 72vh; }
+}

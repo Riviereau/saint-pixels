@@ -67,6 +67,10 @@ function connectSSE() {
         updateEventBanner(event.active, event.endsAt, event.cooldownMs);
       } else if (event.type === 'chat') {
         if (typeof window.__chatIncoming === 'function') window.__chatIncoming(event);
+      } else if (event.type === 'clan_chat') {
+        if (typeof window.__clanChatIncoming === 'function') window.__clanChatIncoming(event);
+      } else if (event.type === 'clan_event') {
+        if (typeof window.__clanEventIncoming === 'function') window.__clanEventIncoming(event);
       } else if (event.type === 'email_verified') {
         if (event.username && event.username === currentUser) {
           localStorage.setItem(EMAIL_VERIFIED_KEY, '1');

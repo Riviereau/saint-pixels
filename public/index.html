@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="/css/leaderboard.css"> <!-- Leaderboard panel, profile modal -->
   <link rel="stylesheet" href="/css/components.css"> <!-- Achievements, events, attack warning, ruler, animations -->
   <link rel="stylesheet" href="/css/mobile.css">     <!-- All mobile media queries -->
-  <link rel="stylesheet" href="/css/chat.css">
+  <link rel="stylesheet" href="/css/chat&clan.css">
   <link rel="stylesheet" href="/css/settings.css">
   <link rel="stylesheet" href="/css/ios.css">
   <link rel="stylesheet" href="/css/timelapse.css">
@@ -602,11 +602,6 @@
 
   </div>
 
-  <button id="chat-toggle-btn" class="chat-toggle-btn" aria-label="Toggle global chat" title="Global Chat">
-    💬
-    <span id="chat-unread" class="chat-unread-badge"></span>
-  </button>
-
   <div
     id="resetPasswordOverlay"
     style="display:none; z-index:9001;"
@@ -729,27 +724,227 @@
     </div>
   </div>
 
-  <div id="chat-panel" role="complementary" aria-label="Global chat">
-    <div id="chat-header">
-      <span>Global Chat</span>
-      <div id="chat-header-actions">
-        <button id="chat-download-btn" data-tooltip="Download chat log" title="Download log">
-          ⬇ Log
-        </button>
-        <button id="chat-close-btn" aria-label="Close chat">✕</button>
+  <!-- ── Chat + Clan panel ────────────────────────────────────────────────── -->
+  <div id="chatclan-panel" role="dialog" aria-label="Chat and Clan">
+
+    <!-- Toggle tab — must be FIRST child inside the panel flex row so it protrudes left -->
+    <button
+      id="chatclan-toggle-btn"
+      class="chatclan-toggle-btn"
+      aria-label="Toggle chat and clan panel"
+      title="Chat &amp; Clan"
+    >
+      <span class="cc-tab-icon">💬</span>
+      <span id="chatclan-unread" class="chatclan-unread-badge" aria-live="polite"></span>
+    </button>
+
+    <!-- Panel body — flex:1 column, receives the background/border styles -->
+    <div id="cc-panel-body">
+
+    <!-- Gold top accent band -->
+    <div class="cc-top-band"></div>
+
+    <!-- Tab bar: Global / Clan -->
+    <div class="cc-tabs" role="tablist">
+      <button id="cc-tab-global" class="cc-tab cc-tab-active cc-tab--global" role="tab" aria-selected="true">
+        🌐 Global
+        <span id="cc-global-badge" class="cc-tab-badge"></span>
+      </button>
+      <button id="cc-tab-clan" class="cc-tab cc-tab--clan" role="tab" aria-selected="false">
+        🛡️ Clan
+        <span id="cc-clan-badge" class="cc-tab-badge"></span>
+      </button>
+      <button id="chatclan-close-btn" aria-label="Close" title="Close">✕</button>
+    </div>
+
+    <!-- ── GLOBAL CHAT PAGE ───────────────────────────────────────────────── -->
+    <div id="cc-page-global" class="cc-page cc-page-active" role="tabpanel">
+
+      <!-- Header -->
+      <div class="cc-page-header">
+        <span class="cc-page-title">Global Chat</span>
+        <div style="display:flex;gap:0.35rem;align-items:center;">
+          <button id="cc-global-download" class="cc-icon-btn" title="Download log">⬇ Log</button>
+        </div>
       </div>
-    </div>
-    <ul id="chat-messages" role="log" aria-live="polite" aria-label="Chat messages"></ul>
-    <div id="chat-form-wrapper">
-      <form id="chat-form" autocomplete="off">
-        <input id="chat-input" type="text" maxlength="200"
-               placeholder="Say something…" autocomplete="off" />
-        <button id="chat-send-btn" type="submit">Send</button>
+
+      <!-- Messages -->
+      <ul id="cc-global-messages" class="cc-msg-list" aria-live="polite" aria-label="Global chat messages"></ul>
+
+      <!-- Input -->
+      <form id="cc-global-form" class="cc-input-row" autocomplete="off">
+        <input
+          id="cc-global-input"
+          class="cc-input"
+          type="text"
+          maxlength="200"
+          placeholder="Message everyone…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="cc-global-send" class="cc-send-btn cc-send-btn--global" type="submit">Send</button>
       </form>
-    </div>
-  </div>
+
+    </div><!-- /cc-page-global -->
+
+    <!-- ── CLAN PAGE ──────────────────────────────────────────────────────── -->
+    <div id="cc-page-clan" class="cc-page" role="tabpanel">
+
+      <!-- Landing: no clan yet ─────────────────────────────────────────── -->
+      <div id="cc-clan-landing">
+        <div class="cc-clan-crest-placeholder">🛡️</div>
+        <div class="cc-landing-title">Join the Battle</div>
+        <div class="cc-landing-sub">Create your own clan or join an existing one to chat with clanmates and forge alliances.</div>
+        <div class="cc-landing-actions">
+          <button id="cc-landing-create" class="cc-btn cc-btn--gold">⚒ Create Clan</button>
+          <button id="cc-landing-join"   class="cc-btn cc-btn--slate">🔎 Find Clan</button>
+        </div>
+      </div>
+
+      <!-- Create clan form ──────────────────────────────────────────────── -->
+      <div id="cc-create-panel" class="hidden">
+        <button id="cc-create-back" class="cc-back-btn">← Back</button>
+        <div class="cc-form-group">
+          <label class="cc-form-label" for="cc-create-name">Clan Name</label>
+          <input id="cc-create-name" class="cc-form-input" type="text" maxlength="40" placeholder="Enter a name…" />
+        </div>
+        <div class="cc-form-group">
+          <label class="cc-form-label" for="cc-create-desc">Description</label>
+          <textarea id="cc-create-desc" class="cc-form-textarea" maxlength="200" placeholder="What's your clan about?"></textarea>
+        </div>
+        <div class="cc-form-group">
+          <label class="cc-form-label" for="cc-create-emoji">Clan Crest (emoji)</label>
+          <input id="cc-create-emoji" class="cc-form-input" type="text" maxlength="4" placeholder="🛡️" value="🛡️" style="font-size:1.4rem;text-align:center;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:0.6rem;padding:0.2rem 0;">
+          <input id="cc-create-open" type="checkbox" checked style="accent-color:var(--cc-gold);width:16px;height:16px;" />
+          <label for="cc-create-open" class="cc-form-label" style="margin:0;">Open to all (anyone can join)</label>
+        </div>
+        <button id="cc-create-submit" class="cc-btn cc-btn--gold cc-btn--full">⚒ Found Clan</button>
+      </div>
+
+      <!-- Search clans ─────────────────────────────────────────────────── -->
+      <div id="cc-search-panel" class="hidden">
+        <button id="cc-search-back" class="cc-back-btn">← Back</button>
+        <div class="cc-search-row">
+          <input id="cc-search-input" class="cc-form-input" type="text" placeholder="Search clans…" style="flex:1;" />
+          <button id="cc-search-btn" class="cc-btn cc-btn--gold cc-btn--sm">🔎</button>
+        </div>
+        <div id="cc-search-results" class="cc-search-results">
+          <div class="cc-empty">Search for a clan above.</div>
+        </div>
+      </div>
+
+      <!-- Clan home (shown when member of a clan) ───────────────────────── -->
+      <div id="cc-clan-home" class="hidden">
+
+        <!-- Clan crest + name band -->
+        <div class="cc-clan-header-band">
+          <div id="cc-crest-display" class="cc-clan-crest" title="Your clan">🛡️</div>
+          <div class="cc-clan-info">
+            <div id="cc-clan-name-display" class="cc-clan-name">—</div>
+            <div id="cc-clan-meta-display" class="cc-clan-meta">— members</div>
+          </div>
+        </div>
+
+        <!-- Pending join requests (leader only) -->
+        <div id="cc-pending-section" class="cc-requests-section hidden">
+          <div class="cc-form-label" style="margin-bottom:0.3rem;">⏳ Join Requests</div>
+          <div id="cc-pending-list"></div>
+        </div>
+
+        <!-- Inner nav: Chat / Members / Alliances / Settings -->
+        <nav class="cc-clan-nav" aria-label="Clan sections">
+          <button id="cc-nav-chat"      class="cc-clan-nav-btn active">💬 Chat</button>
+          <button id="cc-nav-members"   class="cc-clan-nav-btn">👥 Members</button>
+          <button id="cc-nav-alliances" class="cc-clan-nav-btn">⚔ Alliances</button>
+          <button id="cc-nav-settings"  class="cc-clan-nav-btn">⚙ Settings</button>
+        </nav>
+
+        <!-- Sub-page: Clan chat ─────────────────────────────────────────── -->
+        <div id="cc-sub-chat" class="cc-sub-page active">
+          <ul id="cc-clan-messages" class="cc-msg-list" aria-live="polite" aria-label="Clan chat messages"></ul>
+          <form id="cc-clan-form" class="cc-input-row" autocomplete="off">
+            <input
+              id="cc-clan-input"
+              class="cc-input"
+              type="text"
+              maxlength="300"
+              placeholder="Message clanmates…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="cc-clan-send" class="cc-send-btn cc-send-btn--clan" type="submit">Send</button>
+          </form>
+        </div>
+
+        <!-- Sub-page: Members ───────────────────────────────────────────── -->
+        <div id="cc-sub-members" class="cc-sub-page">
+          <ul id="cc-member-list" class="cc-member-list">
+            <li class="cc-loading">Loading…</li>
+          </ul>
+        </div>
+
+        <!-- Sub-page: Alliances / Enemies ──────────────────────────────── -->
+        <div id="cc-sub-alliances" class="cc-sub-page">
+          <div id="cc-ally-list" class="cc-ally-list">
+            <div class="cc-loading">Loading…</div>
+          </div>
+          <!-- Add ally / enemy inputs (leader + officer only, hidden by JS if not) -->
+          <div class="cc-ally-actions">
+            <div>
+              <input id="cc-add-ally-input"  class="cc-form-input" type="text" placeholder="Ally clan name…" style="flex:1;" />
+              <button id="cc-add-ally-btn"   class="cc-btn cc-btn--green cc-btn--sm" title="Add ally">🤝</button>
+            </div>
+            <div>
+              <input id="cc-add-enemy-input" class="cc-form-input" type="text" placeholder="Rival clan…" style="flex:1;" />
+              <button id="cc-add-enemy-btn"  class="cc-btn cc-btn--red cc-btn--sm" title="Declare rival">🔥</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sub-page: Settings ─────────────────────────────────────────── -->
+        <div id="cc-sub-settings" class="cc-sub-page">
+          <div id="cc-settings-panel">
+            <div class="cc-settings-section-title">Clan Settings</div>
+            <div class="cc-form-group">
+              <label class="cc-form-label" for="cc-settings-name">Clan Name</label>
+              <input id="cc-settings-name" class="cc-form-input" type="text" maxlength="40" />
+            </div>
+            <div class="cc-form-group">
+              <label class="cc-form-label" for="cc-settings-desc">Description</label>
+              <textarea id="cc-settings-desc" class="cc-form-textarea" maxlength="200"></textarea>
+            </div>
+            <div class="cc-form-group">
+              <label class="cc-form-label" for="cc-settings-emoji">Clan Crest (emoji)</label>
+              <input id="cc-settings-emoji" class="cc-form-input" type="text" maxlength="4" style="font-size:1.4rem;text-align:center;" />
+            </div>
+            <div style="display:flex;align-items:center;gap:0.6rem;">
+              <input id="cc-settings-open" type="checkbox" style="accent-color:var(--cc-gold);width:16px;height:16px;" />
+              <label for="cc-settings-open" class="cc-form-label" style="margin:0;">Open clan (anyone can join)</label>
+            </div>
+            <button id="cc-settings-save" class="cc-btn cc-btn--gold cc-btn--full hidden">💾 Save Changes</button>
+
+            <!-- Danger zone -->
+            <div class="cc-danger-zone">
+              <div class="cc-danger-title">⚠ Danger Zone</div>
+              <div class="cc-danger-sub">These actions are permanent and cannot be undone.</div>
+              <button id="cc-leave-clan-btn"   class="cc-btn cc-btn--slate cc-btn--full">🚪 Leave Clan</button>
+              <button id="cc-disband-clan-btn" class="cc-btn cc-btn--red cc-btn--full hidden" style="margin-top:0.4rem;">💀 Disband Clan</button>
+            </div>
+          </div>
+        </div><!-- /cc-sub-settings -->
+
+      </div><!-- /cc-clan-home -->
+
+    </div><!-- /cc-page-clan -->
+
+    </div><!-- /cc-panel-body -->
+  </div><!-- /chatclan-panel -->
 
   <!-- ── JS modules (split from app.js) ── -->
+  <!-- diagnostic.js MUST be first — it instruments fetch, EventSource, console, and global errors -->
+  <script nonce="__CSP_NONCE__" src="/js/diagnostic.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/sfx.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/app.js"></script>        <!-- global state + dispatchStateChange -->
   <script nonce="__CSP_NONCE__" src="/js/canvas.js"></script>     <!-- bufferCtx, BOARD_WIDTH, redraw, color helpers -->
@@ -764,7 +959,7 @@
   <script nonce="__CSP_NONCE__" src="/js/guest.js"></script>      <!-- observer banner + guest pixel trial (must follow auth, precede input) -->
   <script nonce="__CSP_NONCE__" src="/js/input.js"></script>      <!-- depends on all of the above -->
   <script nonce="__CSP_NONCE__" src="/js/leaderboard.js"></script>
-  <script nonce="__CSP_NONCE__" src="/js/chat.js"></script>
+  <script nonce="__CSP_NONCE__" src="/js/chat&clan.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/settings.js"></script>
 
   <!-- ── Community Rules window (standalone — no connection to auth/tools) ── -->
@@ -893,7 +1088,6 @@
         .observe(src, { childList: true, characterData: true, subtree: true });
     })();
   </script>
-  <script nonce="__CSP_NONCE__" src="/js/diagnostic.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/timelapse-ui.js"></script>
   <!-- ── Achievement Popups ── -->
   <div id="achievement-container" class="achievement-container"></div>

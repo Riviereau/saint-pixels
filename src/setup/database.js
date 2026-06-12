@@ -113,6 +113,17 @@ function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_guest_sessions_expires
       ON guest_sessions (expires_at);
 
+    -- Tracks how many clans a user has created on a given UTC day.
+    -- Used to enforce a daily cap (max 3/day) so a registered account
+    -- can't spam-create/disband clans to bloat the clans table or
+    -- hammer the DB with INSERT/DELETE cycles.
+    CREATE TABLE IF NOT EXISTS clan_creations (
+      username TEXT NOT NULL,
+      day      TEXT NOT NULL,
+      count    INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (username, day)
+    );
+    
     -- Monotonic counter for human-readable guest numbers (Guest 0000001, etc.)
     CREATE TABLE IF NOT EXISTS guest_counter (
       id  INTEGER PRIMARY KEY CHECK (id = 1),
@@ -158,31 +169,35 @@ function initializeDatabase(db) {
     const pixelCols = db.pragma('table_info(pixels)').map(c => c.name);
     if (pixelCols.includes('id')) {
       console.log('[db] Migrating pixels table from append-log to upsert model…');
-      db.exec(`
-        -- Keep only the latest row per cell (max id = most recent insert)
-        DELETE FROM pixels
-        WHERE id NOT IN (
-          SELECT MAX(id) FROM pixels GROUP BY x, y
-        );
+      // Wrap the structural migration in a transaction so a crash mid-way
+      // can't leave both 'pixels' and 'pixels_new' present. VACUUM cannot
+      // run inside a transaction, so it's executed afterward.
+      db.transaction(() => {
+        db.exec(`
+          -- Keep only the latest row per cell (max id = most recent insert)
+          DELETE FROM pixels
+          WHERE id NOT IN (
+            SELECT MAX(id) FROM pixels GROUP BY x, y
+          );
 
-        -- Rebuild as a proper keyed table without the autoincrement id
-        CREATE TABLE IF NOT EXISTS pixels_new (
-          username  TEXT    NOT NULL,
-          x         INTEGER NOT NULL,
-          y         INTEGER NOT NULL,
-          color     TEXT    NOT NULL,
-          placed_at INTEGER NOT NULL,
-          PRIMARY KEY (x, y)
-        );
-        INSERT OR REPLACE INTO pixels_new (username, x, y, color, placed_at)
-          SELECT username, x, y, color, placed_at FROM pixels;
-        DROP TABLE pixels;
-        ALTER TABLE pixels_new RENAME TO pixels;
-        CREATE INDEX IF NOT EXISTS idx_pixels_username  ON pixels(username);
-        CREATE INDEX IF NOT EXISTS idx_pixels_placed_at ON pixels(placed_at);
-
-        VACUUM;
-      `);
+          -- Rebuild as a proper keyed table without the autoincrement id
+          CREATE TABLE IF NOT EXISTS pixels_new (
+            username  TEXT    NOT NULL,
+            x         INTEGER NOT NULL,
+            y         INTEGER NOT NULL,
+            color     TEXT    NOT NULL,
+            placed_at INTEGER NOT NULL,
+            PRIMARY KEY (x, y)
+          );
+          INSERT OR REPLACE INTO pixels_new (username, x, y, color, placed_at)
+            SELECT username, x, y, color, placed_at FROM pixels;
+          DROP TABLE pixels;
+          ALTER TABLE pixels_new RENAME TO pixels;
+          CREATE INDEX IF NOT EXISTS idx_pixels_username  ON pixels(username);
+          CREATE INDEX IF NOT EXISTS idx_pixels_placed_at ON pixels(placed_at);
+        `);
+      })();
+      db.exec('VACUUM');
       console.log('[db] pixels table migration complete.');
     }
   } catch (err) {
@@ -226,11 +241,12 @@ function initializeDatabase(db) {
  *   • expired sessions          (expires_at < now)
  *   • used/expired email tokens (used OR expires_at < now)
  *   • used/expired pw resets    (used OR expires_at < now)
+ *   • expired guest sessions    (expires_at < now)
  *   • old pixel_counts rows     (day < 366 days ago — keeps a full year for
  *                                 leaderboard history, deletes the rest)
  *
  * @param {import('better-sqlite3').Database} db
- * @returns {{ sessions: number, emailVerifications: number, passwordResets: number, pixelCounts: number }}
+ * @returns {{ sessions: number, emailVerifications: number, passwordResets: number, guestSessions: number, pixelCounts: number }}
  */
 function runMaintenance(db) {
   const now = Date.now();
@@ -242,12 +258,16 @@ function runMaintenance(db) {
     const s  = db.prepare('DELETE FROM sessions           WHERE expires_at < ?').run(now);
     const ev = db.prepare('DELETE FROM email_verifications WHERE used = 1 OR expires_at < ?').run(now);
     const pr = db.prepare('DELETE FROM password_resets     WHERE used = 1 OR expires_at < ?').run(now);
+    const gs = db.prepare('DELETE FROM guest_sessions      WHERE expires_at < ?').run(now);
     const pc = db.prepare('DELETE FROM pixel_counts        WHERE day < ?').run(cutoffDay);
+    const cc = db.prepare('DELETE FROM clan_creations      WHERE day < ?').run(cutoffDay);
     return {
       sessions:           s.changes,
       emailVerifications: ev.changes,
       passwordResets:     pr.changes,
+      guestSessions:      gs.changes,
       pixelCounts:        pc.changes,
+      clanCreations:      cc.changes,
     };
   })();
 
