@@ -40,6 +40,13 @@
     box-sizing: border-box !important;
     flex-shrink: 0 !important;
   }
+  /* hCaptcha wrapper: don't let it collapse to 0 height before the
+     async iframe injects on mobile */
+  #authCaptchaWrapper {
+    overflow: visible !important;
+    min-height: 55px !important;
+  }
+
   /* hCaptcha compact widget: allow centering on narrow screens */
   .h-captcha {
     display: flex;
