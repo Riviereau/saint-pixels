@@ -118,13 +118,18 @@ function handleApiBanResponse(data, response) {
 }
 
 // ── Captcha helpers ──────────────────────────────────────────────────
+// captcha.js renders the hCaptcha widget explicitly (avoids the
+// auto-render-skips-hidden-elements bug on mobile) and stores the
+// resulting widget ID on window.__hcaptchaWidgetId. We pass that ID
+// to getResponse()/reset() so they target the right (and only) widget
+// even if hCaptcha hasn't finished rendering yet.
 function getCaptchaToken() {
   if (isLocalDev()) return 'dev-bypass';
-  if (typeof hcaptcha !== 'undefined') {
-    const response = hcaptcha.getResponse();
+  if (typeof hcaptcha !== 'undefined' && window.__hcaptchaWidgetId !== undefined) {
+    const response = hcaptcha.getResponse(window.__hcaptchaWidgetId);
     return response || null;
   }
-  // hCaptcha widget failed to load — return null so the caller shows
+  // hCaptcha widget failed to load/render — return null so the caller shows
   // the "please complete the captcha" message rather than sending a
   // 'dev-bypass' token that the server will reject with a confusing error.
   return null;
@@ -132,7 +137,9 @@ function getCaptchaToken() {
 
 function resetCaptcha() {
   if (isLocalDev()) return;
-  if (typeof hcaptcha !== 'undefined') hcaptcha.reset();
+  if (typeof hcaptcha !== 'undefined' && window.__hcaptchaWidgetId !== undefined) {
+    hcaptcha.reset(window.__hcaptchaWidgetId);
+  }
 }
 
 // ── Auth message ─────────────────────────────────────────────────────

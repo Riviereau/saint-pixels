@@ -226,6 +226,14 @@ window.StarSystem = (() => {
       if (star.collected) return;
       star.collected = true;
 
+      // Stop intercepting pointer events immediately so the underlying
+      // #overlay receives the mouseup/touchend that startAction() in
+      // input.js is waiting for. Without this, mousedown fires on #overlay
+      // (arming the long-press-pan timer / isMouseDown) but the matching
+      // mouseup gets swallowed by this star canvas during its 280ms removal
+      // delay, leaving the canvas stuck in pan mode until the next click.
+      canvas.style.pointerEvents = 'none';
+
       // SFX
       if (window.SFX) window.SFX.play('star-picked', 0, 0.75);
 

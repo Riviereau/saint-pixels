@@ -19,7 +19,7 @@
   <meta name="twitter:description" content="A real-time multiplayer pixel canvas game where players collaborate or compete to create massive online artworks.">
   <!-- <meta name="twitter:image" content="https://www.saint-pixels.org/images/social-preview.png"> -->
   <script nonce="__CSP_NONCE__" defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script nonce="__CSP_NONCE__" src="https://js.hcaptcha.com/1/api.js" async defer></script>
+  <script nonce="__CSP_NONCE__" src="https://js.hcaptcha.com/1/api.js?onload=spHcaptchaOnLoad&render=explicit" async defer></script>
   <!-- ── Styles (split from styles.css) ── -->
   <link rel="stylesheet" href="/css/base.css">       <!-- Tailwind theme/base/utilities + @property -->
   <link rel="stylesheet" href="/css/canvas.css">     <!-- Canvas, viewport, grid, cursor -->
@@ -213,9 +213,8 @@
       </div>
       <div id="authCaptchaWrapper">
         <div
-          id="authCaptcha"
-          class="h-captcha"
-          data-sitekey="__VITE_HCAPTCHA_SITEKEY__"
+          id="hcaptchaContainer"
+          data-hcaptcha-sitekey="__VITE_HCAPTCHA_SITEKEY__"
           data-theme="dark"
           data-size="compact"
         ></div>
@@ -956,6 +955,7 @@
   <script nonce="__CSP_NONCE__" src="/js/achievements.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/particles.js"></script>
   <script nonce="__CSP_NONCE__" src="/js/broadcast.js"></script>  <!-- depends on canvas, cooldown, events -->
+  <script nonce="__CSP_NONCE__" src="/js/captcha.js"></script>     <!-- explicit hCaptcha render (must precede auth.js) -->
   <script nonce="__CSP_NONCE__" src="/js/auth.js"></script>       <!-- depends on cooldown, events, broadcast (must precede input) -->
   <script nonce="__CSP_NONCE__" src="/js/guest.js"></script>      <!-- observer banner + guest pixel trial (must follow auth, precede input) -->
   <script nonce="__CSP_NONCE__" src="/js/input.js"></script>      <!-- depends on all of the above -->
