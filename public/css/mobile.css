@@ -967,3 +967,117 @@
     padding: 3px 7px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Android-specific fixes
+   Applied via html[data-android] selector (set by android.js after
+   UA detection).  Mirrors the ios.js / ios.css pattern exactly.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Gesture navigation bar compensation ──────────────────────── */
+/* android.js measures the nav-bar height and publishes it as
+   --android-nav-extra.  Add it on top of any existing bottom offset
+   so panels and banners clear the nav bar on gesture-nav devices. */
+html[data-android] .gm-observer-banner,
+html[data-android] #gm-observer-banner {
+  bottom: calc(
+    var(--mob-bottom-total, 156px)
+    + env(safe-area-inset-bottom, 0px)
+    + var(--android-nav-extra, 0px)
+    + 36px
+  ) !important;
+}
+
+html[data-android] .gm-observer-badge,
+html[data-android] #gm-observer-badge {
+  bottom: calc(
+    var(--mob-bottom-total, 156px)
+    + env(safe-area-inset-bottom, 0px)
+    + var(--android-nav-extra, 0px)
+    + 40px
+  ) !important;
+}
+
+html[data-android] .gm-hud,
+html[data-android] #gm-hud {
+  bottom: calc(
+    var(--mob-bottom-total, 156px)
+    + env(safe-area-inset-bottom, 0px)
+    + var(--android-nav-extra, 0px)
+    + 4px
+  ) !important;
+}
+
+/* ── 2. Auth overlay — never block touches when hidden ────────────── */
+/* Belt-and-suspenders: when Alpine sets display:none on #authOverlay,
+   also strip pointer-events so any rendering glitch on Android can't
+   leave an invisible touch trap. */
+#authOverlay[style*="display: none"],
+#authOverlay[style*="display:none"] {
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* ── 3. Leaderboard + chat toggles — fat touch targets on Android ─── */
+/* Android's swipe-back gesture can steal edge taps.  Widen the hit
+   area and disable browser swipe navigation on the toggle buttons. */
+@media (max-width: 720px) {
+  #lb-toggle {
+    min-width:    36px !important;
+    min-height:   64px !important;
+    touch-action: manipulation !important;
+    /* Extend the tap area left into the panel gutter without visual change */
+    padding-left: 8px !important;
+    padding-right: 4px !important;
+  }
+
+  #chatclan-toggle-btn {
+    min-width:    36px !important;
+    min-height:   68px !important;
+    touch-action: manipulation !important;
+    padding-right: 8px !important;
+    padding-left:  4px !important;
+  }
+
+  /* Ensure collapsed chat panel's toggle is always hittable */
+  #chatclan-panel {
+    /* pointer-events is none when collapsed; toggle inherits auto */
+    /* already handled in mobile.css — this just re-asserts it */
+  }
+  #chatclan-panel #chatclan-toggle-btn {
+    pointer-events: auto !important;
+    /* Slightly wider than the panel's --cc-toggle-w so edge swipes
+       register as taps on the button rather than browser gestures */
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: rgba(212, 175, 55, 0.25) !important;
+  }
+
+  #lb-toggle {
+    -webkit-tap-highlight-color: rgba(56, 189, 248, 0.25) !important;
+  }
+}
+
+/* ── 4. Guest observer banner — show on Android even without x-cloak ─ */
+/* The auth overlay's x-cloak + Alpine timing issue can delay hiding.
+   On Android, ensure the guest banner is always on top of it when it
+   should be visible. */
+html[data-android] #gm-observer-banner.gm-visible {
+  z-index: 2147483647 !important;
+}
+
+html[data-android] #gm-hud {
+  z-index: 2147483646 !important;
+}
+
+/* ── 5. Footer panel — extra padding for Android gesture nav ─────── */
+html[data-android] .footer-panel {
+  padding-bottom: calc(
+    env(safe-area-inset-bottom, 0px)
+    + var(--android-nav-extra, 0px)
+  ) !important;
+  height: calc(
+    var(--mob-spawn-h, 48px)
+    + env(safe-area-inset-bottom, 0px)
+    + var(--android-nav-extra, 0px)
+  ) !important;
+}

@@ -1,0 +1,106 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   android.css — Android-specific visual fixes
+
+   Complements android.js (which detects Android and sets data-android="1"
+   on <html>).  All rules here are scoped to html[data-android] so they
+   have zero impact on non-Android platforms.
+
+   Link AFTER ios.css in <head>:
+     <link rel="stylesheet" href="/css/android.css">
+
+   Z-index reference (same hierarchy as leaderboard.css):
+     auth overlay:          2147483647  (must stay on top when open)
+     guest banner (open):   2147483647  (same plane — android.js manages)
+     chat panel open:       20500
+     settings overlay:      11000
+     ios/android reset:     12000
+     lb panel open:         510
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Hard-reset topbar button ─────────────────────────────────────────── */
+/* Hidden by default; android.js reveals it if it adds a reset button.
+   Currently android.js does not inject a reset button (unlike ios.js),
+   but this stub is here so future versions can follow the same pattern. */
+#android-reset-btn {
+  display: none;
+}
+html[data-android] #android-reset-btn {
+  display: inline-flex;
+}
+
+/* ── Touch highlight: use brand colours instead of the default grey ──── */
+/* Android Chrome's default tap highlight is an ugly grey square.
+   Override it on interactive elements with brand-appropriate colours. */
+html[data-android] #lb-toggle,
+html[data-android] .lb-toggle {
+  -webkit-tap-highlight-color: rgba(56, 189, 248, 0.22);
+}
+
+html[data-android] #chatclan-toggle-btn,
+html[data-android] .chatclan-toggle-btn {
+  -webkit-tap-highlight-color: rgba(212, 175, 55, 0.22);
+}
+
+html[data-android] .gm-btn {
+  -webkit-tap-highlight-color: rgba(56, 189, 248, 0.15);
+}
+
+/* ── Prevent double-tap zoom on all interactive elements ─────────────── */
+/* Android Chrome triggers zoom on rapid double-taps unless touch-action
+   manipulation is set.  Canvas and tool buttons already set this; we
+   extend it to the panels and banners. */
+html[data-android] #lb-toggle,
+html[data-android] #chatclan-toggle-btn,
+html[data-android] .gm-btn,
+html[data-android] .gm-obs-dismiss,
+html[data-android] #gm-observer-banner button,
+html[data-android] .footer-panel button,
+html[data-android] .tool--secondary {
+  touch-action: manipulation;
+}
+
+/* ── Guest observer banner — on top of everything on Android ─────────── */
+/* android.js sets z-index inline when the banner is built; this CSS
+   reinforces it so it survives Alpine z-index resets. */
+html[data-android] #gm-observer-banner.gm-visible {
+  z-index: 2147483647 !important;
+  /* Slight extra bottom padding to clear Android gesture nav bar */
+  padding-bottom: calc(12px + var(--android-nav-extra, 0px)) !important;
+}
+
+html[data-android] #gm-hud {
+  z-index: 2147483646 !important;
+}
+
+/* ── Auth overlay — never intercept touches when hidden ──────────────── */
+/* Belt-and-suspenders complement to the mobile.css rule. */
+html[data-android] #authOverlay[style*="display: none"],
+html[data-android] #authOverlay[style*="display:none"] {
+  pointer-events: none !important;
+  visibility:     hidden !important;
+}
+
+/* ── Fullscreen palette: slightly taller touch targets on Android ─────── */
+@media (max-width: 720px) {
+  html[data-android] .fullscreen-palette button {
+    min-width:  32px !important;
+    min-height: 32px !important;
+  }
+
+  html[data-android] .tool--secondary {
+    min-width:  48px !important;
+    min-height: 48px !important;
+  }
+}
+
+/* ── Footer panel: gesture nav bar compensation ──────────────────────── */
+/* --android-nav-extra is set by android.js after measuring the gap.
+   On devices where it's 0 this has no effect. */
+@media (max-width: 720px) {
+  html[data-android] .footer-panel {
+    padding-bottom: calc(
+      env(safe-area-inset-bottom, 0px)
+      + var(--android-nav-extra, 0px)
+    ) !important;
+  }
+}

@@ -119,6 +119,9 @@
     banner.id        = 'gm-observer-banner';
     banner.className = 'gm-observer-banner';
     banner.setAttribute('role', 'status');
+    // Ensure banner is always above the auth overlay (which may still be
+    // rendering on slow devices / Alpine-delayed Android) and above chat/lb panels
+    banner.style.zIndex = '2147483647';
     banner.innerHTML = `
       <span class="gm-obs-eye" aria-hidden="true">👁</span>
       <span class="gm-obs-text">You're watching live. Want to leave your mark?</span>
@@ -126,7 +129,7 @@
         Try 300 free pixels
       </button>
       <button id="gm-signup-btn" class="gm-btn gm-btn--ghost" type="button">
-        Sign up free
+        Login / Sign up
       </button>
       <button id="gm-obs-dismiss" class="gm-obs-dismiss" type="button" aria-label="Dismiss">✕</button>
     `;
@@ -342,7 +345,25 @@
   // making the overlay visible regardless of currentUser.
 
   function openAuthModal() {
+    // Primary path: Alpine listens for sp-open-auth and sets showAuth = true,
+    // which makes the overlay visible regardless of currentUser/guestObserver.
     window.dispatchEvent(new CustomEvent('sp-open-auth'));
+
+    // Fallback for Android / slow Alpine: if the overlay still isn't visible
+    // 150 ms later, force-show it by removing display:none directly.
+    setTimeout(() => {
+      const overlay = document.getElementById('authOverlay');
+      if (!overlay) return;
+      const computed = window.getComputedStyle(overlay).display;
+      if (computed === 'none') {
+        overlay.style.removeProperty('display');
+        overlay.style.zIndex = '2147483647';
+        overlay.style.pointerEvents = 'auto';
+        // Hide the guest banner so it doesn't sit on top
+        const banner = document.getElementById('gm-observer-banner');
+        if (banner) banner.style.zIndex = '500';
+      }
+    }, 150);
   }
 
   // ── Start guest session ────────────────────────────────────────────────────
@@ -576,6 +597,37 @@
       if (_userIsReal || _guestActive) return;
       if (!_authResolved) showObserverMode();
     }, 3000);
+
+    // Android Doze / background tab can delay setTimeout.  android.js fires
+    // sp-guest-nudge when the tab becomes visible so we re-check promptly.
+    window.addEventListener('sp-guest-nudge', function onNudge() {
+      if (_userIsReal || _guestActive) {
+        window.removeEventListener('sp-guest-nudge', onNudge);
+        return;
+      }
+      if (!_authResolved) {
+        // Auth hasn't resolved yet — treat it as logged-out and show banner.
+        _authResolved = true;
+        showObserverMode();
+      } else if (!document.getElementById('gm-observer-banner') && !_guestActive) {
+        // Auth resolved as logged-out but banner was never injected — try again.
+        showObserverMode();
+      }
+      window.removeEventListener('sp-guest-nudge', onNudge);
+    });
+
+    // Also handle visibility change directly in case android.js isn't loaded.
+    function onVisibilityVisible() {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', onVisibilityVisible);
+      if (_userIsReal || _guestActive) return;
+      setTimeout(() => {
+        if (!_userIsReal && !_guestActive && !document.getElementById('gm-observer-banner')) {
+          showObserverMode();
+        }
+      }, 500);
+    }
+    document.addEventListener('visibilitychange', onVisibilityVisible);
   }
 
   // Run after DOM is ready
