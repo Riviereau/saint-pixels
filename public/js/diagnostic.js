@@ -511,12 +511,23 @@
   badge.id    = 'sp-diag-badge';
   badge.type  = 'button';
   Object.assign(badge.style, {
-    position: 'fixed', bottom: '12px', right: '12px', zIndex: '999999',
-    background: '#1e1e2e', border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: '10px', color: '#94a3b8', cursor: 'pointer',
-    fontSize: '0.75rem', fontFamily: 'ui-monospace, monospace', fontWeight: '600',
-    padding: '6px 10px', display: 'none', gap: '6px', alignItems: 'center',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.5)', lineHeight: '1.4',
+    position: 'fixed',
+    bottom: '16px',
+    right: '16px',
+    zIndex: '2000', 
+    padding: '10px 14px',
+    borderRadius: '12px',
+    fontSize: '0.82rem',
+    fontWeight: '700',
+    fontFamily: 'sans-serif',
+    cursor: 'pointer',
+    userSelect: 'none',
+    display: 'none',
+    alignItems: 'center',
+   gap: '8px',
+    background: 'rgba(30,30,30,0.92)',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+    lineHeight: '1.4',
   });
   badge.title = 'Saint-Pixels diagnostic — click to download JSON report';
   badge.addEventListener('click', _download);
