@@ -98,7 +98,30 @@ function initializeDatabase(db) {
 
     CREATE INDEX IF NOT EXISTS idx_ph_placed_at ON pixel_history(placed_at);
     CREATE INDEX IF NOT EXISTS idx_ph_username  ON pixel_history(username);
+
+    -- Short-lived guest tokens — separate from 'sessions' so guest tokens can
+    -- never be validated by getSession() as real registered users.
+    CREATE TABLE IF NOT EXISTS guest_sessions (
+      token       TEXT    PRIMARY KEY,
+      username    TEXT    NOT NULL,
+      ip          TEXT    NOT NULL,
+      created_at  INTEGER NOT NULL,
+      expires_at  INTEGER NOT NULL,
+      pixels_used INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_guest_sessions_expires
+      ON guest_sessions (expires_at);
+
+    -- Monotonic counter for human-readable guest numbers (Guest 0000001, etc.)
+    CREATE TABLE IF NOT EXISTS guest_counter (
+      id  INTEGER PRIMARY KEY CHECK (id = 1),
+      seq INTEGER NOT NULL DEFAULT 0
+    );
   `);
+
+  // Seed the counter row if it doesn't exist yet.
+  db.prepare('INSERT OR IGNORE INTO guest_counter (id, seq) VALUES (1, 0)').run();
 
   // ── Column migrations (SQLite doesn't support IF NOT EXISTS on ALTER TABLE) ──
   try {

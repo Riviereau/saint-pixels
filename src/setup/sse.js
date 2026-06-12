@@ -107,14 +107,14 @@ function initializeSSE(app, db, guardMiddleware) {
     }
 
     // Heartbeat every 20 s keeps the connection alive through reverse proxies.
-    // Use a named SSE event ("event: ping") rather than a bare comment line
-    // (": heartbeat") — some proxies (nginx proxy_read_timeout, Caddy, Railway,
-    // Render, etc.) only reset their idle timer when they see actual data bytes,
-    // not SSE comment lines.  A named event with an empty data field is the
-    // smallest payload that reliably resets proxy read timeouts.
+    // Must be an unnamed data: message (not "event: ping\ndata:\n\n") so that
+    // the browser's EventSource fires .onmessage and broadcast.js can filter it
+    // with its existing `if (event.type === 'ping') return;` guard.
+    // Named SSE events only fire addEventListener('ping', ...) listeners, not
+    // .onmessage — so the old format silently bypassed the filter entirely.
     const heartbeat = setInterval(() => {
       try {
-        res.write('event: ping\ndata: \n\n');
+        res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
       } catch {
         clearInterval(heartbeat);
         clients.delete(res);

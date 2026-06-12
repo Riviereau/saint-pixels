@@ -543,27 +543,9 @@ app.use('/api/stream', (req, res, next) => {
 });
 app.use('/api/stream', sseLimiter);
 
-// ── SSE heartbeat — prevents Cloudflare / AWS ALB / nginx from closing ────────
-// Reverse proxies (including Cloudflare) close idle HTTP connections after
-// ~100 s of inactivity.  An EventSource with no data will therefore receive a
-// 502 / connection-reset error on the client.  We emit an SSE comment (lines
-// starting with ':' are ignored by EventSource) every 25 seconds to keep the
-// TCP socket alive through any proxy idle-timeout window.
-// The interval is stored per-response and cleared when the client disconnects.
-app.use('/api/stream', (req, res, next) => {
-  // Only attach the heartbeat after the SSE headers have been sent.
-  // We hook into the 'pipe' event which fires once initializeSSE writes the
-  // headers, OR we use a short delay as a reliable fallback.
-  const sendHeartbeat = () => {
-    if (!res.writableEnded && !res.destroyed) {
-      try { res.write(':heartbeat\n\n'); } catch { /* ignore if already closed */ }
-    }
-  };
-  const heartbeatInterval = setInterval(sendHeartbeat, 25_000);
-  res.on('close',  () => clearInterval(heartbeatInterval));
-  res.on('finish', () => clearInterval(heartbeatInterval));
-  next();
-});
+// NOTE: SSE keep-alive heartbeats are handled inside sse.js (every 20 s),
+// which sends { type: 'ping' } as an unnamed data: message.  No second
+// heartbeat middleware is needed here.
 
 initializeSSE(app, db, sseConnectionGuard);
 
@@ -915,34 +897,8 @@ function initStreakTables() {
 }
 initStreakTables();
 
-// ── Guest sessions table ──────────────────────────────────────────────────────
-// Stores short-lived guest tokens. Separate from `sessions` so guest tokens
-// can never be validated by getSession() as real users.
-function initGuestTable() {
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guest_sessions (
-      token       TEXT    PRIMARY KEY,
-      username    TEXT    NOT NULL,
-      ip          TEXT    NOT NULL,
-      created_at  INTEGER NOT NULL,
-      expires_at  INTEGER NOT NULL,
-      pixels_used INTEGER NOT NULL DEFAULT 0
-    )
-  `).run();
-  db.prepare(`
-    CREATE INDEX IF NOT EXISTS idx_guest_sessions_token
-    ON guest_sessions (token)
-  `).run();
-  // Monotonic counter for human-readable guest numbers (Guest 0000001, etc.)
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guest_counter (
-      id  INTEGER PRIMARY KEY CHECK (id = 1),
-      seq INTEGER NOT NULL DEFAULT 0
-    )
-  `).run();
-  db.prepare(`INSERT OR IGNORE INTO guest_counter (id, seq) VALUES (1, 0)`).run();
-}
-initGuestTable();
+// guest_sessions and guest_counter tables are created by initializeDatabase()
+// in database.js — no separate initGuestTable() needed here.
 
 // Update a user's streak when they place a pixel. Called from placePixel paths.
 function updateStreak(username) {
