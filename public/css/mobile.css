@@ -564,73 +564,73 @@
     padding-right: 0.75rem !important;
   }
   /* ── Chat + Clan panel: portrait mobile ─────────────────────────── */
-  /* On mobile the panel slides up from the bottom. Collapsed state      */
-  /* must keep the toggle tab (32px) ABOVE the footer-panel (48px) +    */
-  /* palette (108px) + spawn (48px) = 204px from bottom — so nothing    */
-  /* overlaps the canvas touch area. When open, raise panel fully.       */
+  /* Mirrors .lb-panel exactly but on the right edge.                   */
+  /* Collapsed: only the 32px toggle tab is visible at mid-right of     */
+  /* the canvas area. Open: panel expands to full width from the right. */
 
-  /* Collapsed: panel is just the 32px toggle tab, pinned bottom-right.
-     Use a fixed small height instead of "65vh shifted down" so the
-     content (chat log etc.) can't peek out from behind the transform. */
   #chatclan-panel {
-    /* Override desktop horizontal-slide to vertical slide-up */
-    top: auto !important;
+    position: fixed !important;
+    top: var(--mob-top-total, 88px) !important;
     bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px)) !important;
-    right: 8px !important;
-    left: auto !important;
-    width: auto !important;
-    height: 32px !important;
-    max-height: 32px !important;
-    flex-direction: column-reverse !important; /* toggle tab at bottom */
-    border-radius: 10px 10px 0 0 !important;
-    overflow: hidden !important;
-    transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                right 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                left 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    z-index: 20000 !important;
-    transform: none !important;
-  }
-  /* Open: expand into the full slide-up panel */
-  #chatclan-panel.cc-open {
-    bottom: 0 !important;
     right: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 65vh !important;
-    max-height: 65vh !important;
-    border-radius: 16px 16px 0 0 !important;
+    left: auto !important;
+    /* Collapsed: shift body off-screen right, leaving only the toggle tab */
+    width: calc(var(--cc-panel-width) + var(--cc-toggle-w)) !important;
+    transform: translateX(var(--cc-panel-width)) !important;
+    height: auto !important;
+    max-height: none !important;
+    flex-direction: row !important;   /* toggle tab left, body right — same as desktop */
+    align-items: center !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                top 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    z-index: 20000 !important;
+    pointer-events: none !important;
+  }
+  /* Toggle tab is always tappable */
+  #chatclan-panel #chatclan-toggle-btn {
+    pointer-events: auto !important;
+  }
+  /* Open: slide body fully into view */
+  #chatclan-panel.cc-open {
+    transform: translateX(0) !important;
+    top: var(--mob-top-total, 88px) !important;
+    bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px)) !important;
+    align-items: stretch !important;
+    border-radius: 0 !important;
     z-index: 20500 !important;
+    pointer-events: auto !important;
   }
 
-  /* Toggle tab: compact pill, full width/height of collapsed panel */
+  /* Toggle tab: vertical strip, same height+style as .lb-toggle */
   #chatclan-toggle-btn {
-    width: 100% !important;
-    height: 32px !important;
-    border-radius: 10px 10px 0 0 !important;
-    border-left: 1px solid var(--cc-gold-deep) !important;
-    border-right: 1px solid var(--cc-gold-deep) !important;
-    border-bottom: none !important;
-    flex-direction: row !important;
-    align-self: auto !important;
-    margin: 0 !important;
     flex-shrink: 0 !important;
-    padding: 0 14px !important;
+    width: var(--cc-toggle-w, 30px) !important;
+    height: 64px !important;
+    align-self: center !important;
+    border-radius: 10px 0 0 10px !important;
+    border: 1px solid var(--cc-gold-deep) !important;
+    border-right: none !important;
+    flex-direction: column !important;
+    margin: 0 !important;
+    padding: 10px 0 !important;
   }
-  #chatclan-panel.cc-open #chatclan-toggle-btn {
-    border-radius: 16px 16px 0 0 !important;
-  }
-  /* Rivets at left/right on horizontal bar */
-  #chatclan-toggle-btn::before { top: 50%; left: 10px; transform: translateY(-50%); }
-  #chatclan-toggle-btn::after  { top: 50%; left: auto; right: 10px; transform: translateY(-50%); bottom: auto; }
+  /* Rivets: top and bottom of the vertical tab */
+  #chatclan-toggle-btn::before { top: 6px;    left: 50%; transform: translateX(-50%); bottom: auto; }
+  #chatclan-toggle-btn::after  { bottom: 6px; left: 50%; transform: translateX(-50%); top: auto; }
 
-  /* Panel body: full width, fills height */
+  /* Panel body: fills the remaining width when panel is open */
   #cc-panel-body {
-    width: 100% !important;
-    flex: 1 !important;
-    border-left: none !important;
-    border-top: 3px solid var(--cc-gold-dark) !important;
+    display: flex !important;
+    width: var(--cc-panel-width) !important;
+    flex-shrink: 0 !important;
+    flex: none !important;
+    border-left: 3px solid var(--cc-gold-dark) !important;
+    border-top: none !important;
+    align-self: stretch !important;
+    overflow: hidden !important;
   }
 
   /* ── Guest observer banner: sits just above footer, below chat tab ─ */
@@ -931,24 +931,32 @@
 /* ── Leaderboard: mobile overrides ──────────────────────────────────────── */
 @media (max-width: 720px) {
   .lb-panel {
+    /* Collapsed: panel slides off-screen left; only the toggle tab protrudes */
     top: var(--mob-top-total, 100px);
     bottom: calc(var(--mob-bottom-total, 106px) + env(safe-area-inset-bottom, 0px));
     --lb-width: 220px;
     --lb-toggle-w: 24px;
     height: auto;
     transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1), top 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Panel is a flex row: body on left, toggle tab on right edge */
+    align-items: center;
   }
   .lb-panel.lb-open {
     top: 0;
     bottom: 0;
     z-index: 510;
   }
+  /* Toggle tab: vertically centered within the canvas area (not full-height) */
+  .lb-toggle {
+    height: 52px;
+    /* Override align-self:center from base — let the panel flex-row center it */
+    align-self: center;
+  }
   .lb-body {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-  }
-  .lb-toggle {
-    height: 52px;
+    /* Body fills the full panel height when open */
+    align-self: stretch;
   }
   .lb-filters {
     gap: 3px;

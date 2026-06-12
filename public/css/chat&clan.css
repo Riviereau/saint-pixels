@@ -816,68 +816,17 @@
 /* ── Utility ─────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
 
-/* ── Mobile portrait (≤ 720 px) — vertical slide-up from bottom ──── */
+/* ── Mobile portrait (≤ 720 px) — right-edge slide, mirrors lb-panel ── */
 /*
-   Strategy: the whole #chatclan-panel sits above the mobile bottom-bar
-   (footer + palette + spawn = --mob-bottom-total ≈ 156px). In collapsed
-   state only the 32px toggle tab peeks out; the rest is hidden via
-   translateY. In open state the whole panel is fully visible.
-   mobile.css carries the actual pixel values; this file supplies only
-   the structure / aesthetics so the two sources stay independent.
+   Positioning, dimensions, and transition are handled entirely by
+   mobile.css. This block only supplies aesthetic overrides (font sizes,
+   padding) that don't conflict with the layout rules there.
 */
 @media (max-width: 720px) {
-  :root { --cc-panel-width: 100vw; }
+  :root { --cc-panel-width: 300px; }
 
-  /* The desktop horizontal slide is disabled; mobile.css handles motion */
-  #chatclan-panel {
-    right: 0 !important;   /* always flush-right — transition is via transform */
-    top: auto;
-    left: 0;
-    flex-direction: column-reverse;
-    border-radius: 16px 16px 0 0;
-    overflow: hidden;
-    /* pointer-events on the collapsed panel itself OFF; the toggle btn   */
-    /* keeps pointer-events:auto via its own rule, so the tab is tappable */
-    pointer-events: none;
+  /* Disable the desktop horizontal-right-slide; mobile.css uses translateX */
+  #chatclan-panel:not(.cc-open) {
+    right: 0 !important;   /* panel straddles the right edge via transform, not right offset */
   }
-  /* Re-enable pointer-events on the visible toggle tab */
-  #chatclan-panel #chatclan-toggle-btn {
-    pointer-events: auto;
-  }
-  /* Re-enable pointer-events on the full panel when open */
-  #chatclan-panel.cc-open {
-    pointer-events: auto;
-  }
-
-  #chatclan-toggle-btn {
-    width: 100%;
-    height: 32px;
-    border-radius: 16px 16px 0 0;
-    border: 1px solid var(--cc-gold-dark);
-    border-bottom: none;
-    flex-direction: row;
-    align-self: auto;
-    margin: 0;
-    flex-shrink: 0;
-  }
-  #chatclan-toggle-btn::before,
-  #chatclan-toggle-btn::after {
-    top: 50%;
-    left: auto;
-    transform: translateY(-50%);
-    bottom: auto;
-  }
-  #chatclan-toggle-btn::before { left: 10px; }
-  #chatclan-toggle-btn::after  { right: 10px; }
-
-  #cc-panel-body {
-    width: 100%;
-    flex: 1;
-    border-left: none;
-    border-top: 3px solid var(--cc-gold-dark);
-  }
-}
-
-@media (max-width: 480px) {
-  /* slightly taller on very small phones — mobile.css overrides height */
 }
