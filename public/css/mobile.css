@@ -582,16 +582,20 @@
     flex-direction: row !important;   /* toggle tab left, body right — same as desktop */
     align-items: center !important;
     border-radius: 0 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                 top 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                 bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
     z-index: 20000 !important;
+    /* Panel body is off-screen when collapsed — use pointer-events on children */
     pointer-events: none !important;
   }
-  /* Toggle tab is always tappable */
+  /* Toggle tab is ALWAYS tappable — must override the panel's pointer-events:none */
   #chatclan-panel #chatclan-toggle-btn {
     pointer-events: auto !important;
+    /* Also ensure it's above other fixed elements at the right edge */
+    position: relative !important;
+    z-index: 20001 !important;
   }
   /* Open: slide body fully into view */
   #chatclan-panel.cc-open {
@@ -940,16 +944,32 @@
     transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1), top 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     /* Panel is a flex row: body on left, toggle tab on right edge */
     align-items: center;
+    /* overflow:visible lets the toggle tab protrude even when panel is collapsed */
+    overflow: visible;
+    /* Collapsed panel body is off-screen — disable pointer events except on toggle */
+    pointer-events: none;
+  }
+  /* Toggle must always receive taps */
+  .lb-toggle {
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: rgba(56, 189, 248, 0.22) !important;
+    /* Sit above chat panel toggle and other fixed elements */
+    position: relative !important;
+    z-index: 501 !important;
+    min-width: 36px !important;
+    min-height: 64px !important;
   }
   .lb-panel.lb-open {
     top: 0;
     bottom: 0;
     z-index: 510;
+    pointer-events: auto;
+    overflow: hidden;
   }
   /* Toggle tab: vertically centered within the canvas area (not full-height) */
-  .lb-toggle {
+  .lb-panel.lb-open .lb-toggle {
     height: 52px;
-    /* Override align-self:center from base — let the panel flex-row center it */
     align-self: center;
   }
   .lb-body {

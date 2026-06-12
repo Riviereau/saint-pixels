@@ -12,21 +12,33 @@
 /* ── Mobile: overlay becomes scrollable when keyboard appears ────────────── */
 @media (max-width: 720px) {
   #authOverlay {
+    /* Override the Tailwind grid/place-items-center so it scrolls on mobile */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
     align-items: flex-start !important;
     overflow-y: auto !important;
+    overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
     /* dvh = dynamic viewport height — shrinks when keyboard appears */
     min-height: 100dvh;
     height: 100dvh !important;
-    padding: 16px 12px env(safe-area-inset-bottom, 16px);
+    padding: 0 12px !important;
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 24px)) !important;
+    box-sizing: border-box !important;
     scroll-padding-bottom: 20px;
   }
   #authOverlay > div {
-    margin: auto;
-    margin-top: 12px;
-    margin-bottom: max(20px, env(safe-area-inset-bottom));
-    width: min(420px, 100%);
+    /* Must have explicit top margin so card is visible below status bar */
+    margin: 0 auto !important;
+    margin-top: 24px !important;
+    margin-bottom: max(24px, env(safe-area-inset-bottom, 24px)) !important;
+    width: min(420px, 100%) !important;
+    max-width: 100% !important;
     padding: 1.25rem !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
   }
   /* hCaptcha compact widget: allow centering on narrow screens */
   .h-captcha {

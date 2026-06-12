@@ -110,38 +110,67 @@
       const overlay = document.getElementById('authOverlay');
       if (!overlay) return;
 
-      // If Alpine has hidden the overlay properly, nothing to do
-      if (overlay.style.display === 'none' || overlay.style.display === '') return;
+      // Strip pointer-events whenever the overlay is display:none so it can
+      // never block touches even if visibility is toggled by Alpine mid-session.
+      function syncOverlayPointerEvents() {
+        const computed = window.getComputedStyle(overlay).display;
+        if (computed === 'none') {
+          overlay.style.pointerEvents = 'none';
+          overlay.style.visibility    = 'hidden';
+        } else {
+          overlay.style.pointerEvents = '';
+          overlay.style.visibility    = '';
+        }
+      }
 
-      // If the overlay is visible but currentUser is set (or guestObserver is
-      // true in Alpine), the overlay should be hidden.  We can't read Alpine
-      // state directly, so we read the rendered display value.
-      // If x-cloak was already stripped and the overlay is display:none, fine.
-      // If somehow the overlay has display:block/grid when it shouldn't, hide it.
+      // Watch for Alpine toggling display via style or x-show
+      new MutationObserver(syncOverlayPointerEvents)
+        .observe(overlay, { attributes: true, attributeFilter: ['style', 'class'] });
+
+      // Apply immediately
+      syncOverlayPointerEvents();
+
+      // Also force-hide if overlay is still visible but a user is already active
+      // (catches the Alpine boot delay race)
       const computed = window.getComputedStyle(overlay).display;
       if (computed !== 'none') {
-        // Check if a real user or guest session is active
         const hasUser  = !!(window.currentUser || window.__username);
         const hasToken = !!(window.__token);
         if (hasUser || hasToken) {
-          overlay.style.display = 'none';
+          overlay.style.display       = 'none';
           overlay.style.pointerEvents = 'none';
+          overlay.style.visibility    = 'hidden';
           console.info('[android] Auth overlay force-hidden (Alpine delayed, user present)');
         }
       }
     }, 8000);
+
+    // Belt-and-suspenders: whenever a real user logs in, ensure overlay can't block
+    window.addEventListener('sp-state-change', function (e) {
+      if (!e.detail || !e.detail.currentUser) return;
+      const overlay = document.getElementById('authOverlay');
+      if (!overlay) return;
+      const computed = window.getComputedStyle(overlay).display;
+      if (computed === 'none') {
+        overlay.style.pointerEvents = 'none';
+        overlay.style.visibility    = 'hidden';
+      }
+    });
   });
 
   // ── 4. Guest observer banner — visibility page event ──────────────────────
   // Android Doze can delay setTimeout by minutes in background tabs.
   // When the user switches back to the tab, fire `sp-guest-nudge` so
   // guest.js can check whether the observer banner should be shown.
-
-  let _nudgeFired = false;
+  //
+  // We do NOT use a global _nudgeFired flag here — we want each visibility
+  // event to be able to nudge guest.js independently, because the first nudge
+  // may fire before guest.js has resolved auth state.
 
   function fireGuestNudge() {
-    if (_nudgeFired) return;
-    _nudgeFired = true;
+    // Only nudge if no real user is logged in and no banner is already visible
+    if (window.currentUser && !/^Guest \d{7}$/.test(window.currentUser)) return;
+    if (document.getElementById('gm-observer-banner')) return;
     window.dispatchEvent(new CustomEvent('sp-guest-nudge'));
   }
 
@@ -153,9 +182,27 @@
     }
   });
 
-  // Also fire once the page is fully loaded in case we're already visible
+  // Also fire at load time in case we're already visible
   window.addEventListener('load', function () {
     setTimeout(fireGuestNudge, 1200);
+    // Second nudge at 4 s covers Doze-delayed background loads
+    setTimeout(fireGuestNudge, 4000);
+  });
+
+  // ── 4b. Direct sp-state-change fallback ───────────────────────────────────
+  // If updateAuthState never fires (network failure, Doze, background tab),
+  // guest.js's sp-state-change listener never receives currentUser:null and the
+  // observer banner never appears. After 6 s, if no user and no banner, dispatch
+  // the event directly so guest.js's main code path triggers.
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (window.currentUser) return; // real user logged in
+      if (window.__token) return;     // guest token active
+      if (document.getElementById('gm-observer-banner')) return; // already shown
+      window.dispatchEvent(new CustomEvent('sp-state-change', {
+        detail: { currentUser: null }
+      }));
+    }, 6000);
   });
 
   // ── 5. Leaderboard + chat toggle touch-area fix ───────────────────────────
