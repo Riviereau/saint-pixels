@@ -129,6 +129,24 @@ function initializeDatabase(db) {
       id  INTEGER PRIMARY KEY CHECK (id = 1),
       seq INTEGER NOT NULL DEFAULT 0
     );
+
+    -- Edit history for chat messages (both global and clan chat).
+    -- 'kind' discriminates which table 'message_id' refers to, since
+    -- chat_messages and clan_chat_messages each have their own
+    -- autoincrement id space.
+    --   kind        = 'global' | 'clan'
+    --   message_id  = chat_messages.id  OR  clan_chat_messages.id
+    --   prev_message = the message text *before* this edit was applied
+    --   edited_at    = ms timestamp (UTC) when this edit was made
+    CREATE TABLE IF NOT EXISTS chat_message_edits (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind          TEXT    NOT NULL,
+      message_id    INTEGER NOT NULL,
+      prev_message  TEXT    NOT NULL,
+      edited_at     INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_message_edits_lookup
+      ON chat_message_edits(kind, message_id, edited_at);
   `);
 
   // Seed the counter row if it doesn't exist yet.

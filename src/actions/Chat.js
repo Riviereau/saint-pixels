@@ -193,7 +193,32 @@ function setDb(db) {
       sent_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_chat_sent_at ON chat_messages(sent_at);
+
+    -- Edit history shared with clan chat — see database.js for schema notes.
+    CREATE TABLE IF NOT EXISTS chat_message_edits (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind          TEXT    NOT NULL,
+      message_id    INTEGER NOT NULL,
+      prev_message  TEXT    NOT NULL,
+      edited_at     INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_message_edits_lookup
+      ON chat_message_edits(kind, message_id, edited_at);
   `);
+
+  // ── Column migration: edited_at / original_message ────────────────────────
+  // SQLite has no "ADD COLUMN IF NOT EXISTS" — check pragma first.
+  try {
+    const cols = db.pragma('table_info(chat_messages)').map(c => c.name);
+    if (!cols.includes('edited_at')) {
+      db.exec('ALTER TABLE chat_messages ADD COLUMN edited_at INTEGER');
+    }
+    if (!cols.includes('original_message')) {
+      db.exec('ALTER TABLE chat_messages ADD COLUMN original_message TEXT');
+    }
+  } catch (err) {
+    console.error('[chat] Migration error (chat_messages edit columns):', err);
+  }
 }
 
 function setBroadcast(fn) {
@@ -309,7 +334,7 @@ function history(req, res) {
   if (!_db) return res.status(500).json({ error: 'Database not ready.' });
   try {
     const rows = _db.prepare(`
-      SELECT id, username, message, sent_at
+      SELECT id, username, message, sent_at, edited_at
       FROM   chat_messages
       ORDER  BY sent_at DESC
       LIMIT  ?
@@ -322,4 +347,128 @@ function history(req, res) {
   }
 }
 
-module.exports = { setDb, setBroadcast, send, history };
+// ── PATCH /api/chat/:id — edit a message ──────────────────────────────────────
+//
+// Only the message's original author (matching the current session's
+// username — works identically for guest and registered accounts, since
+// getSession() returns the same shape for both) may edit it.
+//
+// Every edit appends the *previous* text to chat_message_edits before
+// overwriting chat_messages.message, so the full revision chain can be
+// reconstructed: original_message -> edit 1 -> edit 2 -> ... -> current.
+
+async function edit(req, res) {
+  if (!_db) return res.status(500).json({ error: 'Database not ready.' });
+
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'Not authenticated.' });
+
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid message id.' });
+  }
+
+  const rawBody = req.body?.message;
+  if (rawBody === undefined || rawBody === null || typeof rawBody !== 'string') {
+    return res.status(400).json({ error: 'Message must be a string.' });
+  }
+
+  const message = sanitiseMessage(rawBody);
+  if (!message) return res.status(400).json({ error: 'Message cannot be empty.' });
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({ error: `Message too long (max ${MAX_MESSAGE_LENGTH} chars).` });
+  }
+  if (SUSPICIOUS_RE.test(rawBody)) {
+    return res.status(400).json({ error: 'Message contains disallowed content.' });
+  }
+  if (URL_RE.test(message)) {
+    return res.status(400).json({ error: 'Links are not allowed in chat.' });
+  }
+  if (isSpammy(message)) {
+    return res.status(400).json({ error: 'Message looks like spam.' });
+  }
+
+  const row = _db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Message not found.' });
+
+  if (row.username !== session.username) {
+    return res.status(403).json({ error: 'You can only edit your own messages.' });
+  }
+
+  if (message === row.message) {
+    // No-op edit — nothing to record, just return current state.
+    return res.json({
+      ok: true, type: 'chat_edit', id: row.id, username: row.username,
+      message: row.message, sent_at: row.sent_at, edited_at: row.edited_at || null,
+    });
+  }
+
+  const now = Date.now();
+  try {
+    const tx = _db.transaction(() => {
+      _db.prepare(`
+        INSERT INTO chat_message_edits (kind, message_id, prev_message, edited_at)
+        VALUES ('global', ?, ?, ?)
+      `).run(id, row.message, now);
+
+      _db.prepare(`
+        UPDATE chat_messages
+        SET message = ?, edited_at = ?,
+            original_message = COALESCE(original_message, ?)
+        WHERE id = ?
+      `).run(message, now, row.message, id);
+    });
+    tx();
+  } catch (err) {
+    console.error('[chat] edit error:', err);
+    return res.status(500).json({ error: 'Could not save edit.' });
+  }
+
+  const payload = {
+    type: 'chat_edit', id, username: row.username, message, sent_at: row.sent_at, edited_at: now,
+  };
+  if (_broadcast) _broadcast(payload);
+
+  return res.json({ ok: true, ...payload });
+}
+
+// ── GET /api/chat/:id/history — revision history for a message ────────────────
+//
+// Returns the chain of previous versions, oldest first, each with the UTC
+// timestamp the edit that *produced the next version* was made. The final
+// entry's `message` is always the original text; the current text is not
+// included here (the client already has it).
+
+function getHistory(req, res) {
+  if (!_db) return res.status(500).json({ error: 'Database not ready.' });
+
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'Not authenticated.' });
+
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid message id.' });
+  }
+
+  const row = _db.prepare('SELECT username, edited_at FROM chat_messages WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Message not found.' });
+
+  if (!row.edited_at) {
+    return res.json({ edits: [] });
+  }
+
+  try {
+    const rows = _db.prepare(`
+      SELECT prev_message AS message, edited_at
+      FROM   chat_message_edits
+      WHERE  kind = 'global' AND message_id = ?
+      ORDER  BY edited_at ASC
+    `).all(id);
+    return res.json({ edits: rows });
+  } catch (err) {
+    console.error('[chat] getHistory error:', err);
+    return res.status(500).json({ error: 'Could not load edit history.' });
+  }
+}
+
+module.exports = { setDb, setBroadcast, send, history, edit, getHistory };

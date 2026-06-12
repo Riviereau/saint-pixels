@@ -724,6 +724,20 @@
     </div>
   </div>
 
+  <!-- ── Message edit-history modal ──────────────────────────────────────── -->
+  <div class="cc-edit-history-overlay" id="cc-edit-history-overlay">
+    <div class="cc-edit-history-modal" role="dialog" aria-modal="true" aria-label="Message edit history">
+      <div class="cc-eh-header">
+        <span class="cc-eh-title">Edit History</span>
+        <button class="cc-eh-close" id="cc-eh-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <ul class="cc-eh-list" id="cc-eh-list"></ul>
+      <div class="cc-eh-footer">
+        <button class="cc-eh-restore" id="cc-eh-restore" type="button" disabled>Use selected version</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Chat + Clan panel ────────────────────────────────────────────────── -->
   <div id="chatclan-panel" role="dialog" aria-label="Chat and Clan">
 
@@ -773,15 +787,15 @@
 
       <!-- Input -->
       <form id="cc-global-form" class="cc-input-row" autocomplete="off">
-        <input
+        <textarea
           id="cc-global-input"
-          class="cc-input"
-          type="text"
+          class="cc-input cc-input--autosize"
           maxlength="200"
           placeholder="Message everyone…"
           autocomplete="off"
           spellcheck="false"
-        />
+          rows="1"
+        ></textarea>
         <button id="cc-global-send" class="cc-send-btn cc-send-btn--global" type="submit">Send</button>
       </form>
 
@@ -865,15 +879,15 @@
         <div id="cc-sub-chat" class="cc-sub-page active">
           <ul id="cc-clan-messages" class="cc-msg-list" aria-live="polite" aria-label="Clan chat messages"></ul>
           <form id="cc-clan-form" class="cc-input-row" autocomplete="off">
-            <input
+            <textarea
               id="cc-clan-input"
-              class="cc-input"
-              type="text"
+              class="cc-input cc-input--autosize"
               maxlength="300"
               placeholder="Message clanmates…"
               autocomplete="off"
               spellcheck="false"
-            />
+              rows="1"
+            ></textarea>
             <button id="cc-clan-send" class="cc-send-btn cc-send-btn--clan" type="submit">Send</button>
           </form>
         </div>

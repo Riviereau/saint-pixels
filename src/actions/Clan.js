@@ -186,7 +186,31 @@ function setDb(db) {
       sent_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_clan_chat_clan_sent ON clan_chat_messages(clan_id, sent_at);
+
+    -- Edit history shared with global chat — see database.js for schema notes.
+    CREATE TABLE IF NOT EXISTS chat_message_edits (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind          TEXT    NOT NULL,
+      message_id    INTEGER NOT NULL,
+      prev_message  TEXT    NOT NULL,
+      edited_at     INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_message_edits_lookup
+      ON chat_message_edits(kind, message_id, edited_at);
   `);
+
+  // ── Column migration: edited_at / original_message ────────────────────────
+  try {
+    const cols = db.pragma('table_info(clan_chat_messages)').map(c => c.name);
+    if (!cols.includes('edited_at')) {
+      db.exec('ALTER TABLE clan_chat_messages ADD COLUMN edited_at INTEGER');
+    }
+    if (!cols.includes('original_message')) {
+      db.exec('ALTER TABLE clan_chat_messages ADD COLUMN original_message TEXT');
+    }
+  } catch (err) {
+    console.error('[clan] Migration error (clan_chat_messages edit columns):', err);
+  }
 }
 
 function setBroadcast(fn) {
@@ -890,7 +914,7 @@ function chatHistory(req, res) {
 
   try {
     const rows = _db.prepare(`
-      SELECT id, username, role, message, sent_at
+      SELECT id, username, role, message, sent_at, edited_at
       FROM   clan_chat_messages
       WHERE  clan_id = ?
       ORDER  BY sent_at DESC
@@ -901,6 +925,134 @@ function chatHistory(req, res) {
   } catch (err) {
     console.error('[clan] chatHistory error:', err);
     return res.status(500).json({ error: 'Could not load clan chat history.' });
+  }
+}
+
+// ── PATCH /api/clan/chat/:id — edit a clan chat message ───────────────────────
+//
+// Only the message's original author may edit it, and only while still a
+// member of the clan the message belongs to (mirrors the access check in
+// sendChat / chatHistory).
+
+async function editChat(req, res) {
+  if (!_db) return res.status(500).json({ error: 'Database not ready.' });
+
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'Not authenticated.' });
+
+  const membership = getMembership(session.username);
+  if (!membership) return res.status(403).json({ error: 'You must be in a clan to use clan chat.' });
+
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid message id.' });
+  }
+
+  const rawBody = req.body?.message;
+  if (rawBody === undefined || rawBody === null || typeof rawBody !== 'string') {
+    return res.status(400).json({ error: 'Message must be a string.' });
+  }
+
+  const message = sanitise(rawBody);
+  if (!message) return res.status(400).json({ error: 'Message cannot be empty.' });
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({ error: `Message too long (max ${MAX_MESSAGE_LENGTH} chars).` });
+  }
+  if (SUSPICIOUS_RE.test(rawBody)) {
+    return res.status(400).json({ error: 'Message contains disallowed content.' });
+  }
+  if (URL_RE.test(message)) {
+    return res.status(400).json({ error: 'Links are not allowed in chat.' });
+  }
+  if (isSpammy(message)) {
+    return res.status(400).json({ error: 'Message looks like spam.' });
+  }
+
+  const row = _db.prepare('SELECT * FROM clan_chat_messages WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Message not found.' });
+
+  if (row.clan_id !== membership.clan_id) {
+    return res.status(403).json({ error: 'That message is not in your clan.' });
+  }
+  if (row.username !== session.username) {
+    return res.status(403).json({ error: 'You can only edit your own messages.' });
+  }
+
+  if (message === row.message) {
+    return res.json({
+      ok: true, type: 'clan_chat_edit', id: row.id, clan_id: row.clan_id,
+      username: row.username, message: row.message, sent_at: row.sent_at,
+      edited_at: row.edited_at || null,
+    });
+  }
+
+  const now = Date.now();
+  try {
+    const tx = _db.transaction(() => {
+      _db.prepare(`
+        INSERT INTO chat_message_edits (kind, message_id, prev_message, edited_at)
+        VALUES ('clan', ?, ?, ?)
+      `).run(id, row.message, now);
+
+      _db.prepare(`
+        UPDATE clan_chat_messages
+        SET message = ?, edited_at = ?,
+            original_message = COALESCE(original_message, ?)
+        WHERE id = ?
+      `).run(message, now, row.message, id);
+    });
+    tx();
+  } catch (err) {
+    console.error('[clan] edit error:', err);
+    return res.status(500).json({ error: 'Could not save edit.' });
+  }
+
+  const payload = {
+    type: 'clan_chat_edit', id, clan_id: row.clan_id, username: row.username,
+    message, sent_at: row.sent_at, edited_at: now,
+  };
+  if (_broadcast) _broadcast(payload);
+
+  return res.json({ ok: true, ...payload });
+}
+
+// ── GET /api/clan/chat/:id/history — revision history for a clan message ──────
+
+function getChatHistory(req, res) {
+  if (!_db) return res.status(500).json({ error: 'Database not ready.' });
+
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'Not authenticated.' });
+
+  const membership = getMembership(session.username);
+  if (!membership) return res.status(403).json({ error: 'You must be in a clan to use clan chat.' });
+
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid message id.' });
+  }
+
+  const row = _db.prepare('SELECT clan_id, edited_at FROM clan_chat_messages WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Message not found.' });
+  if (row.clan_id !== membership.clan_id) {
+    return res.status(403).json({ error: 'That message is not in your clan.' });
+  }
+
+  if (!row.edited_at) {
+    return res.json({ edits: [] });
+  }
+
+  try {
+    const rows = _db.prepare(`
+      SELECT prev_message AS message, edited_at
+      FROM   chat_message_edits
+      WHERE  kind = 'clan' AND message_id = ?
+      ORDER  BY edited_at ASC
+    `).all(id);
+    return res.json({ edits: rows });
+  } catch (err) {
+    console.error('[clan] getChatHistory error:', err);
+    return res.status(500).json({ error: 'Could not load edit history.' });
   }
 }
 
@@ -926,4 +1078,6 @@ module.exports = {
   removeEnemy,
   sendChat,
   chatHistory,
+  editChat,
+  getChatHistory,
 };

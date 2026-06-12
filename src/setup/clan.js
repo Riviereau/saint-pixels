@@ -55,6 +55,8 @@ function initializeClan(app, db, broadcastSSE, clanLimiter) {
   // ── Clan chat ────────────────────────────────────────────────────────────
   app.post('/api/clan/chat', limiter, Clan.sendChat);
   app.get('/api/clan/chat',  limiter, Clan.chatHistory);
+  app.patch('/api/clan/chat/:id',         limiter, Clan.editChat);
+  app.get('/api/clan/chat/:id/history',   limiter, Clan.getChatHistory);
 }
 
 module.exports = { initializeClan };

@@ -35,6 +35,17 @@ function initializeChat(app, db, broadcastSSE, chatLimiter, chatHistoryLimiter) 
   } else {
     app.get('/api/chat', Chat.history);
   }
+
+  // PATCH: edit a message (author-only, enforced in Chat.edit). Reuses the
+  // POST rate limiter — edits are content writes just like new messages.
+  app.patch('/api/chat/:id', chatLimiter, Chat.edit);
+
+  // GET: per-message edit/revision history.
+  if (chatHistoryLimiter) {
+    app.get('/api/chat/:id/history', chatHistoryLimiter, Chat.getHistory);
+  } else {
+    app.get('/api/chat/:id/history', Chat.getHistory);
+  }
 }
 
 module.exports = { initializeChat };

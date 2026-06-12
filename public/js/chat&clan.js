@@ -132,14 +132,40 @@
   function formatTime(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
+  /** Format a ms timestamp as UTC time for the "edited" tooltip / badge. */
+  function formatUTC(ts) {
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      month: 'short', day: 'numeric',
+      timeZone: 'UTC', hour12: false,
+    }) + ' UTC';
+  }
 
-  function appendMessage(list, { username, message, sent_at, role }, scroll, seenIds, capacity) {
+  /**
+   * Render (or re-render) a message <li>.
+   *
+   * kind: 'global' | 'clan' — used to route edit/history API calls and to
+   *   pick the right SSE incoming handler when an edit broadcast arrives.
+   *
+   * The full message data is cached on the <li>'s dataset so the ⋮ menu
+   * (added after the fact) and edit-in-place logic can read it without
+   * threading extra state through closures.
+   */
+  function appendMessage(list, data, scroll, seenIds, capacity, kind) {
+    const { username, message, sent_at, role, id, edited_at } = data;
     const safeUser = String(username ?? '').slice(0, 30);
     const safeMsg  = String(message  ?? '').slice(0, 300);
     const safeTime = formatTime(typeof sent_at === 'number' ? sent_at : Date.now());
 
     const li = document.createElement('li');
     li.className = 'cc-msg';
+    li.dataset.kind = kind || 'global';
+    if (id !== undefined && id !== null) li.dataset.id = String(id);
+    li.dataset.username = safeUser;
+    li.dataset.message  = safeMsg;
+    li.dataset.sentAt   = String(sent_at || Date.now());
+    if (edited_at) li.dataset.editedAt = String(edited_at);
 
     if (role === 'leader' || role === 'officer') {
       const badge = document.createElement('span');
@@ -164,6 +190,15 @@
     li.appendChild(userSpan);
     li.appendChild(textSpan);
     li.appendChild(timeSpan);
+
+    if (edited_at) {
+      li.appendChild(buildEditedBadge(edited_at));
+    }
+
+    // ⋮ menu — present on every message; Copy is always available,
+    // Edit / Edit history are added conditionally inside buildMsgMenuBtn.
+    li.appendChild(buildMsgMenuBtn());
+
     list.appendChild(li);
 
     while (list.children.length > capacity) {
@@ -171,6 +206,20 @@
     }
     if (scroll !== false) scrollToBottom(list);
   }
+
+  function buildEditedBadge(editedAt) {
+    const badge = document.createElement('span');
+    badge.className = 'cc-edited-badge';
+    badge.textContent = '(edited)';
+    badge.title = `Edited ${formatUTC(editedAt)} — click for history`;
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const li = badge.closest('.cc-msg');
+      if (li) openEditHistory(li);
+    });
+    return badge;
+  }
+
 
   function appendSystem(list, text) {
     const li = document.createElement('li');

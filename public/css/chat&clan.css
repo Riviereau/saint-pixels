@@ -276,10 +276,11 @@
 }
 
 .cc-msg {
+  position: relative;
   font-size: 0.8rem;
   line-height: 1.45;
   color: #e8d9b5;
-  padding: 0.3rem 0.5rem;
+  padding: 0.3rem 1.6rem 0.3rem 0.5rem;
   border-radius: 6px;
   background: rgba(0,0,0,0.14);
   border: 1px solid rgba(255,215,107,0.06);
@@ -292,18 +293,150 @@
   cursor: pointer;
 }
 .cc-msg .cc-user:hover { text-decoration: underline; }
-.cc-msg .cc-text { color: #e8d9b5; }
+.cc-msg .cc-text { color: #e8d9b5; white-space: pre-wrap; }
 .cc-msg .cc-time {
   font-size: 0.65rem;
   color: #8a7a60;
   margin-left: 0.35em;
 }
+.cc-msg .cc-edited-badge {
+  font-size: 0.62rem;
+  font-style: italic;
+  color: #8a7a60;
+  margin-left: 0.35em;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.cc-msg .cc-edited-badge:hover { color: #c9b690; }
+
+/* ── Per-message ⋮ menu ──────────────────────────────────────────────── */
+.cc-msg-menu-btn {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #8a7a60;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.cc-msg:hover .cc-msg-menu-btn,
+.cc-msg-menu-btn.cc-menu-open {
+  opacity: 1;
+}
+.cc-msg-menu-btn:hover,
+.cc-msg-menu-btn.cc-menu-open {
+  background: rgba(255,215,107,0.14);
+  color: var(--cc-gold);
+}
+/* Always visible on touch devices — no hover state to reveal it */
+@media (pointer: coarse) {
+  .cc-msg-menu-btn { opacity: 0.55; }
+}
+
+.cc-msg-menu {
+  position: absolute;
+  top: 1.5rem;
+  right: 0.15rem;
+  z-index: 30;
+  min-width: 132px;
+  background: rgba(20,16,10,0.97);
+  border: 1px solid rgba(255,215,107,0.22);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.cc-msg-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #e8d9b5;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cc-msg-menu-item:hover { background: rgba(255,215,107,0.14); }
+.cc-msg-menu-item.cc-menu-item--copied { color: #7be08a; }
+
+/* ── Inline edit mode ─────────────────────────────────────────────────── */
+.cc-msg.cc-editing .cc-text { display: none; }
+.cc-msg-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.1rem;
+}
+.cc-msg-edit-textarea {
+  width: 100%;
+  min-height: 2.2em;
+  max-height: 40vh;
+  resize: none;
+  background: linear-gradient(180deg, rgba(0,0,0,0.32), rgba(0,0,0,0.18));
+  border: 1px solid var(--cc-gold-deep);
+  border-radius: 8px;
+  color: #f1e6c8;
+  font-size: 0.8rem;
+  font-family: inherit;
+  padding: 0.4rem 0.55rem;
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.45);
+  overflow-y: auto;
+}
+.cc-msg-edit-textarea:focus {
+  border-color: var(--cc-gold);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,215,107,0.25);
+}
+.cc-msg-edit-actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+.cc-msg-edit-actions button {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid;
+}
+.cc-msg-edit-save {
+  background: rgba(56,189,248,0.18);
+  border-color: rgba(56,189,248,0.4);
+  color: #38bdf8;
+}
+.cc-msg-edit-save:hover { background: rgba(56,189,248,0.3); }
+.cc-msg-edit-cancel {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.12);
+  color: #94a3b8;
+}
+.cc-msg-edit-cancel:hover { background: rgba(255,255,255,0.1); }
+
 .cc-msg.cc-system {
   color: #c9b690;
   font-style: italic;
   font-size: 0.74rem;
   text-align: center;
-  padding: 0.2rem 0;
+  padding: 0.2rem 0.5rem;
 }
 .cc-role-badge {
   display: inline-block;
@@ -815,6 +948,131 @@
 
 /* ── Utility ─────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
+
+/* ── Chat input: auto-growing textarea ─────────────────────────────────── */
+/* Replaces the old single-line <input>. JS sets height via scrollHeight;
+   these rules bound it and keep the resize handle hidden. */
+textarea.cc-input.cc-input--autosize {
+  resize: none;
+  overflow-y: auto;
+  font-family: inherit;
+  line-height: 1.35;
+  /* Roughly one line of text at this font-size/padding */
+  min-height: 2.05rem;
+  max-height: 7.5rem; /* ~5 lines before scrolling kicks in */
+  transition: height 0.08s ease-out;
+}
+/* Keep the send button aligned to the bottom as the textarea grows */
+.cc-input-row {
+  align-items: flex-end;
+}
+
+/* ── Message edit-history modal ─────────────────────────────────────── */
+.cc-edit-history-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 21000; /* above the chat panel (20500) */
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.cc-edit-history-overlay.cc-eh-open { display: flex; }
+
+.cc-edit-history-modal {
+  width: 100%;
+  max-width: 380px;
+  max-height: 80vh;
+  background: rgba(20,16,10,0.98);
+  border: 1px solid rgba(255,215,107,0.22);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cc-eh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid rgba(255,215,107,0.14);
+  flex-shrink: 0;
+}
+.cc-eh-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--cc-gold);
+}
+.cc-eh-close {
+  background: transparent;
+  border: none;
+  color: #8a7a60;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 5px;
+}
+.cc-eh-close:hover { color: #e8d9b5; background: rgba(255,215,107,0.1); }
+
+.cc-eh-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.cc-eh-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,215,107,0.08);
+  background: rgba(0,0,0,0.18);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.cc-eh-item:hover { border-color: rgba(255,215,107,0.3); }
+.cc-eh-item.cc-eh-selected {
+  border-color: var(--cc-gold);
+  background: rgba(255,215,107,0.08);
+}
+.cc-eh-item-text {
+  font-size: 0.78rem;
+  color: #e8d9b5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cc-eh-item-meta {
+  font-size: 0.65rem;
+  color: #8a7a60;
+}
+.cc-eh-item-meta.cc-eh-current { color: #7be08a; }
+
+.cc-eh-footer {
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid rgba(255,215,107,0.14);
+  flex-shrink: 0;
+}
+.cc-eh-restore {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid rgba(56,189,248,0.4);
+  background: rgba(56,189,248,0.18);
+  color: #38bdf8;
+}
+.cc-eh-restore:hover:not(:disabled) { background: rgba(56,189,248,0.3); }
+.cc-eh-restore:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Mobile portrait (≤ 720 px) — right-edge slide, mirrors lb-panel ── */
 /*
