@@ -92,3 +92,15 @@
 #fullscreen-btn {
   z-index: 20002 !important;
 }
+
+/* ── Mobile: shrink stars so they don't dominate small screens ───────────── */
+@media (max-width: 720px) {
+  .sp-star,
+  #viewport canvas.sp-star-canvas {
+    max-width: 18px !important;
+    max-height: 18px !important;
+    filter:
+      drop-shadow(0 0 3px rgba(255, 215, 0, 0.80))
+      drop-shadow(0 0 7px rgba(255, 180, 0, 0.40)) !important;
+  }
+}

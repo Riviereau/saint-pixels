@@ -563,6 +563,101 @@
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
   }
+  /* ── Chat + Clan panel: portrait mobile ─────────────────────────── */
+  /* On mobile the panel slides up from the bottom. Collapsed state      */
+  /* must keep the toggle tab (32px) ABOVE the footer-panel (48px) +    */
+  /* palette (108px) + spawn (48px) = 204px from bottom — so nothing    */
+  /* overlaps the canvas touch area. When open, raise panel fully.       */
+
+  /* Collapsed: panel is off-screen except the 32px toggle tab at bottom */
+  #chatclan-panel {
+    /* Override desktop horizontal-slide to vertical slide-up */
+    top: auto !important;
+    bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px)) !important;
+    right: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 65vh !important;
+    max-height: 65vh !important;
+    flex-direction: column-reverse !important; /* toggle tab at bottom */
+    border-radius: 16px 16px 0 0 !important;
+    overflow: hidden !important;
+    transition: bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    z-index: 20000 !important;
+    /* Collapsed: entire panel is below the mobile UI bar */
+    transform: translateY(calc(100% - 32px)) !important;
+  }
+  /* Open: slide the panel up fully */
+  #chatclan-panel.cc-open {
+    transform: translateY(0) !important;
+    bottom: 0 !important;
+    z-index: 20500 !important;
+  }
+
+  /* Toggle tab: horizontal strip at the bottom of the panel */
+  #chatclan-toggle-btn {
+    width: 100% !important;
+    height: 32px !important;
+    border-radius: 16px 16px 0 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    flex-direction: row !important;
+    align-self: auto !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+    /* Ensure it does NOT block canvas touches when collapsed:       */
+    /* pointer-events is auto so the tab itself is still tappable,  */
+    /* but it's positioned above the bottom UI bar, not over canvas  */
+  }
+  /* Rivets at left/right on horizontal bar */
+  #chatclan-toggle-btn::before { top: 50%; left: 10px; transform: translateY(-50%); }
+  #chatclan-toggle-btn::after  { top: 50%; left: auto; right: 10px; transform: translateY(-50%); bottom: auto; }
+
+  /* Panel body: full width, fills height */
+  #cc-panel-body {
+    width: 100% !important;
+    flex: 1 !important;
+    border-left: none !important;
+    border-top: 3px solid var(--cc-gold-dark) !important;
+  }
+
+  /* ── Guest observer banner: sits just above footer, below chat tab ─ */
+  .gm-observer-banner {
+    bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px) + 36px) !important;
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    left: 8px !important;
+    border-radius: 12px 12px 0 0 !important;
+    transform: translateX(0) translateY(110%) !important;
+  }
+  .gm-observer-banner.gm-visible {
+    transform: translateX(0) translateY(0) !important;
+  }
+  .gm-observer-badge {
+    bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px) + 40px) !important;
+  }
+
+  /* ── Guest HUD: position above footer so it never covers canvas ─── */
+  .gm-hud {
+    top: auto !important;
+    bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px) + 4px) !important;
+    right: 0 !important;
+    left: 0 !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    border-top: 1px solid rgba(56,189,248,0.2) !important;
+  }
+
+  /* ── Stars: cap size on mobile ───────────────────────────────────── */
+  .sp-star,
+  #viewport canvas.sp-star-canvas {
+    max-width: 20px !important;
+    max-height: 20px !important;
+  }
+
   .tl-load-bar-label {
     min-width: 110px !important;
     font-size: 0.67rem !important;

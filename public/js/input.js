@@ -394,13 +394,23 @@ let touchStartedOnUI = false;
 const _uiLayersInsideViewport = [
   document.getElementById('fullscreen-palette'),
   document.getElementById('fullscreen-btn'),
+  // Chat+clan toggle tab sits at the bottom of the viewport on mobile;
+  // touches on it must not trigger canvas pixel placement.
+  document.getElementById('chatclan-toggle-btn'),
+  document.getElementById('chatclan-panel'),
 ];
 
 document.addEventListener('touchstart', (e) => {
   const target = e.target;
   const insideViewport = viewport.contains(target);
   const onUILayer = _uiLayersInsideViewport.some(el => el && el.contains(target));
-  touchStartedOnUI = !insideViewport || onUILayer;
+  // Also catch any touch on fixed overlays/panels that may visually overlap the viewport
+  const onFixedOverlay = !!target.closest(
+    '#chatclan-panel, #chatclan-toggle-btn, .lb-panel, .lb-toggle, ' +
+    '#lb-panel, .profile-modal-overlay, #chatclan-panel, ' +
+    '.gm-observer-banner, .gm-hud, .gm-conversion-overlay, .gm-upgrade-strip'
+  );
+  touchStartedOnUI = !insideViewport || onUILayer || onFixedOverlay;
 }, { passive: true, capture: true });
 
 viewport.addEventListener('touchstart', (e) => {

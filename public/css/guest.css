@@ -439,63 +439,68 @@ html[data-guest] #eraserBtn::after {
 /* ── Responsive tweaks ────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
-  /* Observer banner: full-width pill on mobile */
+  /* Observer banner: full-width above the footer UI row */
   .gm-observer-banner {
+    /* Position is controlled by mobile.css which knows --mob-bottom-total.
+       Here we just ensure good aesthetics at mobile widths. */
     border-radius: 12px 12px 0 0;
     padding: 10px 12px 12px;
     gap: 8px;
+    /* Reset the desktop translateX centering — mobile.css pins left/right */
+    left: 8px !important;
+    right: 8px !important;
+    transform: translateX(0) translateY(110%);
+    width: auto !important;
+    max-width: none !important;
   }
+  .gm-observer-banner.gm-visible {
+    transform: translateX(0) translateY(0);
+  }
+  .gm-observer-banner.gm-dismissed {
+    transform: translateX(0) translateY(110%);
+  }
+
   .gm-obs-text { display: none; } /* save space — eye icon alone is enough */
 
-  /* Guest HUD: collapse from a card to a compact bottom bar */
+  /* Guest HUD: compact horizontal strip pinned above the footer. */
+  /* mobile.css sets the exact bottom value. Here we set the layout. */
   .gm-hud {
-    /* Detach from top-right; pin to bottom above the mobile toolbar */
-    top:          auto !important;
-    bottom:       calc(156px + env(safe-area-inset-bottom, 0px)); /* above mob-bottom-total */
-    right:        0;
-    left:         0;
-    border-radius: 0;
-    border-left:  none;
-    border-right: none;
-    border-bottom: none;
-    border-top:   1px solid rgba(56,189,248,0.2);
-    box-shadow:   0 -2px 16px rgba(0,0,0,0.4);
+    right: 0 !important;
+    left: 0 !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    border-top: 1px solid rgba(56, 189, 248, 0.2) !important;
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.4) !important;
   }
 
   .gm-hud-inner {
     flex-direction: row;
-    align-items:    center;
-    gap:            10px;
-    padding:        8px 12px;
-    min-width:      0;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    min-width: 0;
   }
 
-  /* Hide the label and timer on mobile — keep only the bar + count + CTA */
   .gm-hud-label,
   .gm-hud-timer { display: none; }
 
-  /* Let the progress bar fill the available space */
   .gm-hud-pixels {
     flex: 1;
     min-width: 0;
   }
 
   .gm-pixel-bar-wrap { width: 100%; }
+  .gm-pixel-count { font-size: 0.72rem; }
 
-  /* Tighter count text */
-  .gm-pixel-count {
-    font-size: 0.72rem;
-  }
-
-  /* Shrink the sign-up button */
   #gm-hud-signup-btn {
     flex-shrink: 0;
-    font-size:   0.72rem;
-    padding:     6px 10px;
+    font-size: 0.72rem;
+    padding: 6px 10px;
     white-space: nowrap;
   }
 
-  /* Conversion modal */
   .gm-conversion-modal {
     padding: 28px 20px 24px;
   }

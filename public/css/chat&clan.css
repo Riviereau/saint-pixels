@@ -816,58 +816,68 @@
 /* ── Utility ─────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
 
-/* ── Mobile portrait (≤ 720 px) ──────────────────────────────────────── */
+/* ── Mobile portrait (≤ 720 px) — vertical slide-up from bottom ──── */
+/*
+   Strategy: the whole #chatclan-panel sits above the mobile bottom-bar
+   (footer + palette + spawn = --mob-bottom-total ≈ 156px). In collapsed
+   state only the 32px toggle tab peeks out; the rest is hidden via
+   translateY. In open state the whole panel is fully visible.
+   mobile.css carries the actual pixel values; this file supplies only
+   the structure / aesthetics so the two sources stay independent.
+*/
 @media (max-width: 720px) {
   :root { --cc-panel-width: 100vw; }
 
+  /* The desktop horizontal slide is disabled; mobile.css handles motion */
   #chatclan-panel {
-    /* On mobile: full-width panel slides up from the bottom.
-       Override the desktop horizontal slide entirely. */
+    right: 0 !important;   /* always flush-right — transition is via transform */
     top: auto;
-    bottom: 0;
-    right: 0 !important;
     left: 0;
-    width: 100%;
-    height: 68vh;
-    flex-direction: column-reverse; /* toggle tab at bottom */
-    border-radius: 14px 14px 0 0;
+    flex-direction: column-reverse;
+    border-radius: 16px 16px 0 0;
     overflow: hidden;
-    transition: none;
+    /* pointer-events on the collapsed panel itself OFF; the toggle btn   */
+    /* keeps pointer-events:auto via its own rule, so the tab is tappable */
+    pointer-events: none;
+  }
+  /* Re-enable pointer-events on the visible toggle tab */
+  #chatclan-panel #chatclan-toggle-btn {
+    pointer-events: auto;
+  }
+  /* Re-enable pointer-events on the full panel when open */
+  #chatclan-panel.cc-open {
+    pointer-events: auto;
   }
 
   #chatclan-toggle-btn {
     width: 100%;
     height: 32px;
-    border-radius: 14px 14px 0 0;
+    border-radius: 16px 16px 0 0;
     border: 1px solid var(--cc-gold-dark);
     border-bottom: none;
     flex-direction: row;
     align-self: auto;
     margin: 0;
+    flex-shrink: 0;
   }
-  /* Rivets sit at the left/right ends of the horizontal bar on mobile */
   #chatclan-toggle-btn::before,
   #chatclan-toggle-btn::after {
     top: 50%;
     left: auto;
     transform: translateY(-50%);
+    bottom: auto;
   }
   #chatclan-toggle-btn::before { left: 10px; }
-  #chatclan-toggle-btn::after  { left: auto; right: 10px; }
+  #chatclan-toggle-btn::after  { right: 10px; }
 
   #cc-panel-body {
     width: 100%;
     flex: 1;
     border-left: none;
-    border-top: 2px solid var(--cc-gold-dark);
-    transform: translateY(100%);
-    transition: transform 0.25s ease;
-  }
-  #chatclan-panel.cc-open #cc-panel-body {
-    transform: translateY(0);
+    border-top: 3px solid var(--cc-gold-dark);
   }
 }
 
 @media (max-width: 480px) {
-  #chatclan-panel { height: 72vh; }
+  /* slightly taller on very small phones — mobile.css overrides height */
 }
