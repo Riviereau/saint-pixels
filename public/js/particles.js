@@ -43,7 +43,7 @@ function spawnParticles(bx, by, hexColor) {
   // Screen position of the board pixel's centre
   const cx = (bx + 0.5) * scale + offsetX;
   const cy = (by + 0.5) * scale + offsetY;
-  const count = 16;
+  const count = 48;
   for (let i = 0; i < count; i++) {
     const angle  = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
     const speed  = 1.5 + Math.random() * 2.5;
