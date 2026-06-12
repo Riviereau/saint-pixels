@@ -48,7 +48,7 @@
   }
 
   /* hCaptcha compact widget: allow centering on narrow screens */
-  .h-captcha {
+  #hcaptchaContainer {
     display: flex;
     justify-content: center; /* Centers the captcha nicely on mobile */
     min-height: 80px; /* Reserves space so the container doesn't collapse to 0 height */
@@ -65,14 +65,23 @@
   overflow: hidden;
   min-height: 0;
 }
-#authCaptchaWrapper .h-captcha,
-#authCaptchaWrapper .h-captcha > iframe {
+#authCaptchaWrapper #hcaptchaContainer > iframe {
   display: block;
   width: 164px !important;
   height: 55px !important;
   max-height: 55px;
   overflow: hidden;
   border-radius: 8px;
+}
+@media (min-width: 721px) {
+  #authCaptchaWrapper #hcaptchaContainer {
+    display: block;
+    width: 164px !important;
+    height: 55px !important;
+    max-height: 55px;
+    overflow: hidden;
+    border-radius: 8px;
+  }
 }
 
 /* ── Password reset overlay ──────────────────────────────────────────────── */
