@@ -569,46 +569,57 @@
   /* palette (108px) + spawn (48px) = 204px from bottom — so nothing    */
   /* overlaps the canvas touch area. When open, raise panel fully.       */
 
-  /* Collapsed: panel is off-screen except the 32px toggle tab at bottom */
+  /* Collapsed: panel is just the 32px toggle tab, pinned bottom-right.
+     Use a fixed small height instead of "65vh shifted down" so the
+     content (chat log etc.) can't peek out from behind the transform. */
   #chatclan-panel {
     /* Override desktop horizontal-slide to vertical slide-up */
     top: auto !important;
     bottom: calc(var(--mob-bottom-total) + env(safe-area-inset-bottom, 0px)) !important;
+    right: 8px !important;
+    left: auto !important;
+    width: auto !important;
+    height: 32px !important;
+    max-height: 32px !important;
+    flex-direction: column-reverse !important; /* toggle tab at bottom */
+    border-radius: 10px 10px 0 0 !important;
+    overflow: hidden !important;
+    transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                right 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                left 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    z-index: 20000 !important;
+    transform: none !important;
+  }
+  /* Open: expand into the full slide-up panel */
+  #chatclan-panel.cc-open {
+    bottom: 0 !important;
     right: 0 !important;
     left: 0 !important;
     width: 100% !important;
     height: 65vh !important;
     max-height: 65vh !important;
-    flex-direction: column-reverse !important; /* toggle tab at bottom */
     border-radius: 16px 16px 0 0 !important;
-    overflow: hidden !important;
-    transition: bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    z-index: 20000 !important;
-    /* Collapsed: entire panel is below the mobile UI bar */
-    transform: translateY(calc(100% - 32px)) !important;
-  }
-  /* Open: slide the panel up fully */
-  #chatclan-panel.cc-open {
-    transform: translateY(0) !important;
-    bottom: 0 !important;
     z-index: 20500 !important;
   }
 
-  /* Toggle tab: horizontal strip at the bottom of the panel */
+  /* Toggle tab: compact pill, full width/height of collapsed panel */
   #chatclan-toggle-btn {
     width: 100% !important;
     height: 32px !important;
-    border-radius: 16px 16px 0 0 !important;
-    border-left: none !important;
-    border-right: none !important;
+    border-radius: 10px 10px 0 0 !important;
+    border-left: 1px solid var(--cc-gold-deep) !important;
+    border-right: 1px solid var(--cc-gold-deep) !important;
     border-bottom: none !important;
     flex-direction: row !important;
     align-self: auto !important;
     margin: 0 !important;
     flex-shrink: 0 !important;
-    /* Ensure it does NOT block canvas touches when collapsed:       */
-    /* pointer-events is auto so the tab itself is still tappable,  */
-    /* but it's positioned above the bottom UI bar, not over canvas  */
+    padding: 0 14px !important;
+  }
+  #chatclan-panel.cc-open #chatclan-toggle-btn {
+    border-radius: 16px 16px 0 0 !important;
   }
   /* Rivets at left/right on horizontal bar */
   #chatclan-toggle-btn::before { top: 50%; left: 10px; transform: translateY(-50%); }
