@@ -27,7 +27,10 @@
 }
 
 /* ── Hover: star brightens on mouse-over ────────────────────────────────── */
-#viewport canvas:hover {
+/* Scoped to .sp-star-canvas only — the previous `#viewport canvas:hover`
+   rule was accidentally applying this gold glow to #overlay (the cursor
+   canvas), making every cursor pixel glow gold regardless of selected color. */
+#viewport canvas.sp-star-canvas:hover {
   filter:
     drop-shadow(0 0 6px  rgba(255, 255, 200, 0.95))
     drop-shadow(0 0 14px rgba(255, 215,   0, 0.70))

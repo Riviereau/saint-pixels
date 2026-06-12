@@ -376,8 +376,21 @@ function drawCursor() {
   const rulerAlpha = isRulerMode
     ? 0.25 + 0.25 * Math.sin(performance.now() / 180)
     : 0.45;
+
+  // Subtle color-matched glow — only visible when zoomed in enough to see
+  // individual pixels. Scales with zoom so it doesn't bleed at low zoom.
+  if (sizeX >= 6) {
+    const glowRadius = Math.min(sizeX * 0.55, 10);
+    overlayCtx.shadowColor  = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, 0.55)`;
+    overlayCtx.shadowBlur   = glowRadius;
+  }
+
   overlayCtx.fillStyle = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rulerAlpha})`;
   overlayCtx.fillRect(px, py, sizeX, sizeY);
+
+  // Reset shadow before drawing outlines so they stay crisp
+  overlayCtx.shadowColor = 'transparent';
+  overlayCtx.shadowBlur  = 0;
 
   overlayCtx.lineWidth = 1;
   overlayCtx.strokeStyle = 'rgba(0,0,0,0.8)';
