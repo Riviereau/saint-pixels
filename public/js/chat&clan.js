@@ -221,6 +221,396 @@
   }
 
 
+  // ── Edit-history modal refs ──────────────────────────────────────────────
+  const editHistoryOverlay = document.getElementById('cc-edit-history-overlay');
+  const editHistoryList    = document.getElementById('cc-eh-list');
+  const editHistoryClose   = document.getElementById('cc-eh-close');
+  const editHistoryRestore = document.getElementById('cc-eh-restore');
+
+  let _ehSelectedMsg  = null; // currently selected revision text
+  let _ehTargetLi     = null; // <li> the modal was opened for
+
+  if (editHistoryClose) {
+    editHistoryClose.addEventListener('click', () => {
+      if (editHistoryOverlay) editHistoryOverlay.classList.remove('cc-eh-open');
+    });
+  }
+
+  if (editHistoryOverlay) {
+    editHistoryOverlay.addEventListener('click', (e) => {
+      if (e.target === editHistoryOverlay) editHistoryOverlay.classList.remove('cc-eh-open');
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && editHistoryOverlay?.classList.contains('cc-eh-open')) {
+      editHistoryOverlay.classList.remove('cc-eh-open');
+    }
+  });
+
+  if (editHistoryRestore) {
+    editHistoryRestore.addEventListener('click', async () => {
+      if (!_ehSelectedMsg || !_ehTargetLi) return;
+      const id   = _ehTargetLi.dataset.id;
+      const kind = _ehTargetLi.dataset.kind || 'global';
+      if (!id) return;
+
+      const url    = kind === 'clan' ? `/api/clan/chat/${id}` : `/api/chat/${id}`;
+      const token  = window.__token || '';
+      try {
+        const res  = await fetch(url, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ message: _ehSelectedMsg }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data?.error || 'Could not restore version.');
+          return;
+        }
+        // Update the <li> in-place
+        patchMessageLi(_ehTargetLi, data);
+        editHistoryOverlay.classList.remove('cc-eh-open');
+      } catch (err) {
+        console.error('[chatclan] restore error:', err);
+        alert('Network error — could not restore version.');
+      }
+    });
+  }
+
+  /**
+   * Build the ⋮ context-menu button for a message <li>.
+   * Copy is always present. Edit / History are injected lazily when the
+   * menu opens (so we always read the latest role/username from the <li>
+   * dataset rather than capturing stale closure values at build time).
+   */
+  function buildMsgMenuBtn() {
+    const wrap = document.createElement('div');
+    wrap.className = 'cc-msg-menu-wrap';
+
+    const btn = document.createElement('button');
+    btn.className = 'cc-msg-menu-btn';
+    btn.type = 'button';
+    btn.title = 'Message options';
+    btn.setAttribute('aria-label', 'Message options');
+    btn.textContent = '⋮';
+    wrap.appendChild(btn);
+
+    const menu = document.createElement('div');
+    menu.className = 'cc-msg-menu';
+    menu.hidden = true;
+    wrap.appendChild(menu);
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = !menu.hidden;
+
+      // Close all other open menus
+      document.querySelectorAll('.cc-msg-menu:not([hidden])').forEach(m => { m.hidden = true; });
+
+      if (isOpen) return;
+
+      const li = btn.closest('.cc-msg');
+      menu.innerHTML = '';
+
+      // ── Copy ──────────────────────────────────────────────────────────
+      const copyItem = document.createElement('button');
+      copyItem.textContent = '📋 Copy';
+      copyItem.addEventListener('click', () => {
+        const text = li?.dataset.message || li?.querySelector('.cc-text')?.textContent || '';
+        navigator.clipboard?.writeText(text).catch(() => {});
+        menu.hidden = true;
+      });
+      menu.appendChild(copyItem);
+
+      // ── Edit (own messages only) ───────────────────────────────────────
+      if (li && li.dataset.username === (window.__username || '')) {
+        const editItem = document.createElement('button');
+        editItem.textContent = '✏️ Edit';
+        editItem.addEventListener('click', () => {
+          menu.hidden = true;
+          startInlineEdit(li);
+        });
+        menu.appendChild(editItem);
+
+        // ── Edit history (only if message was edited) ───────────────────
+        if (li.dataset.editedAt) {
+          const histItem = document.createElement('button');
+          histItem.textContent = '🕐 Edit history';
+          histItem.addEventListener('click', () => {
+            menu.hidden = true;
+            openEditHistory(li);
+          });
+          menu.appendChild(histItem);
+        }
+      } else if (li && li.dataset.editedAt) {
+        // Others can still view edit history (read-only)
+        const histItem = document.createElement('button');
+        histItem.textContent = '🕐 Edit history';
+        histItem.addEventListener('click', () => {
+          menu.hidden = true;
+          openEditHistory(li);
+        });
+        menu.appendChild(histItem);
+      }
+
+      menu.hidden = false;
+    });
+
+    // Close when clicking anywhere else
+    document.addEventListener('click', () => { menu.hidden = true; }, { capture: false });
+
+    return wrap;
+  }
+
+  /**
+   * Replace a message <li>'s text area with a single-line textarea for in-place editing.
+   * Pressing Enter commits; Escape cancels.
+   */
+  function startInlineEdit(li) {
+    if (!li) return;
+    const currentText = li.dataset.message || li.querySelector('.cc-text')?.textContent || '';
+    const textSpan    = li.querySelector('.cc-text');
+    if (!textSpan) return;
+
+    // Prevent double-editing
+    if (li.querySelector('.cc-edit-input')) return;
+
+    const input = document.createElement('textarea');
+    input.className = 'cc-edit-input';
+    input.value     = currentText;
+    input.maxLength = li.dataset.kind === 'clan' ? 300 : 200;
+    input.rows      = 1;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type      = 'button';
+    saveBtn.className = 'cc-edit-save';
+    saveBtn.textContent = '✓';
+    saveBtn.title     = 'Save edit';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type      = 'button';
+    cancelBtn.className = 'cc-edit-cancel';
+    cancelBtn.textContent = '✕';
+    cancelBtn.title     = 'Cancel';
+
+    // Hide the original text span (keep in DOM so cancel can restore)
+    textSpan.style.display = 'none';
+    li.appendChild(input);
+    li.appendChild(saveBtn);
+    li.appendChild(cancelBtn);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    async function commitEdit() {
+      const newText = input.value.trim();
+      if (!newText || newText === currentText) {
+        cancel();
+        return;
+      }
+      const id   = li.dataset.id;
+      const kind = li.dataset.kind || 'global';
+      if (!id) { cancel(); return; }
+
+      saveBtn.disabled   = true;
+      cancelBtn.disabled = true;
+
+      const url   = kind === 'clan' ? `/api/clan/chat/${id}` : `/api/chat/${id}`;
+      const token = window.__token || '';
+      try {
+        const res  = await fetch(url, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ message: newText }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data?.error || 'Could not save edit.');
+          saveBtn.disabled   = false;
+          cancelBtn.disabled = false;
+          return;
+        }
+        patchMessageLi(li, data);
+      } catch (err) {
+        console.error('[chatclan] inline edit error:', err);
+        alert('Network error — could not save edit.');
+        saveBtn.disabled   = false;
+        cancelBtn.disabled = false;
+      }
+    }
+
+    function cancel() {
+      input.remove();
+      saveBtn.remove();
+      cancelBtn.remove();
+      textSpan.style.display = '';
+    }
+
+    saveBtn.addEventListener('click', commitEdit);
+    cancelBtn.addEventListener('click', cancel);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+      if (e.key === 'Escape')               { e.preventDefault(); cancel(); }
+    });
+  }
+
+  /**
+   * Mutate an existing <li> in-place to reflect an edited message payload
+   * (either from a local PATCH response or an incoming SSE edit broadcast).
+   */
+  function patchMessageLi(li, data) {
+    if (!li || !data) return;
+
+    const newMsg  = String(data.message || '').slice(0, 300);
+    const editedAt = data.edited_at || null;
+
+    // Update dataset
+    li.dataset.message = newMsg;
+    if (editedAt) li.dataset.editedAt = String(editedAt);
+
+    // Update displayed text
+    const textSpan = li.querySelector('.cc-text');
+    if (textSpan) {
+      textSpan.textContent = newMsg;
+      textSpan.style.display = '';
+    }
+
+    // Remove stale inline edit controls if still present
+    li.querySelector('.cc-edit-input')?.remove();
+    li.querySelector('.cc-edit-save')?.remove();
+    li.querySelector('.cc-edit-cancel')?.remove();
+
+    // Update / add (edited) badge
+    let badge = li.querySelector('.cc-edited-badge');
+    if (editedAt) {
+      if (badge) {
+        badge.title = `Edited ${formatUTC(editedAt)} — click for history`;
+      } else {
+        badge = buildEditedBadge(editedAt);
+        // Insert before the ⋮ menu
+        const menuWrap = li.querySelector('.cc-msg-menu-wrap');
+        if (menuWrap) li.insertBefore(badge, menuWrap);
+        else          li.appendChild(badge);
+      }
+    }
+
+    // Refresh ⋮ menu so "Edit history" option appears if it wasn't there before
+    const oldMenu = li.querySelector('.cc-msg-menu-wrap');
+    if (oldMenu) {
+      oldMenu.replaceWith(buildMsgMenuBtn());
+    }
+  }
+
+  /**
+   * Open the edit-history modal for a given message <li>.
+   * Fetches revision history from the server and renders it.
+   */
+  async function openEditHistory(li) {
+    if (!li || !editHistoryOverlay || !editHistoryList) return;
+    const id   = li.dataset.id;
+    const kind = li.dataset.kind || 'global';
+    if (!id) return;
+
+    _ehTargetLi    = li;
+    _ehSelectedMsg = null;
+    editHistoryRestore && (editHistoryRestore.disabled = true);
+
+    editHistoryList.innerHTML = '<li class="cc-eh-loading">Loading…</li>';
+    editHistoryOverlay.classList.add('cc-eh-open');
+
+    const url   = kind === 'clan' ? `/api/clan/chat/${id}/history` : `/api/chat/${id}/history`;
+    const token = window.__token || '';
+    try {
+      const res  = await fetch(url, {
+        credentials: 'same-origin',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        editHistoryList.innerHTML = `<li class="cc-eh-empty">${data?.error || 'Could not load history.'}</li>`;
+        return;
+      }
+
+      const edits = data.edits || [];
+      // The current version is the "latest" — append it at the end
+      const currentMsg = li.dataset.message || li.querySelector('.cc-text')?.textContent || '';
+      const currentAt  = li.dataset.editedAt ? Number(li.dataset.editedAt) : null;
+
+      // Build the full chain: [oldest…, current]
+      // edits[i].message = the text *before* that edit, edits[i].edited_at = when the edit was applied
+      const allVersions = edits.map((e, i) => ({
+        label: `Version ${i + 1}`,
+        message: e.message,
+        ts: e.edited_at,
+        isCurrent: false,
+      }));
+      allVersions.push({
+        label: `Current (Version ${edits.length + 1})`,
+        message: currentMsg,
+        ts: currentAt,
+        isCurrent: true,
+      });
+
+      if (allVersions.length <= 1 && edits.length === 0) {
+        editHistoryList.innerHTML = '<li class="cc-eh-empty">No edit history.</li>';
+        return;
+      }
+
+      editHistoryList.innerHTML = '';
+      const canRestore = li.dataset.username === (window.__username || '');
+
+      for (const v of allVersions.slice().reverse()) { // newest first
+        const item = document.createElement('li');
+        item.className = 'cc-eh-item' + (v.isCurrent ? ' cc-eh-item--current' : '');
+        item.dataset.msg = v.message;
+
+        const meta = document.createElement('div');
+        meta.className = 'cc-eh-meta';
+        meta.textContent = v.label + (v.ts ? ` — ${formatUTC(v.ts)}` : '');
+        item.appendChild(meta);
+
+        const text = document.createElement('div');
+        text.className = 'cc-eh-text';
+        text.textContent = v.message;
+        item.appendChild(text);
+
+        if (canRestore && !v.isCurrent) {
+          item.addEventListener('click', () => {
+            editHistoryList.querySelectorAll('.cc-eh-item').forEach(el => el.classList.remove('cc-eh-selected'));
+            item.classList.add('cc-eh-selected');
+            _ehSelectedMsg = v.message;
+            if (editHistoryRestore) editHistoryRestore.disabled = false;
+          });
+        }
+
+        editHistoryList.appendChild(item);
+      }
+    } catch (err) {
+      console.error('[chatclan] openEditHistory error:', err);
+      editHistoryList.innerHTML = '<li class="cc-eh-empty">Network error.</li>';
+    }
+  }
+
+  // ── SSE edit-broadcast handlers ─────────────────────────────────────────────
+  // broadcast.js should forward:
+  //   if (data.type === 'chat_edit')      window.__chatEditIncoming?.(data);
+  //   if (data.type === 'clan_chat_edit') window.__clanChatEditIncoming?.(data);
+
+  window.__chatEditIncoming = function (data) {
+    if (!data || !data.id) return;
+    const li = globalList.querySelector(`.cc-msg[data-id="${data.id}"]`);
+    if (li) patchMessageLi(li, data);
+  };
+
+  window.__clanChatEditIncoming = function (data) {
+    if (!data || !data.id) return;
+    const li = clanMsgList?.querySelector(`.cc-msg[data-id="${data.id}"]`);
+    if (li) patchMessageLi(li, data);
+  };
+
   function appendSystem(list, text) {
     const li = document.createElement('li');
     li.className = 'cc-msg cc-system';
@@ -309,7 +699,7 @@
       seenGlobalIds.clear();
       for (const msg of data.messages) {
         if (msg.id) seenGlobalIds.add(msg.id);
-        appendMessage(globalList, msg, false, seenGlobalIds, MAX_DISPLAY);
+        appendMessage(globalList, msg, false, seenGlobalIds, MAX_DISPLAY, 'global');
       }
       scrollToBottom(globalList, true);
     } catch (err) {
@@ -331,7 +721,7 @@
 
     const wasAtBottom = isAtBottom(globalList);
     const viewingGlobal = isOpen && activeTab === 'global';
-    appendMessage(globalList, data, wasAtBottom || viewingGlobal, seenGlobalIds, MAX_DISPLAY);
+    appendMessage(globalList, data, wasAtBottom || viewingGlobal, seenGlobalIds, MAX_DISPLAY, 'global');
 
     if (!viewingGlobal) {
       unreadGlobal++;
@@ -701,7 +1091,7 @@
       seenClanIds.clear();
       for (const msg of data.messages) {
         if (msg.id) seenClanIds.add(msg.id);
-        appendMessage(clanMsgList, msg, false, seenClanIds, MAX_DISPLAY);
+        appendMessage(clanMsgList, msg, false, seenClanIds, MAX_DISPLAY, 'clan');
       }
       scrollToBottom(clanMsgList, true);
     } catch (err) {
@@ -725,7 +1115,7 @@
 
     const wasAtBottom = isAtBottom(clanMsgList);
     const viewingClanChat = isOpen && activeTab === 'clan' && subChat.classList.contains('active');
-    appendMessage(clanMsgList, data, wasAtBottom || viewingClanChat, seenClanIds, MAX_DISPLAY);
+    appendMessage(clanMsgList, data, wasAtBottom || viewingClanChat, seenClanIds, MAX_DISPLAY, 'clan');
 
     if (!viewingClanChat) {
       unreadClan++;
