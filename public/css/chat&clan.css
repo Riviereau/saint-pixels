@@ -580,7 +580,6 @@ textarea.cc-input.cc-input--autosize {
 #cc-page-clan {
   overflow-y: auto;
   padding: 14px 14px 16px;
-  display: block; /* overridden to flex by .cc-page-active */
   gap: 0;
 }
 #cc-page-clan.cc-page-active {
