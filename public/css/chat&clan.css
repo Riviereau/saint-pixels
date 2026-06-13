@@ -585,12 +585,51 @@ textarea.cc-input.cc-input--autosize {
 #cc-page-clan.cc-page-active {
   display: block;
 }
+
+/* ── My Clan / Other Clans toggle strip ──────────────────────────────── */
+.cc-clan-view-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 12px;
+  border: 1px solid var(--cc-border);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.18);
+  flex-shrink: 0;
+}
+.cc-clan-view-toggle.hidden { display: none; }
+.cc-clan-view-btn {
+  flex: 1;
+  padding: 7px 4px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cc-clan-view-btn:hover {
+  color: var(--cc-gold-text);
+  background: rgba(255,255,255,0.03);
+}
+.cc-clan-view-btn--active {
+  color: var(--cc-gold);
+  background: var(--cc-gold-glow);
+  border-color: var(--cc-gold-deep);
+}
+/* When clan-home is active the page becomes a flex column with no padding;
+   the toggle strip needs its own horizontal margin in that mode. */
+#cc-page-clan:has(#cc-clan-home:not(.hidden)) .cc-clan-view-toggle {
+  margin: 10px 12px 0;
+}
 /* cc-clan-home itself becomes the flex column when shown */
 #cc-clan-home:not(.hidden) {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 10px;
-  height: 100%;
   min-height: 0;
 }
 /* When clan-home is active, the page container should not scroll itself —

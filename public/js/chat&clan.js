@@ -68,6 +68,10 @@
   const searchBtn     = document.getElementById('cc-search-btn');
   const searchResults = document.getElementById('cc-search-results');
 
+  const clanViewToggle  = document.getElementById('cc-clan-view-toggle');
+  const toggleMyClanBtn = document.getElementById('cc-toggle-my-clan');
+  const toggleOtherBtn  = document.getElementById('cc-toggle-other-clans');
+
   const clanHome       = document.getElementById('cc-clan-home');
   const browseClansBtn = document.getElementById('cc-browse-clans');
   const crestDisplay   = document.getElementById('cc-crest-display');
@@ -842,6 +846,16 @@
     createPanel.classList.toggle('hidden', view !== 'create');
     searchPanel.classList.toggle('hidden', view !== 'search');
     clanHome.classList.toggle('hidden', view !== 'home');
+
+    // Toggle strip: only relevant (and shown) once the user has a clan
+    if (clanViewToggle) {
+      clanViewToggle.classList.toggle('hidden', !myClan);
+      if (myClan) {
+        const onMyClan = (view === 'home');
+        toggleMyClanBtn.classList.toggle('cc-clan-view-btn--active', onMyClan);
+        toggleOtherBtn.classList.toggle('cc-clan-view-btn--active', !onMyClan);
+      }
+    }
   }
 
   function showClanSubpage(sub) {
@@ -871,6 +885,16 @@
   if (createBack) createBack.addEventListener('click', () => showClanView(myClan ? 'home' : 'landing'));
   if (searchBack) searchBack.addEventListener('click', () => showClanView(myClan ? 'home' : 'landing'));
   if (browseClansBtn) browseClansBtn.addEventListener('click', () => showClanView('search'));
+
+  // ── My Clan / Other Clans toggle strip ───────────────────────────────────
+  if (toggleMyClanBtn) toggleMyClanBtn.addEventListener('click', () => {
+    if (!myClan) return;
+    showClanView('home');
+  });
+  if (toggleOtherBtn) toggleOtherBtn.addEventListener('click', () => {
+    showClanView('search');
+    runClanSearch('');
+  });
 
   // ══════════════════════════════════════════════════════════════════════
   // CLAN — fetch current membership
