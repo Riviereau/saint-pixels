@@ -518,6 +518,10 @@
         if (_sessionTimeout) { clearTimeout(_sessionTimeout);  _sessionTimeout = null; }
       }
       if (!isGuest) {
+        // Also remove the observer banner if it was shown while waiting for
+        // auth to resolve (it may have appeared without _guestActive being set,
+        // e.g. when the mobile.js fallback fired during a slow auth fetch).
+        removeObserverBanner();
         // Clean up any lingering conversion prompts
         const conv = document.getElementById('gm-conversion-overlay');
         if (conv) conv.remove();
@@ -526,8 +530,16 @@
       }
     }
 
-    // User logged out of a real account — re-show the observer banner
+    // User logged out of a real account — re-show the observer banner.
+    // Guard against stale mobile.js / android.js fallback dispatches that fire
+    // { currentUser: null } as a last resort even when a real user is already
+    // signed in (e.g. mobile.js fires at 7 s to nudge guest.js on slow networks).
+    // We cross-check window.currentUser so those spurious nulls can't trigger
+    // the banner while a signed-in session is active.
     if (detail.currentUser === null && !_guestActive) {
+      const liveUser = window.currentUser;
+      const liveUserIsReal = !!(liveUser && !/^Guest \d{7}$/.test(liveUser));
+      if (liveUserIsReal) return; // spurious null — a real user is still active
       // Small delay so auth.js finishes its teardown first
       setTimeout(showObserverMode, 300);
     }
@@ -585,7 +597,19 @@
         return;
       }
       if (u === null && !_authResolved) {
-        // Confirmed logged-out (no token) — show the observer banner once.
+        // Confirmed logged-out (no token) — but verify window.currentUser hasn't
+        // been set by a concurrent updateAuthState() response before acting.
+        // mobile.js / android.js fire { currentUser: null } as a fallback nudge;
+        // if the real user is already known we must not show the observer banner.
+        const liveUser = window.currentUser;
+        if (liveUser && !/^Guest \d{7}$/.test(liveUser)) {
+          // A real user resolved concurrently — treat as signed in.
+          window.removeEventListener('sp-state-change', onFirst);
+          _authResolved = true;
+          _userIsReal   = true;
+          return;
+        }
+        // Show the observer banner once.
         window.removeEventListener('sp-state-change', onFirst);
         onAuthResolved(null);
       }
@@ -593,8 +617,12 @@
 
     // Fallback: if no state change fires within 3 s (e.g. network timeout),
     // only show the banner when we have no confirmed real user.
+    // Also cross-check window.currentUser in case updateAuthState() resolved
+    // the token and set the user but hasn't dispatched sp-state-change yet.
     setTimeout(() => {
       if (_userIsReal || _guestActive) return;
+      const liveUser = window.currentUser;
+      if (liveUser && !/^Guest \d{7}$/.test(liveUser)) return; // real user active
       if (!_authResolved) showObserverMode();
     }, 3000);
 
