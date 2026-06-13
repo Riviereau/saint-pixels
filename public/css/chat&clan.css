@@ -223,6 +223,9 @@
 }
 .cc-tab-badge.visible { display: inline-block; }
 
+/* ── Generic utility ───────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
 /* ── Pages: Global / Clan ─────────────────────────────────────────────── */
 
 .cc-page {
