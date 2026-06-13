@@ -1542,10 +1542,14 @@
   // Panel starts collapsed — CSS default (no cc-open class) keeps it off-screen.
   switchTab('global');
 
-  // Refresh clan state once auth resolves (app.js sets window.__username after load)
+  // Load clan state at boot so myClan is populated before the user opens the tab.
+  // If the user isn't logged in yet, refreshMyClan is a no-op (guards on __username).
+  refreshMyClan();
+
+  // Re-check clan membership whenever auth state changes (login / session restore).
   window.addEventListener('sp-state-change', (e) => {
     if (e.detail && e.detail.currentUser !== undefined) {
-      if (activeTab === 'clan') refreshMyClan();
+      refreshMyClan();
     }
   });
 
