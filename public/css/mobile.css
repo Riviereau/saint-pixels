@@ -628,6 +628,8 @@
   /* Panel body: fills the remaining width when panel is open */
   #cc-panel-body {
     display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
     width: var(--cc-panel-width) !important;
     flex-shrink: 0 !important;
     flex: none !important;
