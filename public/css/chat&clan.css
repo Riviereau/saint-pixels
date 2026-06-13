@@ -621,7 +621,7 @@ textarea.cc-input.cc-input--autosize {
 }
 /* When clan-home is active the page becomes a flex column with no padding;
    the toggle strip needs its own horizontal margin in that mode. */
-#cc-page-clan:has(#cc-clan-home:not(.hidden)) .cc-clan-view-toggle {
+#cc-page-clan.cc-page-active:has(#cc-clan-home:not(.hidden)) .cc-clan-view-toggle {
   margin: 10px 12px 0;
 }
 /* cc-clan-home itself becomes the flex column when shown */
@@ -634,7 +634,7 @@ textarea.cc-input.cc-input--autosize {
 }
 /* When clan-home is active, the page container should not scroll itself —
    the inner message list / sub-pages handle their own scrolling. */
-#cc-page-clan:has(#cc-clan-home:not(.hidden)) {
+#cc-page-clan.cc-page-active:has(#cc-clan-home:not(.hidden)) {
   overflow: hidden;
   display: flex;
   flex-direction: column;

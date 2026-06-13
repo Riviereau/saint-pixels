@@ -58,18 +58,23 @@ function isPrivateIp(req) {
  *   null                                               — no valid session
  */
 function getSession(req) {
+  const auth = req.headers.authorization || '';
+  const [type, token] = auth.split(' ');
+  const hasToken = type === 'Bearer' && !!token;
+
   // mobileDebug bypass — also accept any request from a private-network IP
   // so LAN phones work without needing app.locals.mobileDebug to be set manually.
-  if (req && (req.localBypassUser || isPrivateIp(req))) {
+  // Only applies when the request carries no real session token; if a Bearer
+  // token is present (e.g. a logged-in user on their home LAN), it takes
+  // priority so real accounts aren't shadowed by the anon-local bypass.
+  if (!hasToken && req && (req.localBypassUser || isPrivateIp(req))) {
     const bypassUser = req.localBypassUser || 'anon-local';
     const ban = checkBan(bypassUser);
     if (ban) return buildBanPayload(ban);
     return { username: bypassUser, created_at: Date.now() };
   }
 
-  const auth = req.headers.authorization || '';
-  const [type, token] = auth.split(' ');
-  if (type !== 'Bearer' || !token) return null;
+  if (!hasToken) return null;
 
   const row = _db.prepare(
     'SELECT username, created_at FROM sessions WHERE token = ? AND expires_at > ?'
