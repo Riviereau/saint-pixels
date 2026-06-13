@@ -246,8 +246,10 @@
       10
     );
     if (navExtra > 0) {
+      if (banner.dataset.androidNavPatched === '1') return;
       const current = parseInt(getComputedStyle(banner).bottom, 10) || 0;
       banner.style.bottom = (current + navExtra) + 'px';
+      banner.dataset.androidNavPatched = '1';
     }
   }
 

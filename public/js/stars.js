@@ -143,6 +143,7 @@ window.StarSystem = (() => {
 
     // Canvas element
     const canvas  = document.createElement('canvas');
+    canvas.className = 'sp-star-canvas';
     canvas.width  = size;
     canvas.height = size;
     canvas.style.cssText = `
