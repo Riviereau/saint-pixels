@@ -42,6 +42,7 @@ app.use((req, res, next) => {
         "'sha256-fhzTSFP/g8pZXkvs0zLgEc7vR12cQqDrjqwhNP7LoMA='",
         "'sha256-kgL4BeXu5i8IL19/h+xX29yxerkiRJAIMlaB16C9Z3c='",
         "'sha256-DKvyw+VPCZ+yYosvM7fBfmlQLJUOPR/XmndDIzBHCuk='",
+        "'sha256-x3UaW7aTn2jCzxUxDrLUMzK5PLT7EZW2R8ZZV/nT5Hs='",
         // Rules window script — two hashes cover the file-as-uploaded and the
         // version the browser reported. The inline script has been moved to
         // /rules.js so these hashes are belt-and-suspenders for cached deployments.

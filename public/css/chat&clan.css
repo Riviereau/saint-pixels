@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   chat_clan.css — Chat + Clan panel styles
+   chat&clan.css — Chat + Clan panel styles
 
    z-index hierarchy (matches leaderboard.css comment block):
      canvas elements (ruler label, fullscreen btn): ≤ 10000
