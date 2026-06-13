@@ -1556,4 +1556,34 @@ textarea.cc-input.cc-input--autosize {
     border-top: none !important;
     transform: none !important;
   }
+
+  /* ── Clan page: ensure full flex chain so the chat input row stays
+     pinned to the bottom of the panel instead of being pushed off
+     the visible area. ─────────────────────────────────────────── */
+  #cc-page-clan.cc-page-active {
+    flex: 1 !important;
+    min-height: 0 !important;
+  }
+  #cc-clan-home:not(.hidden) {
+    flex: 1 !important;
+    min-height: 0 !important;
+  }
+  #cc-sub-chat.active {
+    flex: 1 !important;
+    min-height: 0 !important;
+  }
+
+  /* ── Clan inner nav (Chat / Members / Alliances / Settings): shrink
+     so all four tabs fit without horizontal scroll clipping the
+     left-most button. ─────────────────────────────────────────── */
+  .cc-clan-nav {
+    gap: 2px !important;
+    overflow-x: visible !important;
+  }
+  .cc-clan-nav-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 6px 2px !important;
+    font-size: 0.66rem !important;
+  }
 }
