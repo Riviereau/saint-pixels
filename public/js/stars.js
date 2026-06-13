@@ -224,6 +224,7 @@ window.StarSystem = (() => {
     // ── Collect on click / touch ──────────────────────────────────────
     function collect(e) {
       e.stopPropagation();
+      e.preventDefault();   // prevent scroll/pan reset on mobile tap
       if (star.collected) return;
       star.collected = true;
 
@@ -252,8 +253,8 @@ window.StarSystem = (() => {
       cancelAnimationFrame(star.rafId);
       setTimeout(() => _removeStar(star), 280);
     }
-    canvas.addEventListener('click',      collect, { once: true });
-    canvas.addEventListener('touchstart', collect, { once: true, passive: false });
+    canvas.addEventListener('click',    collect, { once: true });
+    canvas.addEventListener('touchend', collect, { once: true, passive: false });
   }
 
   // ── Remove a star cleanly ────────────────────────────────────────────────

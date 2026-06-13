@@ -658,8 +658,12 @@ textarea.cc-input.cc-input--autosize {
   flex-direction: column;
   margin: 0 -12px;
 }
-#cc-sub-chat.active .cc-msg-list { padding: 6px 0; }
-#cc-sub-chat.active .cc-input-row { margin-top: auto; }
+#cc-sub-chat.active .cc-msg-list {
+  padding: 6px 0;
+  flex: 1;
+  min-height: 0;
+}
+#cc-sub-chat.active .cc-input-row { flex-shrink: 0; }
 
 /* ═══════════════════════════════════════════════════════════════════════
    CLAN LANDING  (#cc-clan-landing)
