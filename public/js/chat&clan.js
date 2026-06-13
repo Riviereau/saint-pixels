@@ -132,6 +132,22 @@
   function formatTime(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
+
+  /**
+   * Auto-grow a <textarea> to fit its content, up to the CSS max-height
+   * (where overflow-y:auto takes over). Reset to 'auto' first so shrinking
+   * (e.g. after Enter clears the box) recalculates correctly.
+   */
+  function autosizeTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+  function attachAutosize(el) {
+    if (!el) return;
+    autosizeTextarea(el);
+    el.addEventListener('input', () => autosizeTextarea(el));
+  }
   /** Format a ms timestamp as UTC time for the "edited" tooltip / badge. */
   function formatUTC(ts) {
     const d = new Date(ts);
@@ -400,6 +416,7 @@
     li.appendChild(input);
     li.appendChild(saveBtn);
     li.appendChild(cancelBtn);
+    attachAutosize(input);
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
 
@@ -742,6 +759,7 @@
     globalSendBtn.disabled = true;
     sendCooldownGlobal = true;
     globalInput.value = '';
+    autosizeTextarea(globalInput);
 
     try {
       const res = await fetch('/api/chat', {
@@ -757,6 +775,7 @@
       if (!res.ok) {
         appendSystem(globalList, data?.error || 'Failed to send message.');
         globalInput.value = text;
+        autosizeTextarea(globalInput);
       } else if (typeof window.__chatIncoming === 'function') {
         window.__chatIncoming(data);
       }
@@ -764,6 +783,7 @@
       console.error('[chatclan] global send error:', err);
       appendSystem(globalList, 'Network error — could not send.');
       globalInput.value = text;
+      autosizeTextarea(globalInput);
     }
 
     setTimeout(() => {
@@ -779,6 +799,7 @@
     globalInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGlobalMessage(); }
     });
+    attachAutosize(globalInput);
   }
 
   if (globalDownload) {
@@ -1176,6 +1197,7 @@
     clanSendBtn.disabled = true;
     sendCooldownClan = true;
     clanInput.value = '';
+    autosizeTextarea(clanInput);
 
     try {
       const res = await fetch('/api/clan/chat', {
@@ -1187,6 +1209,7 @@
       if (!res.ok) {
         appendSystem(clanMsgList, data?.error || 'Failed to send message.');
         clanInput.value = text;
+        autosizeTextarea(clanInput);
       } else if (typeof window.__clanChatIncoming === 'function') {
         window.__clanChatIncoming(data);
       }
@@ -1194,6 +1217,7 @@
       console.error('[chatclan] clan send error:', err);
       appendSystem(clanMsgList, 'Network error — could not send.');
       clanInput.value = text;
+      autosizeTextarea(clanInput);
     }
 
     setTimeout(() => {
@@ -1203,9 +1227,12 @@
   }
 
   if (clanForm) clanForm.addEventListener('submit', (e) => { e.preventDefault(); sendClanMessage(); });
-  if (clanInput) clanInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendClanMessage(); }
-  });
+  if (clanInput) {
+    clanInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendClanMessage(); }
+    });
+    attachAutosize(clanInput);
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // CLAN — members

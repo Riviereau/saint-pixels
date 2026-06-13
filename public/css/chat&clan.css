@@ -142,9 +142,17 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* ── Tab strip: Chat | Clan ──────────────────────────────────────────────── */
+/* ── Top gold accent band ─────────────────────────────────────────────── */
+.cc-top-band {
+  height: 3px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, transparent, var(--cc-gold), transparent);
+  opacity: 0.7;
+}
 
-#cc-tabs {
+/* ── Tab strip: Global | Clan | ✕ ────────────────────────────────────── */
+
+.cc-tabs {
   display: flex;
   flex-shrink: 0;
   border-bottom: 1px solid var(--cc-border);
@@ -157,7 +165,6 @@
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
   color: #64748b;
   background: none;
   border: none;
@@ -166,6 +173,11 @@
   transition: color 0.15s, border-color 0.15s, background 0.15s;
   white-space: nowrap;
   text-align: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
 }
 
 .cc-tab:hover {
@@ -173,14 +185,47 @@
   background: rgba(255,255,255,0.03);
 }
 
-.cc-tab.cc-tab--active {
+.cc-tab.cc-tab-active {
   color: var(--cc-gold);
   border-bottom-color: var(--cc-gold);
 }
 
-/* ── Tab panes ───────────────────────────────────────────────────────────── */
+/* Close ✕ button — last child of .cc-tabs, not a .cc-tab */
+.cc-tabs > button:not(.cc-tab) {
+  flex: 0 0 auto;
+  width: 34px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.cc-tabs > button:not(.cc-tab):hover {
+  color: #f87171;
+  background: rgba(255, 80, 80, 0.08);
+}
 
-.cc-pane {
+/* Unread count badge on a tab */
+.cc-tab-badge {
+  display: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+.cc-tab-badge.visible { display: inline-block; }
+
+/* ── Pages: Global / Clan ─────────────────────────────────────────────── */
+
+.cc-page {
   display: none;
   flex-direction: column;
   flex: 1;
@@ -188,9 +233,46 @@
   overflow: hidden;
 }
 
-.cc-pane--active {
+.cc-page.cc-page-active {
   display: flex;
 }
+
+.cc-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cc-border);
+  background: var(--cc-bg-header);
+  flex-shrink: 0;
+}
+
+.cc-page-title {
+  font-size: 0.83rem;
+  font-weight: 800;
+  color: var(--cc-gold-text);
+  letter-spacing: 0.02em;
+}
+
+.cc-icon-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+.cc-icon-btn:hover {
+  background: var(--cc-gold-glow);
+  border-color: var(--cc-gold-deep);
+  color: var(--cc-gold-text);
+}
+
 
 /* ── Message list ────────────────────────────────────────────────────────── */
 
@@ -213,8 +295,10 @@
 /* Individual message row */
 .cc-msg {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
   padding: 4px 12px;
   font-size: 0.82rem;
   line-height: 1.45;
@@ -226,14 +310,7 @@
   background: rgba(255,255,255,0.03);
 }
 
-.cc-msg-header {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.cc-msg-user {
+.cc-user {
   font-weight: 700;
   font-size: 0.78rem;
   color: var(--cc-gold-text);
@@ -242,38 +319,32 @@
   white-space: nowrap;
 }
 
-.cc-msg-user:hover {
+.cc-user:hover {
   color: var(--cc-gold);
   text-decoration: underline;
 }
 
-/* Own messages get a lighter tint */
-.cc-msg--self .cc-msg-user {
-  color: #38bdf8;
-}
-
-.cc-msg-time {
+.cc-time {
   font-size: 0.68rem;
-  color: #334155;
+  color: #475569;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.cc-msg-body {
+.cc-text {
+  flex: 1 1 auto;
+  min-width: 0;
   color: #cbd5e1;
-  padding-left: 1px;
+  white-space: pre-wrap;
 }
 
 /* System / announcement messages */
-.cc-msg--system {
+.cc-msg.cc-system {
   color: #475569;
   font-style: italic;
   font-size: 0.75rem;
   padding: 3px 12px;
-}
-
-.cc-msg--system .cc-msg-body {
-  color: #475569;
+  display: block;
 }
 
 /* Edited badge */
@@ -282,6 +353,33 @@
   color: #475569;
   margin-left: 4px;
   font-style: italic;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cc-edited-badge:hover {
+  color: var(--cc-gold-text);
+  text-decoration: underline;
+}
+
+/* Role badges inline in messages / member lists */
+.cc-role-badge {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cc-role-badge.cc-role-leader {
+  background: rgba(212, 175, 55, 0.18);
+  color: var(--cc-gold-text);
+  border: 1px solid var(--cc-gold-deep);
+}
+.cc-role-badge.cc-role-officer {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
 /* ── Input area ──────────────────────────────────────────────────────────── */
@@ -323,6 +421,13 @@
   color: #475569;
 }
 
+/* Auto-growing chat textarea — JS sets height via scrollHeight on input.
+   max-height matches the existing .cc-input cap; beyond that it scrolls. */
+textarea.cc-input.cc-input--autosize {
+  resize: none;
+  overflow-y: auto;
+}
+
 .cc-send-btn {
   flex-shrink: 0;
   width: 34px;
@@ -350,63 +455,9 @@
   cursor: not-allowed;
 }
 
-/* ── Not-in-clan placeholder ─────────────────────────────────────────────── */
-
-.cc-no-clan {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 24px 16px;
-  text-align: center;
-  color: #475569;
-  font-size: 0.82rem;
-}
-
-.cc-no-clan__icon {
-  font-size: 2rem;
-  opacity: 0.5;
-}
-
-.cc-no-clan__title {
-  font-weight: 700;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-/* ── Clan info strip (top of clan pane) ──────────────────────────────────── */
-
-.cc-clan-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--cc-border);
-  background: var(--cc-bg-header);
-  flex-shrink: 0;
-}
-
-.cc-clan-name {
-  flex: 1;
-  font-size: 0.83rem;
-  font-weight: 700;
-  color: var(--cc-gold-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cc-clan-members {
-  font-size: 0.72rem;
-  color: #64748b;
-  white-space: nowrap;
-}
-
 /* ── Unread badge on the toggle tab ─────────────────────────────────────── */
 
-.cc-unread-badge {
+.chatclan-unread-badge {
   position: absolute;
   top: -4px;
   right: -4px;
@@ -424,7 +475,7 @@
   display: none;
 }
 
-.cc-unread-badge.cc-unread-badge--visible {
+.chatclan-unread-badge.visible {
   display: block;
 }
 
@@ -444,6 +495,648 @@
   padding: 24px 16px;
   font-size: 0.8rem;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   GENERIC BUTTONS  (.cc-btn + modifiers)
+   Used across landing, create/search/settings forms, alliances, danger zone.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
+}
+.cc-btn:hover  { background: rgba(255,255,255,0.1); }
+.cc-btn:active { transform: scale(0.97); }
+.cc-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.cc-btn--full { width: 100%; }
+.cc-btn--sm   { padding: 5px 9px; font-size: 0.75rem; }
+
+.cc-btn--gold {
+  border-color: var(--cc-gold-deep);
+  background: var(--cc-gold-glow);
+  color: var(--cc-gold-text);
+}
+.cc-btn--gold:hover {
+  background: rgba(212, 175, 55, 0.35);
+  border-color: var(--cc-gold);
+  color: var(--cc-gold);
+}
+
+.cc-btn--slate {
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: #94a3b8;
+}
+.cc-btn--slate:hover {
+  background: rgba(255,255,255,0.1);
+  color: #e2e8f0;
+}
+
+.cc-btn--green {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+.cc-btn--green:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: #4ade80;
+}
+
+.cc-btn--red {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+.cc-btn--red:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #f87171;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLAN PAGE — shared scroll container
+   .cc-page-clan holds whichever sub-view (landing / create / search / home)
+   is visible; each view scrolls independently.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#cc-page-clan {
+  overflow-y: auto;
+  padding: 14px 14px 16px;
+  display: block; /* overridden to flex by .cc-page-active */
+  gap: 0;
+}
+#cc-page-clan.cc-page-active {
+  display: block;
+}
+/* cc-clan-home itself becomes the flex column when shown */
+#cc-clan-home:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+/* When clan-home is active, the page container should not scroll itself —
+   the inner message list / sub-pages handle their own scrolling. */
+#cc-page-clan:has(#cc-clan-home:not(.hidden)) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+#cc-clan-home:not(.hidden) {
+  padding: 10px 12px 0;
+}
+#cc-sub-chat.active {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 -12px;
+}
+#cc-sub-chat.active .cc-msg-list { padding: 6px 0; }
+#cc-sub-chat.active .cc-input-row { margin-top: auto; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLAN LANDING  (#cc-clan-landing)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#cc-clan-landing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 12px;
+}
+
+.cc-clan-crest-placeholder {
+  font-size: 2.6rem;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+
+.cc-landing-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--cc-gold-text);
+}
+
+.cc-landing-sub {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  line-height: 1.55;
+  max-width: 30ch;
+}
+
+.cc-landing-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 10px;
+  width: 100%;
+}
+.cc-landing-actions .cc-btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORMS  (create clan / search / settings)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cc-back-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 6px;
+  transition: color 0.12s;
+}
+.cc-back-btn:hover { color: var(--cc-gold-text); }
+
+#cc-create-panel,
+#cc-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cc-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cc-form-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cc-form-input,
+.cc-form-textarea {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 0.83rem;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cc-form-input:focus,
+.cc-form-textarea:focus {
+  border-color: var(--cc-gold-deep);
+}
+.cc-form-input::placeholder,
+.cc-form-textarea::placeholder {
+  color: #475569;
+}
+.cc-form-textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.cc-search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cc-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ── Search result rows ──────────────────────────────────────────────── */
+
+.cc-clan-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+}
+
+.cc-clan-result-crest {
+  flex-shrink: 0;
+  font-size: 1.4rem;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+}
+
+.cc-clan-result-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cc-clan-result-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-clan-result-meta {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLAN HOME — header band, pending requests, nav, sub-pages
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cc-clan-header-band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--cc-border);
+  flex-shrink: 0;
+}
+
+.cc-clan-crest {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  border-radius: 10px;
+  background: var(--cc-gold-glow);
+  border: 1px solid var(--cc-gold-deep);
+}
+
+.cc-clan-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cc-clan-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--cc-gold-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-clan-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* ── Pending join requests ───────────────────────────────────────────── */
+
+.cc-requests-section {
+  flex-shrink: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--cc-border);
+}
+
+.cc-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+}
+
+.cc-pending-name {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-accept-btn,
+.cc-reject-btn {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cc-accept-btn {
+  color: #4ade80;
+  border-color: rgba(34,197,94,0.35);
+}
+.cc-accept-btn:hover {
+  background: rgba(34,197,94,0.18);
+  border-color: #4ade80;
+}
+.cc-reject-btn {
+  color: #f87171;
+  border-color: rgba(239,68,68,0.35);
+}
+.cc-reject-btn:hover {
+  background: rgba(239,68,68,0.18);
+  border-color: #f87171;
+}
+
+/* ── Inner nav: Chat / Members / Alliances / Settings ───────────────── */
+
+.cc-clan-nav {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--cc-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cc-clan-nav::-webkit-scrollbar { display: none; }
+
+.cc-clan-nav-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cc-clan-nav-btn:hover {
+  color: var(--cc-gold-text);
+  background: rgba(255,255,255,0.03);
+}
+.cc-clan-nav-btn.active {
+  color: var(--cc-gold);
+  background: var(--cc-gold-glow);
+  border-color: var(--cc-gold-deep);
+}
+
+/* ── Sub-pages: Chat / Members / Alliances / Settings ───────────────── */
+
+.cc-sub-page {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.cc-sub-page.active {
+  display: flex;
+}
+/* Members / Alliances / Settings sub-pages need their own padding since
+   #cc-clan-home strips it from the chat sub-page via negative margins */
+#cc-sub-members.active,
+#cc-sub-alliances.active,
+#cc-sub-settings.active {
+  padding: 10px 0 14px;
+  gap: 8px;
+}
+
+/* ── Member list ─────────────────────────────────────────────────────── */
+
+.cc-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cc-member-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.cc-member-name {
+  flex: 1;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.12s;
+}
+.cc-member-name:hover {
+  color: var(--cc-gold-text);
+  text-decoration: underline;
+}
+
+.cc-member-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.cc-member-actions button {
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cc-member-actions button:hover {
+  background: var(--cc-gold-glow);
+  border-color: var(--cc-gold-deep);
+  color: var(--cc-gold-text);
+}
+.cc-member-actions .cc-kick-btn {
+  color: #f87171;
+  border-color: rgba(239,68,68,0.3);
+}
+.cc-member-actions .cc-kick-btn:hover {
+  background: rgba(239,68,68,0.18);
+  border-color: #f87171;
+}
+
+/* ── Alliances / Enemies ─────────────────────────────────────────────── */
+
+.cc-ally-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cc-ally-section-title {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 8px 2px 2px;
+}
+.cc-ally-section-title.allies  { color: #4ade80; }
+.cc-ally-section-title.enemies { color: #f87171; }
+
+.cc-ally-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.cc-ally-crest {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+}
+
+.cc-ally-name {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-ally-row button {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #64748b;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cc-ally-row button:hover {
+  background: rgba(239,68,68,0.18);
+  border-color: #f87171;
+  color: #f87171;
+}
+
+.cc-ally-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cc-border);
+}
+.cc-ally-actions > div {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ── Settings sub-page ───────────────────────────────────────────────── */
+
+#cc-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cc-settings-section-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--cc-gold-text);
+  margin-bottom: 2px;
+}
+
+/* ── Danger zone ─────────────────────────────────────────────────────── */
+
+.cc-danger-zone {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(239,68,68,0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cc-danger-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #f87171;
+}
+
+.cc-danger-sub {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+/* ── Toggle tab icon + close button ─────────────────────────────────── */
+
+.cc-tab-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+#chatclan-close-btn {
+  /* styled via .cc-tabs > button:not(.cc-tab) above */
+}
+
+
 
 /* ═══════════════════════════════════════════════════════════════════════
    DESKTOP: larger toggle tab (mirrors toolbar.css .lb-toggle override)
