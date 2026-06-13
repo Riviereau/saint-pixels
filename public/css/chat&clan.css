@@ -641,6 +641,7 @@ textarea.cc-input.cc-input--autosize {
   flex: 1;
   gap: 10px;
   min-height: 0;
+  padding: 10px 12px 0;
 }
 /* When clan-home is active, the page container should not scroll itself —
    the inner message list / sub-pages handle their own scrolling. */
@@ -649,9 +650,6 @@ textarea.cc-input.cc-input--autosize {
   display: flex;
   flex-direction: column;
   padding: 0;
-}
-#cc-clan-home:not(.hidden) {
-  padding: 10px 12px 0;
 }
 #cc-sub-chat.active {
   flex: 1;

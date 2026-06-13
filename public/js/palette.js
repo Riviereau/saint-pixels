@@ -310,13 +310,6 @@ function createPaletteButton(entry) {
   button.addEventListener('touchend',  () => { if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; } });
   button.addEventListener('touchmove', () => { if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; } });
 
-  button.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    if (e.pointerType === 'touch' || window.matchMedia('(pointer: coarse)').matches) return;
-    const idx = paletteColors.findIndex(p => normalizeHexColor(p.color) === normalizeHexColor(entry.color));
-    if (idx !== -1) { paletteColors.splice(idx, 1); renderPalette(); }
-  });
-
   return button;
 }
 
