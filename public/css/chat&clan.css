@@ -447,6 +447,13 @@ textarea.cc-input.cc-input--autosize {
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
+.cc-send-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .cc-send-btn:hover {
   background: rgba(212, 175, 55, 0.35);
   border-color: var(--cc-gold);
