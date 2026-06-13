@@ -929,7 +929,7 @@ textarea.cc-input.cc-input--autosize {
 .cc-clan-nav {
   display: flex;
   flex-shrink: 0;
-  gap: 4px;
+  gap: 2px;
   padding: 8px 0;
   border-bottom: 1px solid var(--cc-border);
   overflow-x: auto;
@@ -938,16 +938,19 @@ textarea.cc-input.cc-input--autosize {
 .cc-clan-nav::-webkit-scrollbar { display: none; }
 
 .cc-clan-nav-btn {
-  flex: 1;
-  padding: 6px 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 2px;
   border-radius: 8px;
   border: 1px solid transparent;
   background: none;
   color: #64748b;
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .cc-clan-nav-btn:hover {
