@@ -4,8 +4,8 @@
    z-index hierarchy (matches leaderboard.css comment block):
      canvas elements (ruler label, fullscreen btn): ≤ 10000
      lb-panel:                                       500 / 510 open
-     chat-toggle / chat-panel:                       10500
-     chat-panel open:                                20500  (mobile)
+     chat-toggle / chat-panel:                       21000
+     chat-panel open:                                21000  (mobile)
      settings-overlay:                               11000
      profile-modal-overlay:                          12000
      ios-reset-overlay:                              12000
@@ -43,7 +43,7 @@
   top: 0;
   bottom: 0;
   right: 0;
-  z-index: 10500;
+  z-index: 21000;
 
   display: flex;
   flex-direction: row;      /* toggle tab | body */
