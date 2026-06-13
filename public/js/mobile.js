@@ -98,18 +98,17 @@
     var overlay = document.getElementById('authOverlay');
     if (!overlay) return;
 
-    function sync() {
-      var display = window.getComputedStyle(overlay).display;
-      if (display === 'none') {
-        // Overlay is hidden — ensure it never catches touches
-        overlay.style.pointerEvents = 'none';
-        overlay.style.visibility    = 'hidden';
-      } else {
-        // Overlay is visible — restore normal behaviour
-        overlay.style.pointerEvents = '';
-        overlay.style.visibility    = '';
-      }
-    }
+function sync() {
+  var display = window.getComputedStyle(overlay).display;
+  if (display === 'none') {
+    overlay.style.pointerEvents = 'none';
+    overlay.style.visibility    = 'hidden';
+    document.body.classList.remove('auth-open');
+  } else {
+    overlay.style.pointerEvents = '';
+    overlay.style.visibility    = '';
+  }
+  }
 
     // Observe style + class changes (Alpine uses both)
     new MutationObserver(sync)
