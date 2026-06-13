@@ -1516,3 +1516,25 @@ textarea.cc-input.cc-input--autosize {
     transform: none !important;
   }
 }
+/* ═══════════════════════════════════════════════════════════════════════
+   RESET: Forced Side-Panel Override
+   This targets the specific rules causing the 'bottom' slide-up behavior.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Remove any 'bottom' or 'top' overrides from mobile.css */
+#chatclan-panel {
+  bottom: auto !important;
+  top: 88px !important; /* Forces it below the header */
+  height: calc(100vh - 88px - 40px) !important; /* Ensures it fits between bars */
+  transform: none !important;
+}
+
+/* Force mobile to respect side-panel width and positioning */
+@media (max-width: 720px) {
+  #chatclan-panel {
+    right: 0 !important;
+    left: auto !important;
+    bottom: 80px !important; /* Adjust if your bottom bar is taller */
+    top: 60px !important;    /* Adjust if your top header is taller */
+  }
+}
