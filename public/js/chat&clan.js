@@ -69,6 +69,7 @@
   const searchResults = document.getElementById('cc-search-results');
 
   const clanHome       = document.getElementById('cc-clan-home');
+  const browseClansBtn = document.getElementById('cc-browse-clans');
   const crestDisplay   = document.getElementById('cc-crest-display');
   const clanNameDisp   = document.getElementById('cc-clan-name-display');
   const clanMetaDisp   = document.getElementById('cc-clan-meta-display');
@@ -867,8 +868,9 @@
     showClanView('search');
     runClanSearch('');
   });
-  if (createBack) createBack.addEventListener('click', () => showClanView('landing'));
-  if (searchBack) searchBack.addEventListener('click', () => showClanView('landing'));
+  if (createBack) createBack.addEventListener('click', () => showClanView(myClan ? 'home' : 'landing'));
+  if (searchBack) searchBack.addEventListener('click', () => showClanView(myClan ? 'home' : 'landing'));
+  if (browseClansBtn) browseClansBtn.addEventListener('click', () => showClanView('search'));
 
   // ══════════════════════════════════════════════════════════════════════
   // CLAN — fetch current membership
