@@ -1583,7 +1583,9 @@ textarea.cc-input.cc-input--autosize {
   .cc-clan-nav-btn {
     flex: 1 1 0 !important;
     min-width: 0 !important;
-    padding: 6px 2px !important;
-    font-size: 0.66rem !important;
+    padding: 6px 1px !important;
+    font-size: 0.62rem !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 }
