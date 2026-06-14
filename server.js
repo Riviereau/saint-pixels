@@ -205,6 +205,10 @@ app.get('/', indexLimiter, (req, res) => {
 // express.static only serves files that physically exist at the exact path
 // requested; without these routes, a missing root-level favicon.ico returns 404
 // and no icon appears in the tab.
+// Ensure .avif files are served with the correct MIME type.
+// Some Node/Express versions don't include image/avif in their default
+// MIME map, which causes browsers to reject the image silently.
+express.static.mime.define({ 'image/avif': ['avif'] });
 app.use('/images', express.static(path.join(__dirname, 'images')));
 app.get('/favicon.ico', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.ico');
@@ -308,6 +312,17 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.use(globalLimiter);
 app.use('/api', banCheckMiddleware);
+
+// ── Maintenance mode ──────────────────────────────────────────────────────────
+// Set MAINTENANCE_MODE=true in Railway env vars to activate.
+// All routes below this point are blocked — visitors see maintenance.html.
+// The /api/health check above is intentionally left outside so Railway's
+// uptime monitor still gets a 200 while the site is in maintenance.
+if (process.env.MAINTENANCE_MODE === 'true') {
+  app.use((req, res) => {
+    res.status(503).sendFile(path.join(__dirname, 'maintenance.html'));
+  });
+}
 
 // ── Pixel limiter: 60 placements / min / IP ───────────────────────────────────
 const pixelLimiter = rateLimit({

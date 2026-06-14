@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Saint-Pixels — Maintenance</title>
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+  <link rel="icon" href="/images/favicon.ico" sizes="any">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #FFE566;
+      --sky:  #38bdf8;
+      --bg:   #0f0f10;
+      --card: #1c1c1e;
+      --border: rgba(255,255,255,0.08);
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 12%  18%, rgba(255,255,255,0.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 34%   7%, rgba(255,255,255,0.25) 0%, transparent 100%),
+        radial-gradient(1px 1px at 67%  22%, rgba(255,255,255,0.30) 0%, transparent 100%),
+        radial-gradient(1px 1px at 81%   5%, rgba(255,255,255,0.20) 0%, transparent 100%),
+        radial-gradient(1px 1px at  5%  55%, rgba(255,255,255,0.28) 0%, transparent 100%),
+        radial-gradient(1px 1px at 91%  44%, rgba(255,255,255,0.22) 0%, transparent 100%),
+        radial-gradient(1px 1px at 48%  78%, rgba(255,255,255,0.18) 0%, transparent 100%),
+        radial-gradient(1px 1px at 23%  91%, rgba(255,255,255,0.24) 0%, transparent 100%),
+        radial-gradient(1px 1px at 76%  83%, rgba(255,255,255,0.20) 0%, transparent 100%),
+        radial-gradient(1px 1px at 58%  42%, rgba(255,255,255,0.15) 0%, transparent 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px 40px 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    }
+
+    .star {
+      display: inline-block;
+      font-size: 2.8rem;
+      margin-bottom: 20px;
+      animation: pulse 2.4s ease-in-out infinite;
+      filter: drop-shadow(0 0 8px rgba(255,229,102,0.7));
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1)    rotate(0deg);  opacity: 1;    }
+      50%       { transform: scale(1.15) rotate(12deg); opacity: 0.85; }
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 0.92rem;
+      color: var(--sky);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .message {
+      font-size: 0.97rem;
+      color: var(--text);
+      line-height: 1.65;
+      margin-bottom: 28px;
+    }
+
+    .progress-track {
+      height: 6px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--gold), var(--sky));
+      border-radius: 99px;
+      animation: progress 14s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+    @keyframes progress {
+      0%   { width: 0%; }
+      40%  { width: 55%; }
+      70%  { width: 75%; }
+      90%  { width: 88%; }
+      100% { width: 92%; }
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 32px;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+      animation: blink 1.2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1;    }
+      50%       { opacity: 0.25; }
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin-bottom: 24px;
+    }
+
+    .footer {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .footer a {
+      color: var(--sky);
+      text-decoration: none;
+    }
+    .footer a:hover { text-decoration: underline; }
+
+    #countdown {
+      display: inline-block;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    @media (max-width: 480px) {
+      .card { padding: 36px 24px 28px; }
+      h1    { font-size: 1.35rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="star">⭐</div>
+
+    <p class="subtitle">Scheduled Maintenance</p>
+    <h1>Saint-Pixels is updating</h1>
+
+    <p class="message">
+      We're making some improvements to the canvas.<br>
+      Your pixels and progress are safe.<br>
+      We'll be back very shortly!
+    </p>
+
+    <div class="progress-track">
+      <div class="progress-fill"></div>
+    </div>
+
+    <div class="status-row">
+      <div class="dot"></div>
+      <span>Update in progress…</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="footer">
+      Page auto-refreshes in <span id="countdown">60</span>s &nbsp;·&nbsp;
+      <a href="https://discord.gg/Y2u3Zx389B" target="_blank" rel="noopener">Discord</a>
+    </p>
+  </div>
+
+  <script>
+    let seconds = 60;
+    const el = document.getElementById('countdown');
+    const tick = () => {
+      seconds--;
+      el.textContent = seconds;
+      if (seconds <= 0) window.location.reload();
+      else setTimeout(tick, 1000);
+    };
+    setTimeout(tick, 1000);
+  </script>
+</body>
+</html>
