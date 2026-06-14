@@ -12,14 +12,6 @@ const app = express();
 
 // Trust the first reverse-proxy hop so req.ip is the real client IP
 app.set('trust proxy', 1);
-app.get("/debug/db", (req, res) => {
-  res.json({
-    cwd: process.cwd(),
-    dbPath: process.env.DB_PATH,
-    volumePath: process.env.RAILWAY_VOLUME_MOUNT_PATH,
-    files: require("fs").readdirSync(".")
-  });
-});
 // ── Security headers ──────────────────────────────────────────────────────────
 // CSP is applied per-request so we can embed a fresh cryptographic nonce on
 // every response. The nonce is injected into the HTML (replacing the
