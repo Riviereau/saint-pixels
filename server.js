@@ -1,9 +1,3 @@
-if (process.env.MAINTENANCE_MODE === 'true') {
-  app.use((req, res) => {
-    res.status(503).sendFile(path.join(__dirname, 'maintenance.html'));
-  });
-}
-
 require('dotenv').config();
 
 const express  = require('express');
@@ -323,9 +317,17 @@ app.use('/api', banCheckMiddleware);
 // All routes below this point are blocked — visitors see maintenance.html.
 // The /api/health check above is intentionally left outside so Railway's
 // uptime monitor still gets a 200 while the site is in maintenance.
+const MAINTENANCE_FILE = path.resolve(__dirname, 'maintenance.html');
 if (process.env.MAINTENANCE_MODE === 'true') {
-  app.use((req, res) => {
-    res.status(503).sendFile(path.join(__dirname, 'maintenance.html'));
+  app.use((req, res, next) => {
+    // Let static assets through so the maintenance page can load its own
+    // CSS/images if needed — but block everything else.
+    res.status(503).sendFile(MAINTENANCE_FILE, err => {
+      if (err) {
+        console.error('[maintenance] Failed to send maintenance.html:', err);
+        res.status(503).send('<h1>Under Maintenance</h1><p>Back soon.</p>');
+      }
+    });
   });
 }
 
