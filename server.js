@@ -208,11 +208,6 @@ app.get('/', indexLimiter, (req, res) => {
 // express.static only serves files that physically exist at the exact path
 // requested; without these routes, a missing root-level favicon.ico returns 404
 // and no icon appears in the tab.
-// Ensure .avif files are served with the correct MIME type.
-// Some Node/Express versions don't include image/avif in their default
-// MIME map, which causes browsers to reject the image silently.
-// express.static.mime.define({ 'image/avif': ['avif'] });
-
 app.use('/images', express.static(path.join(__dirname, 'images')));
 app.get('/favicon.ico', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.ico');
@@ -565,6 +560,34 @@ function sseConnectionGuard(req, res, next) {
   res.once('close', _decrement);
   next();
 }
+
+// ── Cooldown Event state ──────────────────────────────────────────────────────
+// A cooldown event halves the per-player cooldown for a set duration.
+// Server admins trigger it via POST /api/event/start (no auth for simplicity —
+// add a secret header check if you want to restrict it).
+let _eventActive = false;
+let _eventEndsAt  = 0;
+const EVENT_COOLDOWN_MS = 1500; // 1.5 s during event (vs normal 3 s)
+const EVENT_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
+function isEventActive() {
+  if (_eventActive && Date.now() < _eventEndsAt) return true;
+  _eventActive = false;
+  return false;
+}
+
+// Read / write event state from DB so it survives restarts
+(function initEventTable() {
+  db.prepare(`CREATE TABLE IF NOT EXISTS cooldown_events (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    ends_at INTEGER NOT NULL DEFAULT 0
+  )`).run();
+  const row = db.prepare('SELECT ends_at FROM cooldown_events WHERE id = 1').get();
+  if (row && row.ends_at > Date.now()) {
+    _eventActive  = true;
+    _eventEndsAt  = row.ends_at;
+  }
+})();
 
 // ── Actions & SSE ─────────────────────────────────────────────────────────────
 initializeActions(app, db, pixelLimiter, (event) => {
@@ -974,33 +997,7 @@ function updateStreak(username) {
   }
 }
 
-// ── Cooldown Event state ──────────────────────────────────────────────────────
-// A cooldown event halves the per-player cooldown for a set duration.
-// Server admins trigger it via POST /api/event/start (no auth for simplicity —
-// add a secret header check if you want to restrict it).
-let _eventActive = false;
-let _eventEndsAt  = 0;
-const EVENT_COOLDOWN_MS = 1500; // 1.5 s during event (vs normal 3 s)
-const EVENT_DURATION_MS = 60 * 60 * 1000; // 1 hour
 
-function isEventActive() {
-  if (_eventActive && Date.now() < _eventEndsAt) return true;
-  _eventActive = false;
-  return false;
-}
-
-// Read / write event state from DB so it survives restarts
-(function initEventTable() {
-  db.prepare(`CREATE TABLE IF NOT EXISTS cooldown_events (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    ends_at INTEGER NOT NULL DEFAULT 0
-  )`).run();
-  const row = db.prepare('SELECT ends_at FROM cooldown_events WHERE id = 1').get();
-  if (row && row.ends_at > Date.now()) {
-    _eventActive  = true;
-    _eventEndsAt  = row.ends_at;
-  }
-})();
 
 const eventLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyGenerator: (req) => safeIp(req) });
 
