@@ -5,7 +5,6 @@ const { checkBan, buildBanPayload } = require('./ban');
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 let _db = null;
-
 function setDb(db) { _db = db; }
 
 function createSession(username) {
@@ -14,11 +13,9 @@ function createSession(username) {
   _db.prepare(
     'INSERT INTO sessions (token, username, created_at, expires_at) VALUES (?, ?, ?, ?)'
   ).run(token, username, now, now + SESSION_TTL_MS);
-
   if (Math.random() < 0.02) {
     _db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
   }
-
   return token;
 }
 
@@ -30,17 +27,14 @@ function closeSession(token) {
 
 /**
  * Returns true when the request IP is loopback or an RFC-1918 private address.
- * Mirrors the client-side isLocalDev() check in auth.js and the isPrivateIp()
- * helper in captcha.js so all three agree without needing any extra config flag.
+ * Only used when MOBILE_DEBUG=true is set in the environment.
  */
 function isPrivateIp(req) {
   const raw = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
     .split(',')[0]
     .trim()
     .replace(/^::ffff:/, ''); // normalise IPv4-mapped IPv6
-
   if (raw === '127.0.0.1' || raw === '::1' || raw === 'localhost') return true;
-
   const parts = raw.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (!parts) return false;
   const [, a, b] = parts.map(Number);
@@ -62,12 +56,12 @@ function getSession(req) {
   const [type, token] = auth.split(' ');
   const hasToken = type === 'Bearer' && !!token;
 
-  // mobileDebug bypass — also accept any request from a private-network IP
-  // so LAN phones work without needing app.locals.mobileDebug to be set manually.
-  // Only applies when the request carries no real session token; if a Bearer
-  // token is present (e.g. a logged-in user on their home LAN), it takes
-  // priority so real accounts aren't shadowed by the anon-local bypass.
-  if (!hasToken && req && (req.localBypassUser || isPrivateIp(req))) {
+  // mobileDebug bypass — only applies when MOBILE_DEBUG=true is set AND the
+  // request carries no real Bearer token. This lets LAN phones skip auth
+  // during local development without accidentally auto-logging in production
+  // users on private networks as 'anon-local'.
+  const mobileDebugEnabled = process.env.MOBILE_DEBUG === 'true';
+  if (!hasToken && mobileDebugEnabled && req && (req.localBypassUser || isPrivateIp(req))) {
     const bypassUser = req.localBypassUser || 'anon-local';
     const ban = checkBan(bypassUser);
     if (ban) return buildBanPayload(ban);
@@ -79,12 +73,10 @@ function getSession(req) {
   const row = _db.prepare(
     'SELECT username, created_at FROM sessions WHERE token = ? AND expires_at > ?'
   ).get(token, Date.now());
-
   if (!row) return null;
 
   const ban = checkBan(row.username);
   if (ban) return buildBanPayload(ban);
-
   return row;
 }
 
