@@ -702,6 +702,11 @@ app.post('/api/register', registerLimiter, requireCaptcha, async (req, res) => {
 });
 
 // ── Login ─────────────────────────────────────────────────────────────────────
+app.get('/api/auth-check', (req, res) => {
+    // On vérifie si le cookie spToken est présent
+    const hasToken = !!req.cookies.spToken;
+    res.json({ authenticated: hasToken });
+});
 app.post('/api/login', authLimiter, requireCaptcha, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password)

@@ -52,36 +52,36 @@
     *::-webkit-scrollbar-corner { background: transparent; }
   </style>
 </head>
-<body
-  class="h-screen overflow-hidden text-slate-100 font-sans flex items-stretch" style="background:#2e2e2f;"
-  x-data="{
-    currentUser: null,
-    currentTool: 'Brush',
-    currentColor: '#000000',
-    zoomLevel: 100,
-    liveCount: 1,
-    emailVerified: false,
-    showAuth: false,
+<body x-data="{ 
+    currentUser: null, 
+    currentTool: 'Brush', 
+    currentColor: '#000000', 
+    zoomLevel: 100, 
+    liveCount: 0, 
+    showAuth: true, 
+    emailVerified: false, 
     guestObserver: false,
-    syncFromEngine(d) {
-      if (d.currentUser    !== undefined) this.currentUser    = d.currentUser;
-      if (d.currentTool    !== undefined) this.currentTool    = d.currentTool;
-      if (d.currentColor   !== undefined) this.currentColor   = d.currentColor;
-      if (d.zoomLevel      !== undefined) this.zoomLevel      = d.zoomLevel;
-      if (d.liveCount      !== undefined) this.liveCount      = d.liveCount;
-      if (d.emailVerified  !== undefined) this.emailVerified  = d.emailVerified;
-      if (d.guestObserver  !== undefined) this.guestObserver  = d.guestObserver;
-      // Once a real (non-guest) user is set, close any force-opened auth panel
-      if (d.currentUser && !/^Guest \d{7}$/.test(d.currentUser)) this.showAuth = false;
+    async init() {
+        // Dès que Alpine démarre, on demande au serveur si on a le cookie
+        try {
+            let response = await fetch('/api/auth-check');
+            let data = await response.json();
+            if (data.authenticated) {
+                this.showAuth = false; // Cache l'overlay si le cookie est là
+                // Optionnel: tu peux déclencher ton chargement de profil ici
+            } else {
+                this.showAuth = true; // Force l'overlay si pas de cookie
+            }
+        } catch (e) {
+            this.showAuth = true;
+        }
     }
-  }"
-  @sp-state-change.window="syncFromEngine($event.detail)"
-  @sp-open-auth.window="showAuth = true"
->
+}" class="h-screen bg-neutral-900 text-white select-none overflow-hidden insertion-mode">
 
-  <div
+  <div id="authOverlay"
+    x-show="showAuth"
+    x-cloak
     class="fixed inset-0 z-[400] bg-black/75 grid place-items-center"
-    id="authOverlay"
     x-show="(!currentUser && !guestObserver) || showAuth"
     x-cloak
   >
