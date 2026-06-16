@@ -1,0 +1,248 @@
+/*
+ * zindex-fix.css — Mobile z-index overhaul
+ * ==========================================
+ * Drop this file LAST in <head>, after all other CSS links.
+ * It overrides conflicting z-index values with a clean, documented hierarchy.
+ *
+ * LAYER HIERARCHY (mobile, @media max-width: 720px)
+ * ──────────────────────────────────────────────────
+ *   1        canvas / viewport section
+ *  100       footer / spawn bar
+ *  110       palette (fullscreen-palette)
+ *  120       tool-list
+ *  130       cooldown bar
+ *  140       ruler stop button
+ *  200       canvas toolbar
+ *  210       header
+ *  220       color picker
+ *  225       aside wrapper
+ *  300       leaderboard panel (collapsed) / lb-toggle
+ *  310       leaderboard panel (open)
+ *  400       guest HUD
+ *  410       guest observer banner
+ *  500       chat/clan panel (collapsed) / toggle tab
+ *  510       chat/clan panel (open)
+ * 1000       settings overlay
+ * 1100       profile modal / iOS reset modal / timelapse overlay
+ * 1200       fullscreen button  ← needs to clear all panels
+ * 2147483647 auth overlay       ← always on top; unchanged
+ *
+ * DESKTOP: Only the fullscreen btn, settings, profile modal, timelapse,
+ * and auth overlay matter. Their values above match existing desktop values
+ * (settings=11000→1000 is the only change; everything still stacks correctly).
+ *
+ * NOTE: android.css overrides for #gm-observer-banner.gm-visible and
+ * #gm-hud are updated at the bottom of this file to match the new values.
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE-ONLY LAYER FIXES  (portrait + landscape)
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 720px) {
+
+  /* ── Bottom UI band: footer → palette → tools → cooldown → ruler ── */
+
+  .footer-panel {
+    z-index: 100 !important;
+  }
+
+  #fullscreen-palette,
+  .fullscreen-palette {
+    z-index: 110 !important;
+  }
+
+  .tool-list {
+    z-index: 120 !important;
+  }
+
+  #cooldownBar,
+  .cooldown-bar {
+    z-index: 130 !important;
+  }
+
+  #ruler-stop-btn {
+    z-index: 140 !important;
+  }
+
+  /* ── Top UI band: toolbar → header → color picker → aside ── */
+
+  .canvas-toolbar {
+    z-index: 200 !important;
+  }
+
+  body > div.app-shell header,
+  header.flex {
+    z-index: 210 !important;
+  }
+
+  .color-picker {
+    z-index: 220 !important;
+  }
+
+  main > aside,
+  aside {
+    z-index: 225 !important;
+  }
+
+  /* ── Leaderboard panel ── */
+
+  .lb-panel {
+    /* Collapsed: toggle tab protrudes at 300 */
+    z-index: 300 !important;
+  }
+
+  .lb-toggle {
+    /* Toggle must always be tappable above the panel shell */
+    z-index: 301 !important;
+  }
+
+  .lb-panel.lb-open {
+    z-index: 310 !important;
+  }
+
+  /* ── Guest UI ── */
+
+  .gm-hud,
+  #gm-hud {
+    z-index: 400 !important;
+  }
+
+  .gm-observer-banner,
+  #gm-observer-banner {
+    z-index: 410 !important;
+  }
+
+  /* ── Chat / Clan panel ── */
+
+  #chatclan-panel {
+    /* Collapsed: only toggle tab visible */
+    z-index: 500 !important;
+  }
+
+  #chatclan-panel #chatclan-toggle-btn {
+    z-index: 501 !important;
+  }
+
+  #chatclan-panel.cc-open {
+    z-index: 510 !important;
+  }
+
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LANDSCAPE MOBILE (same band values, different layout)
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+
+  .footer-panel     { z-index: 100 !important; }
+  .fullscreen-palette { z-index: 110 !important; }
+  .tool-list        { z-index: 120 !important; }
+  .cooldown-bar     { z-index: 130 !important; }
+  #ruler-stop-btn   { z-index: 140 !important; }
+  .canvas-toolbar   { z-index: 200 !important; }
+  header.flex       { z-index: 210 !important; }
+  .color-picker     { z-index: 220 !important; }
+  aside             { z-index: 225 !important; }
+  .lb-panel         { z-index: 300 !important; }
+  .lb-panel.lb-open { z-index: 310 !important; }
+  .gm-hud           { z-index: 400 !important; }
+  .gm-observer-banner { z-index: 410 !important; }
+  #chatclan-panel   { z-index: 500 !important; }
+  #chatclan-panel.cc-open { z-index: 510 !important; }
+
+}
+
+/* ══════════════════════════════════════════════════════════════
+   OVERLAY MODALS  (apply on all screen sizes)
+   ══════════════════════════════════════════════════════════════ */
+
+/*
+ * Settings, profile, iOS reset, timelapse, and the fullscreen button all
+ * need to float above even the open chat panel (510). Give each its own
+ * slot in the 1000-1200 band so they can't fight each other either.
+ */
+
+.settings-overlay {
+  z-index: 1000 !important;
+}
+
+.profile-modal-overlay {
+  z-index: 1100 !important;
+}
+
+#ios-reset-overlay {
+  z-index: 1100 !important;
+}
+
+/* Timelapse overlay: was 11500 — bring it into the modal band */
+.sp-timelapse-overlay,
+#timelapse-overlay,
+.tl-overlay {
+  z-index: 1100 !important;
+}
+
+/*
+ * Fullscreen button: needs to clear every panel AND every modal so the
+ * user can always exit fullscreen. 1200 is above all modals but well
+ * below the auth overlay.
+ *
+ * The Tailwind class `z-[20002]` on the button element is overridden here.
+ * stars.css also has `z-index: 20002 !important` on #fullscreen-btn —
+ * that rule is superseded by this file (loaded last).
+ */
+#fullscreen-btn,
+.fullscreen-btn {
+  z-index: 1200 !important;
+}
+
+/* ── Auth overlay: unchanged — always max-int ── */
+/*
+ * #authOverlay { z-index: 2147483647 !important; }
+ * This is already correct in auth.css. Not repeated here.
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   ANDROID GUEST BANNER / HUD  — update android.css values
+   These rules override the 2147483647 !important values that
+   android.css sets for #gm-observer-banner.gm-visible and #gm-hud,
+   replacing them with values that still float above the auth overlay
+   but no longer make every other element unreachable.
+   ══════════════════════════════════════════════════════════════ */
+
+html[data-android] #gm-observer-banner.gm-visible {
+  /*
+   * The auth overlay is display:none when a guest is on the canvas, so
+   * there is nothing at 2147483647 to compete with. Using 410 here lets
+   * the Android MutationObserver / pointer-events cleanup in android.js
+   * work correctly without stomping on the auth plane.
+   */
+  z-index: 410 !important;
+}
+
+html[data-android] #gm-hud {
+  z-index: 400 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CHAT MSG CONTEXT MENU  — keep above panel body
+   The .cc-msg-menu popup sits inside #chatclan-panel which is at 510
+   when open. A local z-index of 20 is enough since it only needs to
+   clear its siblings inside the stacking context created by the panel.
+   No change needed — documenting here for clarity.
+   ══════════════════════════════════════════════════════════════ */
+
+/* .cc-msg-menu { z-index: 9999; } — fine as a local value inside panel */
+
+/* ══════════════════════════════════════════════════════════════
+   DESKTOP CHAT PANEL  — bring from 21000 down to 600
+   On desktop the panel is never full-screen and never competes with
+   the auth overlay. 600 clears the lb-panel (500) comfortably.
+   ══════════════════════════════════════════════════════════════ */
+
+@media (min-width: 721px) {
+  #chatclan-panel {
+    z-index: 600 !important;
+  }
+}
