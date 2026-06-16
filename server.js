@@ -213,9 +213,9 @@ app.get('/favicon.ico', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.ico');
 });
 
-app.get('/favicon.svg', indexLimiter, (req, res) => {
-  res.redirect(301, '/images/favicon.svg');
-});
+//app.get('/favicon.svg', indexLimiter, (req, res) => {
+  // res.redirect(301, '/images/favicon.svg');
+//});
 
 
 
