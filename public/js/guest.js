@@ -536,11 +536,11 @@
     // signed in (e.g. mobile.js fires at 7 s to nudge guest.js on slow networks).
     // We cross-check window.currentUser so those spurious nulls can't trigger
     // the banner while a signed-in session is active.
+    // User logged out of a real account — re-show the observer banner.
     if (detail.currentUser === null && !_guestActive) {
-      const liveUser = window.currentUser;
+      const liveUser = window.__username; // <-- Changed here
       const liveUserIsReal = !!(liveUser && !/^Guest \d{7}$/.test(liveUser));
-      if (liveUserIsReal) return; // spurious null — a real user is still active
-      // Small delay so auth.js finishes its teardown first
+      if (liveUserIsReal) return; 
       setTimeout(showObserverMode, 300);
     }
   });
@@ -549,7 +549,7 @@
 
   function showObserverMode() {
     // Don't show if already logged in as a real user
-    if (window.currentUser && !/^Guest \d{7}$/.test(window.currentUser)) return;
+    if (window.__username && !/^Guest \d{7}$/.test(window.__username)) return;
     if (_guestActive) return;
     buildObserverBanner();
   }

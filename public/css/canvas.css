@@ -128,6 +128,8 @@ body.auth-open:has(#authOverlay[style*="display:none"]) .footer-panel {
 }
 body.auth-open:has(#authOverlay[style*="display: none"]) .color-picker,
 body.auth-open:has(#authOverlay[style*="display:none"]) .color-picker,
+body.auth-open:has(#authOverlay[style*="display: none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display:none"]) .tool-list,
 body.auth-open:has(#authOverlay[style*="display: none"]) .fullscreen-palette,
 body.auth-open:has(#authOverlay[style*="display:none"]) .fullscreen-palette,
 body.auth-open:has(#authOverlay[style*="display: none"]) .cooldown-bar,
