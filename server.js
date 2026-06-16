@@ -1,9 +1,3 @@
-if (process.env.MAINTENANCE_MODE === 'true') {
-  app.use((req, res) => {
-    res.status(503).sendFile(path.join(__dirname, 'maintenance.html'));
-  });
-}
-
 require('dotenv').config();
 
 const express  = require('express');
@@ -59,6 +53,10 @@ app.use((req, res, next) => {
         // and cannot carry a nonce, so their SHA-256 hashes must be listed here instead.
         "'sha256-6Y1r0ipW2nGvNHy99N0UdQ26IeVwb6LxPwoRtSyIJBc='",
         "'sha256-CslW5vTI7mG39IVtHaNDZyZVHaYIKdKoKJgse8X3zQk='",
+        // Hash reported for the mob-star-balance-val MutationObserver inline script when
+        // a cached index.html was served with the __CSP_NONCE__ placeholder un-replaced
+        // (e.g. after a server restart before the route handler initialised).
+        "'sha256-2RbutOIeuARGjozC2fpWXNaOVV39i+46CQfo8IFP7k8='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
@@ -210,18 +208,14 @@ app.get('/', indexLimiter, (req, res) => {
 // express.static only serves files that physically exist at the exact path
 // requested; without these routes, a missing root-level favicon.ico returns 404
 // and no icon appears in the tab.
-// Ensure .avif files are served with the correct MIME type.
-// Some Node/Express versions don't include image/avif in their default
-// MIME map, which causes browsers to reject the image silently.
-express.static.mime.define({ 'image/avif': ['avif'] });
 app.use('/images', express.static(path.join(__dirname, 'images')));
 app.get('/favicon.ico', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.ico');
 });
 
-app.get('/favicon.svg', indexLimiter, (req, res) => {
-  res.redirect(301, '/images/favicon.svg');
-});
+//app.get('/favicon.svg', indexLimiter, (req, res) => {
+  // res.redirect(301, '/images/favicon.svg');
+//});
 
 
 
@@ -236,7 +230,13 @@ app.get('/apple-touch-icon.png', indexLimiter, (req, res) => {
   }
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Exclude index.html from static serving so all requests for '/' go through
+// the route handler above that injects the CSP nonce. Without this exclusion,
+// express.static can serve the raw index.html (with __CSP_NONCE__ still in it)
+// for any path that resolves to the file, bypassing nonce injection entirely.
+app.use(express.static(path.join(__dirname, 'public'), {
+  index: false, // never auto-serve index.html; the GET '/' handler does it
+}));
 app.use('/sfx', express.static(path.join(__dirname, 'sfx')));
 
 // ── DB init & helpers ─────────────────────────────────────────────────────────
@@ -323,9 +323,17 @@ app.use('/api', banCheckMiddleware);
 // All routes below this point are blocked — visitors see maintenance.html.
 // The /api/health check above is intentionally left outside so Railway's
 // uptime monitor still gets a 200 while the site is in maintenance.
+const MAINTENANCE_FILE = path.resolve(__dirname, 'maintenance.html');
 if (process.env.MAINTENANCE_MODE === 'true') {
-  app.use((req, res) => {
-    res.status(503).sendFile(path.join(__dirname, 'maintenance.html'));
+  app.use((req, res, next) => {
+    // Let static assets through so the maintenance page can load its own
+    // CSS/images if needed — but block everything else.
+    res.status(503).sendFile(MAINTENANCE_FILE, err => {
+      if (err) {
+        console.error('[maintenance] Failed to send maintenance.html:', err);
+        res.status(503).send('<h1>Under Maintenance</h1><p>Back soon.</p>');
+      }
+    });
   });
 }
 
@@ -552,6 +560,34 @@ function sseConnectionGuard(req, res, next) {
   res.once('close', _decrement);
   next();
 }
+
+// ── Cooldown Event state ──────────────────────────────────────────────────────
+// A cooldown event halves the per-player cooldown for a set duration.
+// Server admins trigger it via POST /api/event/start (no auth for simplicity —
+// add a secret header check if you want to restrict it).
+let _eventActive = false;
+let _eventEndsAt  = 0;
+const EVENT_COOLDOWN_MS = 1500; // 1.5 s during event (vs normal 3 s)
+const EVENT_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
+function isEventActive() {
+  if (_eventActive && Date.now() < _eventEndsAt) return true;
+  _eventActive = false;
+  return false;
+}
+
+// Read / write event state from DB so it survives restarts
+(function initEventTable() {
+  db.prepare(`CREATE TABLE IF NOT EXISTS cooldown_events (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    ends_at INTEGER NOT NULL DEFAULT 0
+  )`).run();
+  const row = db.prepare('SELECT ends_at FROM cooldown_events WHERE id = 1').get();
+  if (row && row.ends_at > Date.now()) {
+    _eventActive  = true;
+    _eventEndsAt  = row.ends_at;
+  }
+})();
 
 // ── Actions & SSE ─────────────────────────────────────────────────────────────
 initializeActions(app, db, pixelLimiter, (event) => {
@@ -961,33 +997,7 @@ function updateStreak(username) {
   }
 }
 
-// ── Cooldown Event state ──────────────────────────────────────────────────────
-// A cooldown event halves the per-player cooldown for a set duration.
-// Server admins trigger it via POST /api/event/start (no auth for simplicity —
-// add a secret header check if you want to restrict it).
-let _eventActive = false;
-let _eventEndsAt  = 0;
-const EVENT_COOLDOWN_MS = 1500; // 1.5 s during event (vs normal 3 s)
-const EVENT_DURATION_MS = 60 * 60 * 1000; // 1 hour
 
-function isEventActive() {
-  if (_eventActive && Date.now() < _eventEndsAt) return true;
-  _eventActive = false;
-  return false;
-}
-
-// Read / write event state from DB so it survives restarts
-(function initEventTable() {
-  db.prepare(`CREATE TABLE IF NOT EXISTS cooldown_events (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    ends_at INTEGER NOT NULL DEFAULT 0
-  )`).run();
-  const row = db.prepare('SELECT ends_at FROM cooldown_events WHERE id = 1').get();
-  if (row && row.ends_at > Date.now()) {
-    _eventActive  = true;
-    _eventEndsAt  = row.ends_at;
-  }
-})();
 
 const eventLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyGenerator: (req) => safeIp(req) });
 

@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.11.1",
     "canvas": "^3.2.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -21,7 +21,7 @@
     "resend": "^6.12.4"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.0",
-    "tailwindcss": "^4.3.1"
+    "@tailwindcss/cli": "^4.3.1",
+    "tailwindcss": "^4.3.0"
   }
 }

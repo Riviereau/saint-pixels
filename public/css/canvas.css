@@ -107,3 +107,52 @@ body.auth-open .tool-list, body.auth-open .color-picker, body.auth-open .fullscr
 body.auth-open #lb-panel {
   display: none !important;
 }
+
+/* ── Guard against a stuck auth-open class ───────────────────────────────
+   If /api/me (or similar) fails before the login flow resolves normally,
+   the app can fall back to guest mode without ever clearing auth-open
+   from <body>. The rules above then hide the entire canvas UI forever,
+   even though the login modal itself is long gone. Once the overlay's
+   own inline style says it's actually hidden, force the UI back even if
+   auth-open never got cleaned up. */
+body.auth-open:has(#authOverlay[style*="display: none"]) aside,
+body.auth-open:has(#authOverlay[style*="display:none"]) aside,
+body.auth-open:has(#authOverlay[style*="display: none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display:none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display: none"]) .canvas-toolbar,
+body.auth-open:has(#authOverlay[style*="display:none"]) .canvas-toolbar,
+body.auth-open:has(#authOverlay[style*="display: none"]) .footer-panel,
+body.auth-open:has(#authOverlay[style*="display:none"]) .footer-panel {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+body.auth-open:has(#authOverlay[style*="display: none"]) .color-picker,
+body.auth-open:has(#authOverlay[style*="display:none"]) .color-picker,
+body.auth-open:has(#authOverlay[style*="display: none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display:none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display: none"]) .fullscreen-palette,
+body.auth-open:has(#authOverlay[style*="display:none"]) .fullscreen-palette,
+body.auth-open:has(#authOverlay[style*="display: none"]) .cooldown-bar,
+body.auth-open:has(#authOverlay[style*="display:none"]) .cooldown-bar {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+body.auth-open:has(#authOverlay[style*="display: none"]) #lb-panel,
+body.auth-open:has(#authOverlay[style*="display:none"]) #lb-panel {
+  display: flex !important;
+}
+
+/* ── Desktop aside: collapse "How to play" section gap when list is hidden ──
+   toolbar.css hides .help-list with display:none on desktop (hover:fine media
+   query). The section heading still renders and the gap-3 on <aside> keeps a
+   visible blank slot between Palette and How to play. Collapse it here so
+   the "Show" toggle button sits flush below the palette without extra space. */
+@media (hover: hover) and (pointer: fine) {
+  aside section:has(.help-list) {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+  aside {
+    gap: 0.5rem !important;  /* tighten from gap-3 (0.75rem) on desktop */
+  }
+}
