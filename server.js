@@ -53,6 +53,10 @@ app.use((req, res, next) => {
         // and cannot carry a nonce, so their SHA-256 hashes must be listed here instead.
         "'sha256-6Y1r0ipW2nGvNHy99N0UdQ26IeVwb6LxPwoRtSyIJBc='",
         "'sha256-CslW5vTI7mG39IVtHaNDZyZVHaYIKdKoKJgse8X3zQk='",
+        // Hash reported for the mob-star-balance-val MutationObserver inline script when
+        // a cached index.html was served with the __CSP_NONCE__ placeholder un-replaced
+        // (e.g. after a server restart before the route handler initialised).
+        "'sha256-2RbutOIeuARGjozC2fpWXNaOVV39i+46CQfo8IFP7k8='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",
@@ -231,7 +235,13 @@ app.get('/apple-touch-icon.png', indexLimiter, (req, res) => {
   }
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Exclude index.html from static serving so all requests for '/' go through
+// the route handler above that injects the CSP nonce. Without this exclusion,
+// express.static can serve the raw index.html (with __CSP_NONCE__ still in it)
+// for any path that resolves to the file, bypassing nonce injection entirely.
+app.use(express.static(path.join(__dirname, 'public'), {
+  index: false, // never auto-serve index.html; the GET '/' handler does it
+}));
 app.use('/sfx', express.static(path.join(__dirname, 'sfx')));
 
 // ── DB init & helpers ─────────────────────────────────────────────────────────

@@ -609,22 +609,40 @@
           _userIsReal   = true;
           return;
         }
-        // Show the observer banner once.
+        // If a token is stored, auth.js is still fetching /api/me — don't resolve
+        // as logged-out yet. Keep listening; the real username will arrive shortly.
+        try {
+          const storedToken = typeof getStoredToken === 'function'
+            ? getStoredToken()
+            : localStorage.getItem('sp_token');
+          if (storedToken) return; // stay subscribed — more events are coming
+        } catch { /* storage unavailable */ }
+        // No token and no live user — genuinely logged out.
         window.removeEventListener('sp-state-change', onFirst);
         onAuthResolved(null);
       }
     });
 
-    // Fallback: if no state change fires within 3 s (e.g. network timeout),
+    // Fallback: if no state change fires within 8 s (e.g. network timeout),
     // only show the banner when we have no confirmed real user.
-    // Also cross-check window.currentUser in case updateAuthState() resolved
-    // the token and set the user but hasn't dispatched sp-state-change yet.
+    // Also cross-check window.currentUser and localStorage for a stored token —
+    // if a token exists, auth is still in-flight (slow network) and we must not
+    // show the observer banner prematurely, which would make a returning user
+    // appear to be dropped into guest/observer mode.
     setTimeout(() => {
       if (_userIsReal || _guestActive) return;
       const liveUser = window.currentUser;
       if (liveUser && !/^Guest \d{7}$/.test(liveUser)) return; // real user active
+      // Don't show the observer banner if a session token exists — auth is still
+      // resolving (slow connection) and we should wait rather than interrupt.
+      try {
+        const storedToken = typeof getStoredToken === 'function'
+          ? getStoredToken()
+          : localStorage.getItem('sp_token');
+        if (storedToken) return; // token present → auth still in-flight, stay patient
+      } catch { /* storage unavailable; proceed */ }
       if (!_authResolved) showObserverMode();
-    }, 3000);
+    }, 8000);
 
     // Android Doze / background tab can delay setTimeout.  android.js fires
     // sp-guest-nudge when the tab becomes visible so we re-check promptly.
