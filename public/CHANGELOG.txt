@@ -1,0 +1,33 @@
+CHANGELOG — saint-pixels
+=========================
+Keep newest entries at the top. One block per change, copy the template below.
+
+Format:
+[YYYY-MM-DD] Short summary of what changed
+  - File(s): path/to/file.js, path/to/other.css
+  - Why: one line on the reason/motivation
+  - Notes: anything to remember later (gotchas, follow-ups, things to undo)
+
+-------------------------------------------------------------------------
+
+[2026-06-16] Fixed merge conflicts in server.js and maintenance.html
+  - File(s): server.js, public/maintenance.html
+  - Why: leftover conflict markers from an earlier merge broke the build
+  - Notes: kept the HEAD version of the avif MIME-type fix (the
+    try/require('serve-static') approach), not the older
+    express.static.mime.define() line
+
+[2026-06-16] Untracked images/canvas from git
+  - File(s): .gitignore, images/canvas/*
+  - Why: 1.4GB PNG was blocking pushes to GitHub (100MB limit)
+  - Notes: files still exist locally, just no longer tracked by git.
+    Used git filter-repo to scrub the file from history too.
+
+-------------------------------------------------------------------------
+TEMPLATE (copy this for your next entry):
+
+[YYYY-MM-DD] 
+  - File(s): 
+  - Why: 
+  - Notes: 
+
