@@ -107,3 +107,35 @@ body.auth-open .tool-list, body.auth-open .color-picker, body.auth-open .fullscr
 body.auth-open #lb-panel {
   display: none !important;
 }
+
+/* ── Guard against a stuck auth-open class ───────────────────────────────
+   If /api/me (or similar) fails before the login flow resolves normally,
+   the app can fall back to guest mode without ever clearing auth-open
+   from <body>. The rules above then hide the entire canvas UI forever,
+   even though the login modal itself is long gone. Once the overlay's
+   own inline style says it's actually hidden, force the UI back even if
+   auth-open never got cleaned up. */
+body.auth-open:has(#authOverlay[style*="display: none"]) aside,
+body.auth-open:has(#authOverlay[style*="display:none"]) aside,
+body.auth-open:has(#authOverlay[style*="display: none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display:none"]) .tool-list,
+body.auth-open:has(#authOverlay[style*="display: none"]) .canvas-toolbar,
+body.auth-open:has(#authOverlay[style*="display:none"]) .canvas-toolbar,
+body.auth-open:has(#authOverlay[style*="display: none"]) .footer-panel,
+body.auth-open:has(#authOverlay[style*="display:none"]) .footer-panel {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+body.auth-open:has(#authOverlay[style*="display: none"]) .color-picker,
+body.auth-open:has(#authOverlay[style*="display:none"]) .color-picker,
+body.auth-open:has(#authOverlay[style*="display: none"]) .fullscreen-palette,
+body.auth-open:has(#authOverlay[style*="display:none"]) .fullscreen-palette,
+body.auth-open:has(#authOverlay[style*="display: none"]) .cooldown-bar,
+body.auth-open:has(#authOverlay[style*="display:none"]) .cooldown-bar {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+body.auth-open:has(#authOverlay[style*="display: none"]) #lb-panel,
+body.auth-open:has(#authOverlay[style*="display:none"]) #lb-panel {
+  display: flex !important;
+}

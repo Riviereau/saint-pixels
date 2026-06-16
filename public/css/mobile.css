@@ -225,6 +225,40 @@
   aside > section:first-child > h2 {
     display: none !important;
   }
+  /* Palette section: was being caught by the blanket "aside > section { display:none }"
+     rule above with nothing to bring it back, so it never appeared on mobile.
+     Pull it into its own fixed band just above the spawn bar, in the space
+     already reserved for it via --mob-palette-h. */
+  aside > section:has(#palette) {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(var(--mob-spawn-h) + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: auto !important;
+    height: var(--mob-palette-h) !important;
+    margin: 0 !important;
+    padding: 6px 8px !important;
+    background: rgba(58, 58, 59, 0.98) !important;
+    border-top: 1px solid rgba(255,255,255,0.08) !important;
+    box-shadow: none !important;
+    z-index: 290 !important;
+    overflow: visible !important;
+  }
+  aside > section:has(#palette) > h2 {
+    display: none !important;
+  }
+  aside > section:has(#palette) .palette-hint-mobile,
+  aside > section:has(#palette) .palette-hint-desktop {
+    display: none !important;
+  }
+  aside > section:has(#palette) .palette {
+    overflow-y: auto !important;
+    max-height: 100% !important;
+  }
   main, main[style] {
     display: block !important;
     grid-template-columns: 1fr !important;
@@ -931,6 +965,38 @@
   }
   aside > section:first-child > h2 {
     display: none !important;
+  }
+  /* Same fix as the portrait media query above: bring the Palette section
+     back out of the blanket "aside > section { display:none }" rule. */
+  aside > section:has(#palette) {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(var(--mob-spawn-h) + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: auto !important;
+    height: var(--mob-palette-h) !important;
+    margin: 0 !important;
+    padding: 4px 8px !important;
+    background: rgba(58, 58, 59, 0.98) !important;
+    border-top: 1px solid rgba(255,255,255,0.08) !important;
+    box-shadow: none !important;
+    z-index: 290 !important;
+    overflow: visible !important;
+  }
+  aside > section:has(#palette) > h2 {
+    display: none !important;
+  }
+  aside > section:has(#palette) .palette-hint-mobile,
+  aside > section:has(#palette) .palette-hint-desktop {
+    display: none !important;
+  }
+  aside > section:has(#palette) .palette {
+    overflow-y: auto !important;
+    max-height: 100% !important;
   }
 }
 
