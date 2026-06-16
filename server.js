@@ -1,3 +1,9 @@
+if (process.env.MAINTENANCE_MODE === 'true') {
+  app.use((req, res) => {
+    res.status(503).sendFile(path.join(__dirname, 'maintenance.html'));
+  });
+}
+
 require('dotenv').config();
 
 const express  = require('express');
@@ -216,7 +222,6 @@ try {
     mime.define({ 'image/avif': ['avif'] });
   }
 } catch { /* MIME type already registered or serve-static not available */ }
-app.use('/images', express.static(path.join(__dirname, 'images')));
 app.get('/favicon.ico', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.ico');
 });
