@@ -207,7 +207,8 @@ app.get('/', indexLimiter, (req, res) => {
 // Ensure .avif files are served with the correct MIME type.
 // Some Node/Express versions don't include image/avif in their default
 // MIME map, which causes browsers to reject the image silently.
-express.static.mime.define({ 'image/avif': ['avif'] });
+// express.static.mime.define({ 'image/avif': ['avif'] });
+
 app.use('/images', express.static(path.join(__dirname, 'images')));
 app.get('/favicon.ico', indexLimiter, (req, res) => {
   res.redirect(301, '/images/favicon.ico');
