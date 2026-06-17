@@ -140,6 +140,19 @@ function resetCaptcha() {
   if (typeof hcaptcha !== 'undefined' && window.__hcaptchaWidgetId !== undefined) {
     hcaptcha.reset(window.__hcaptchaWidgetId);
   }
+  window.__hcaptchaExpired = false;
+}
+
+/**
+ * Returns a user-facing string for why we don't have a usable captcha
+ * token right now. Distinguishes "never solved it" from "solved it, but
+ * it expired" (captcha.js sets window.__hcaptchaExpired via the
+ * expired-callback) so the message actually matches what happened.
+ */
+function getCaptchaMissingMessage() {
+  return window.__hcaptchaExpired
+    ? 'Your captcha expired — please solve it again.'
+    : 'Please complete the captcha.';
 }
 
 // ── Auth message ─────────────────────────────────────────────────────
@@ -285,7 +298,7 @@ async function handleLogin(event) {
   if (!username || !password) { showAuthMessage('Enter username and password.'); return; }
 
   const captchaToken = getCaptchaToken();
-  if (!captchaToken && !isLocalDev()) { showAuthMessage('Please complete the captcha.'); return; }
+  if (!captchaToken && !isLocalDev()) { showAuthMessage(getCaptchaMissingMessage()); return; }
 
   try {
     const response = await fetch('/api/login', {
@@ -322,7 +335,7 @@ async function handleRegister(event) {
   }
 
   const captchaToken = getCaptchaToken();
-  if (!captchaToken && !isLocalDev()) { showAuthMessage('Please complete the captcha.'); return; }
+  if (!captchaToken && !isLocalDev()) { showAuthMessage(getCaptchaMissingMessage()); return; }
 
   try {
     const response = await fetch('/api/register', {

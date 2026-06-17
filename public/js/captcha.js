@@ -75,12 +75,28 @@
         sitekey: sitekey,
         theme: theme,
         size: size,
+        // hCaptcha responses expire ~2 minutes after the checkbox is solved.
+        // Without this, the checkbox can sit there looking "done" while
+        // getResponse() silently goes back to returning "" — auth.js then
+        // tells the user to "complete the captcha" even though they did,
+        // it just expired while they kept filling out the rest of the form.
+        'expired-callback': function () {
+          window.__hcaptchaExpired = true;
+        },
+        'error-callback': function (err) {
+          console.warn('[captcha] hcaptcha error-callback:', err);
+        },
       });
+      // Any fresh solve (or re-solve after expiry) clears the stale flag.
+      window.__hcaptchaExpired = false;
       _rendered = true;
       return true;
     } catch (err) {
       // "already contains a hcaptcha iframe" or similar — treat as rendered
+      // so we stop retrying forever instead of hammering render() every
+      // 200ms on a container that will never accept a second widget.
       console.warn('[captcha] hcaptcha.render() failed:', err);
+      _rendered = true;
       return false;
     }
   }
