@@ -161,6 +161,28 @@ function showAuthMessage(message, isError = true) {
   authMessage.style.color = isError ? '#fca5a5' : '#86efac';
 }
 
+// ── Alpine bridge ─────────────────────────────────────────────────────
+// #authOverlay's visibility is driven by Alpine's x-show on <body>'s
+// x-data (currentUser / showAuth / guestObserver) — NOT by the legacy
+// `currentUser` global variable or the `auth-open` body class used
+// throughout this file. dispatchStateChange() (state.js) only fires the
+// 'sp-state-change' DOM event; nothing was applying that to Alpine's
+// reactive data, so logging in successfully never closed the overlay
+// (and logging out never reliably reopened it). Mirror every state
+// change into Alpine here.
+window.addEventListener('sp-state-change', function (e) {
+  if (!window.Alpine || typeof window.Alpine.$data !== 'function') return;
+  const data = window.Alpine.$data(document.body);
+  if (!data || !e || !e.detail) return;
+  if ('currentUser' in e.detail) {
+    data.currentUser = e.detail.currentUser;
+    // Logged in: drop the forced-open flag so the (!currentUser && ...)
+    // half of x-show is what's actually deciding visibility from here on.
+    if (e.detail.currentUser) data.showAuth = false;
+  }
+  if ('emailVerified' in e.detail) data.emailVerified = e.detail.emailVerified;
+});
+
 // ── Auth state ───────────────────────────────────────────────────────
 async function updateAuthState(retryCount = 0) {
   const token = getStoredToken();

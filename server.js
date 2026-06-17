@@ -57,6 +57,7 @@ app.use((req, res, next) => {
         // a cached index.html was served with the __CSP_NONCE__ placeholder un-replaced
         // (e.g. after a server restart before the route handler initialised).
         "'sha256-2RbutOIeuARGjozC2fpWXNaOVV39i+46CQfo8IFP7k8='",
+        "'sha256-6KW4Emk4Hm1MeNHqGMLyaWHh2vQ/t6wfK5l7uzU9eTs='",
         // Trusted CDN origins for external scripts.
         "https://cdn.tailwindcss.com",
         "https://cdn.jsdelivr.net",

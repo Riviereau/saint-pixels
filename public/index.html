@@ -79,11 +79,9 @@
 }" class="h-screen bg-neutral-900 text-white select-none overflow-hidden insertion-mode">
 
   <div id="authOverlay"
-    x-show="showAuth"
-    x-cloak
-    class="fixed inset-0 z-[400] bg-black/75 grid place-items-center"
     x-show="(!currentUser && !guestObserver) || showAuth"
     x-cloak
+    class="fixed inset-0 z-[400] bg-black/75 grid place-items-center"
   >
     <div class="w-[min(420px,calc(100%-40px))] p-7 rounded-3xl bg-[#2e2e2f] border border-white/10 shadow-2xl grid gap-4 transition-all">
       <h2 class="text-2xl font-bold m-0">Saint-Pixels</h2>
