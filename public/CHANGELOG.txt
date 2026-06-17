@@ -10,6 +10,172 @@ Format:
 
 -------------------------------------------------------------------------
 
+[2026-06-17] Star tuning + Live Players count fix (NOT YET COMMITTED)
+  - File(s): public/js/stars.js, public/css/stars.css, public/js/auth.js
+  - Why: falling stars fell too fast and glowed too bright; separately,
+    the "Live Players" chip was permanently stuck at 0
+  - Notes: FALL_DURATION raised 9000ms -> 14000ms; glow halo, twinkle
+    alpha, and CSS drop-shadow alphas all reduced (resting/hover/mobile
+    states). The live-count bug was the sp-state-change -> Alpine bridge
+    in auth.js (added in "Fixed the auth v3" below) never forwarding
+    liveCount — only currentUser/emailVerified were mirrored. Added
+    `if ('liveCount' in e.detail) data.liveCount = e.detail.liveCount;`
+    to that bridge. Still need to `git add` + commit these three files.
+
+[2026-06-17] Fixed the auth v3
+  - File(s): public/index.html, public/js/auth.js, server.js
+  - Why: login overlay wasn't reliably closing after login / reopening
+    after logout
+  - Notes: added a manual `sp-state-change` -> Alpine bridge inside
+    auth.js (window.Alpine.$data(document.body)). It only mirrors
+    currentUser and emailVerified — it does NOT restore the old
+    syncFromEngine bridge's currentTool / currentColor / zoomLevel /
+    liveCount handling that "Auth fixes" deleted below. See the
+    liveCount patch above for the first follow-up gap found.
+
+[2026-06-17] Trying to fix the auth
+  - File(s): public/js/auth.js, public/js/captcha.js
+  - Why: hCaptcha tokens expire ~2 min after solving; users who spent
+    longer filling out the rest of the form got "Please complete the
+    captcha" even though they already had
+  - Notes: added expired-callback/error-callback to hcaptcha.render()
+    plus a getCaptchaMissingMessage() helper so the error text matches
+    what actually happened (expired vs never solved). Also stops
+    retrying render() forever once a widget is already mounted.
+
+[2026-06-16] Auth fixes — ** broke Alpine state syncing, see notes **
+  - File(s): public/index.html, server.js, test.txt
+  - Why: meant to fix the login overlay
+  - Notes: REMOVED the working `@sp-state-change.window=
+    "syncFromEngine($event.detail)"` Alpine listener and its generic
+    syncFromEngine() method (which had synced currentUser, currentTool,
+    currentColor, zoomLevel, liveCount, emailVerified, guestObserver in
+    one place). Replaced it with `GET /api/auth-check`, which reads
+    `req.cookies.spToken` — but this app has never used cookies for
+    auth (no cookie-parser middleware is installed, and nothing ever
+    sets an spToken cookie), so that route 500s on every single call.
+    This is the commit that actually broke currentTool/currentColor/
+    zoomLevel/liveCount syncing; the next two commits only ever patched
+    currentUser back. Also deleted a stray test.txt.
+
+[2026-06-16] Fixes
+  - File(s): public/js/guest.js, public/css/canvas.css
+  - Why: the guest-observer banner logic read window.currentUser, which
+    can lag behind the real value during auth teardown
+  - Notes: switched guest.js to read window.__username instead (kept
+    live by dispatchStateChange on every state change). Also added
+    .tool-list to the auth-open stuck-overlay safety-net selectors in
+    canvas.css (it was missing from one of the two rule groups).
+
+[2026-06-16] Fixed the palette
+  - File(s): public/css/toolbar.css
+  - Why: tool icons in the toolbar looked off-center / wrong size
+  - Notes: icon background changed from centered 18x18 to 16x16
+    positioned at 8px from the left, with padding-left:28px added so
+    the (already font-size:0) label text still pushes the icon over
+    correctly.
+
+[2026-06-16] Fixed some things
+  - File(s): src/helpers/session.js, public/css/canvas.css
+  - Why: the LAN auto-login bypass (isPrivateIp) fired for ANY request
+    from a private IP range, even in production — someone on an
+    office/VPN/internal network could get silently logged in as
+    'anon-local' instead of seeing the real login screen
+  - Notes: gated the entire bypass behind `MOBILE_DEBUG === 'true'`.
+    Worth double-checking the production env (Railway) doesn't have
+    MOBILE_DEBUG set. Also tightened the desktop "How to play" section
+    gap in canvas.css.
+
+[2026-06-16] Added a safety-net
+  - File(s): public/css/canvas.css, public/css/mobile.css
+  - Why: if /api/me failed before login resolved, body.auth-open could
+    get stuck forever and permanently hide the canvas UI even after the
+    overlay itself was gone; separately, the mobile palette section was
+    being caught by a blanket `aside > section { display:none }` rule
+    with nothing bringing it back
+  - Notes: added `:has(#authOverlay[style*="display: none"])` override
+    rules to force the UI visible once the overlay is actually hidden.
+    Pinned the mobile palette into its own fixed band above the spawn
+    bar via --mob-palette-h.
+
+[2026-06-16] Fixed the canvas
+  - File(s): server.js
+  - Why: the cooldown-event state block (_eventActive, the
+    cooldown_events table init, isEventActive()) was defined AFTER
+    initializeActions(), which already needed isEventActive() inside
+    its callback at call time
+  - Notes: moved the whole "Cooldown Event state" block above the
+    Actions & SSE section. Also removed the now fully-commented-out
+    avif MIME block instead of leaving dead code in place.
+
+[2026-06-16] Added a zindex-fix for the UI
+  - File(s): public/css/zindex-fix.css (new), public/index.html
+  - Why: mobile z-index values across panels/overlays/toolbars had
+    drifted into conflicts (panels appearing under each other
+    unpredictably)
+  - Notes: one new stylesheet, loaded last in <head>, documenting an
+    explicit layer hierarchy from 1 (canvas) up to 2147483647 (auth
+    overlay). Keep it as the last <link> tag if more panels get added.
+
+[2026-06-16] Fixed some issues
+  - File(s): server.js, public/js/guest.js
+  - Why: (a) a cached index.html could be served with __CSP_NONCE__
+    never replaced, breaking CSP-blocked inline scripts; (b) the guest
+    observer banner could flash on for a returning logged-in user while
+    /api/me was still in flight on a slow connection
+  - Notes: added `express.static(..., { index: false })` so every '/'
+    request goes through the nonce-injecting route handler, plus a CSP
+    sha256 allowance for the stale-nonce edge case. guest.js now checks
+    for a stored token and waits longer (8s instead of 3s) before
+    showing the observer banner.
+
+[2026-06-16] Dependency bumps via Dependabot
+  - File(s): package.json, package-lock.json
+  - Why: automated PRs — tailwindcss 4.3.0 -> 4.3.1, @tailwindcss/cli
+    4.3.0 -> 4.3.1, better-sqlite3 12.10.0 -> 12.11.1
+  - Notes: three separate PRs, merged together; no manual code changes.
+
+[2026-06-16] Fixed completely
+  - File(s): server.js
+  - Why: `express.static.mime.define()` doesn't exist on this
+    Express/Node version — calling it threw on every server boot
+  - Notes: commented the line out entirely rather than restoring the
+    safer try/require('serve-static') approach the very first changelog
+    entry below specifically said to keep. AVIF images currently have
+    no explicit MIME override again — re-apply the try/require version
+    if AVIF serving misbehaves.
+
+[2026-06-16] Fixed the crash
+  - File(s): server.js
+  - Why: server was crashing on the /favicon.svg route
+  - Notes: commented the route out rather than deleting it, so it's
+    easy to re-enable once the underlying cause is tracked down.
+
+[2026-06-16] UI fixes
+  - File(s): server.js, maintenance.html (renamed from
+    public/maintenance.html)
+  - Why: the MAINTENANCE_MODE check at the very top of server.js
+    referenced `app` before Express was even initialized — would throw
+    on any boot with MAINTENANCE_MODE=true; maintenance.html also lived
+    under public/, which is served as static assets, while the real
+    middleware needed one canonical path
+  - Notes: removed the broken top-of-file block, moved maintenance.html
+    to the project root, and rebuilt the real maintenance middleware
+    near the end of the file with a sendFile error fallback (plain
+    inline page) if the file is ever missing.
+
+[2026-06-16] Added fixes for the new update — ** caused a crash, see notes **
+  - File(s): server.js
+  - Why: general server fixes for "the new update"
+  - Notes: REVERTED the avif MIME fix back to the bare
+    `express.static.mime.define(...)` call — exactly the version the
+    changelog entry right below this one (the merge-conflict fix) says
+    to avoid. This is what caused the startup crash fixed two commits
+    later by "Fixed completely," and indirectly sent "Fixed the crash"
+    chasing an unrelated favicon.svg issue in between.
+
+-------------------------------------------------------------------------
+
 [2026-06-16] Fixed merge conflicts in server.js and maintenance.html
   - File(s): server.js, public/maintenance.html
   - Why: leftover conflict markers from an earlier merge broke the build

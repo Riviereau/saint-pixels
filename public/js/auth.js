@@ -181,6 +181,12 @@ window.addEventListener('sp-state-change', function (e) {
     if (e.detail.currentUser) data.showAuth = false;
   }
   if ('emailVerified' in e.detail) data.emailVerified = e.detail.emailVerified;
+  // liveCount (Live Players chip, desktop + mobile) is only ever pushed
+  // through dispatchStateChange({ liveCount }) in broadcast.js — without
+  // mirroring it here it never reaches Alpine's reactive data, so the
+  // x-text="liveCount" bindings stay frozen at the x-data default (0)
+  // forever, even though the SSE 'clients' event is firing correctly.
+  if ('liveCount' in e.detail) data.liveCount = e.detail.liveCount;
 });
 
 // ── Auth state ───────────────────────────────────────────────────────

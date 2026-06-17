@@ -20,7 +20,7 @@ window.StarSystem = (() => {
   const STAR_SIZE_PX  = 20;          // canvas element size (logical px, 1:1 with pixel art)
   const MIN_DELAY_MS  = 18_000;      // minimum ms between spawns
   const MAX_DELAY_MS  = 45_000;      // maximum ms between spawns
-  const FALL_DURATION = 9_000;       // ms for a star to fall off screen
+  const FALL_DURATION = 14_000;      // ms for a star to fall off screen
   const MAX_ON_SCREEN = 3;           // never more than this many visible at once
 
   // ── Pixel-art star shape ────────────────────────────────────────────────
@@ -102,17 +102,17 @@ window.StarSystem = (() => {
     ctx.clearRect(0, 0, size, size);
 
     // Glow halo — soft circle behind the star
-    const glowAlpha = 0.12 + 0.10 * Math.sin(phase * Math.PI * 2);
+    const glowAlpha = 0.07 + 0.06 * Math.sin(phase * Math.PI * 2);
     ctx.save();
     const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, `rgba(255, 215, 0, ${glowAlpha + 0.15})`);
+    grad.addColorStop(0, `rgba(255, 215, 0, ${glowAlpha + 0.08})`);
     grad.addColorStop(1, 'rgba(255, 215, 0, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     ctx.restore();
 
     // Tip brightness pulses with phase
-    const tipAlpha = 0.75 + 0.25 * Math.sin(phase * Math.PI * 2);
+    const tipAlpha = 0.55 + 0.20 * Math.sin(phase * Math.PI * 2);
 
     for (const [col, row, type] of STAR_PIXELS) {
       const x = col * cell;
@@ -124,7 +124,7 @@ window.StarSystem = (() => {
         ctx.fillStyle = COLOURS.core;
       } else {
         // Fringe — amber, slightly dimmed
-        const fringeAlpha = 0.55 + 0.25 * Math.sin(phase * Math.PI * 2 + Math.PI);
+        const fringeAlpha = 0.40 + 0.18 * Math.sin(phase * Math.PI * 2 + Math.PI);
         ctx.fillStyle = `rgba(255, 170, 0, ${fringeAlpha.toFixed(2)})`;
       }
       ctx.fillRect(Math.round(x), Math.round(y), Math.ceil(cell), Math.ceil(cell));
