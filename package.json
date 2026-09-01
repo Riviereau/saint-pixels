@@ -18,7 +18,7 @@
     "express-rate-limit": "^8.6.2",
     "hcaptcha": "^0.2.0",
     "helmet": "^8.3.0",
-    "resend": "^6.20.0"
+    "resend": "^6.25.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
